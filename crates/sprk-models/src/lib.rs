@@ -1,4 +1,6 @@
 //! Resolver skeleton (SPEC 16.4). No model path or name is hard-coded anywhere.
+pub mod manifest;
+pub use manifest::{Manifest, ManifestError};
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
