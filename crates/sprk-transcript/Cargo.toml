@@ -1,0 +1,12 @@
+[package]
+name = "sprk-transcript"
+description = "Transcript format model, writer, recovery, exporters (SPEC 5, 6)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+
+[lints]
+workspace = true

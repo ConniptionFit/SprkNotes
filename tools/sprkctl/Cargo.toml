@@ -1,0 +1,13 @@
+[package]
+name = "sprkctl"
+description = "Admin CLI for model packs (SPEC 16.7)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+sprk-models = { path = "../../crates/sprk-models" }
+anyhow.workspace = true
+
+[lints]
+workspace = true

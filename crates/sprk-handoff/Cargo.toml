@@ -1,0 +1,12 @@
+[package]
+name = "sprk-handoff"
+description = "AI handoff targets: opens Claude/Copilot only; the user sends"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+
+[lints]
+workspace = true

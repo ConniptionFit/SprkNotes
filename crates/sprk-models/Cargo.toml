@@ -1,0 +1,12 @@
+[package]
+name = "sprk-models"
+description = "Model packs: manifest, verify, resolve (SPEC 16). Models are data, not code"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+
+[lints]
+workspace = true

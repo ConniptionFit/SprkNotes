@@ -1,0 +1,12 @@
+[package]
+name = "sprk-config"
+description = "User settings with HKLM/HKCU policy overrides"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+
+[lints]
+workspace = true
