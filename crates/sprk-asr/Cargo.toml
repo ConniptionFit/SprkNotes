@@ -7,6 +7,10 @@ license.workspace = true
 
 [dependencies]
 thiserror.workspace = true
+sprk-models = { path = "../sprk-models" }
+
+[dev-dependencies]
+tempfile.workspace = true
 
 [lints]
 workspace = true

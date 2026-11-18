@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 sprk-models = { path = "../../crates/sprk-models" }
 anyhow.workspace = true
+serde_json.workspace = true
 
 [lints]
 workspace = true

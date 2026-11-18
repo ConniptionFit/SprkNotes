@@ -226,6 +226,8 @@ dependencies = [
 name = "sprk-asr"
 version = "0.0.1"
 dependencies = [
+ "sprk-models",
+ "tempfile",
  "thiserror",
 ]
 
@@ -295,6 +297,7 @@ name = "sprkctl"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "serde_json",
  "sprk-models",
 ]
 
