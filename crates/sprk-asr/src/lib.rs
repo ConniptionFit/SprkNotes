@@ -1,4 +1,6 @@
 //! Engine trait. The pipeline never branches on a specific engine or model.
+pub mod wav;
+pub mod wer;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Segment {
     pub start_ms: u64,
