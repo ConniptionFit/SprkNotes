@@ -1,6 +1,6 @@
 # ADR-003: Default transcription model and speech engine adapter
 
-Status: **accepted** (Parakeet TDT 0.6B v2 int8 chosen as the default by John, 2026-11-19). Accuracy and dev-host numbers are in. The ARM64 and Intel laptop numbers
+Status: **accepted** (Parakeet TDT 0.6B v2 int8 chosen as the default by the product owner, 2026-11-19). Accuracy and dev-host numbers are in. The ARM64 and Intel laptop numbers
 (SPEC 13.3) are still pending; if a gate fails, revisit this decision.
 
 ## Context
@@ -41,14 +41,14 @@ on Linux; WASAPI device enumeration works on Windows via the same code path.
 - Native punctuation and casing, which the transcript format needs; no separate punctuation model.
 - English-only, which matches v1 scope.
 
-## Risks and open items (need John's laptops)
+## Risks and open items (need the pilot laptops)
 1. **Memory.** 1.14 GB for one stream is inside the 1.5 GB gate, but two model instances would not be.
    The pipeline must share one recognizer between the Me and Others streams (serialize decode on one
    worker) rather than load one per stream.
 2. **Speed on Snapdragon and Intel** is unmeasured. Run the commands below and fill in the results.
 3. **Size.** The Parakeet pack is about 460 MiB compressed, 631 MiB installed. SPEC 15 asks whether a
    default ships inside the installer; that choice (bundle Parakeet, bundle Whisper base.en, or ship the app small and
-   let admins add the pack) is a product decision for John.
+   let admins add the pack) is a product decision for the owner.
 4. **Licence.** Parakeet TDT 0.6B v2 is CC-BY-4.0: the app needs an attribution notice. Whisper is MIT.
 5. LibriSpeech clips are CC-BY-4.0 audio; they are used from the model tarball cache and never committed.
 
