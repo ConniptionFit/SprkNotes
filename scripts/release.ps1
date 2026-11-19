@@ -98,7 +98,7 @@ if (-not $SkipMsi) {
   foreach ($a in $arches) {
     $msi = Join-Path $Out "SprkNotes_${ver}_$($a.Name).msi"
     # WiX v5 is pinned: v7+ refuses to build until a person accepts the OSMF EULA.
-    wix build packaging/wix/Package.wxs -arch $a.Name -d "Version=$ver" -d "StageDir=$(Join-Path $stage $a.Name)" -o $msi
+    wix build packaging/wix/Package.wxs -arch $a.Name -d "Version=$ver" -d "StageDir=$((Resolve-Path (Join-Path $stage $a.Name)).Path)" -pdbtype none -o $msi
     if ($LASTEXITCODE -ne 0) { throw "wix build failed ($($a.Name))" }
     Sign $msi
     $artifacts += $msi
@@ -170,8 +170,10 @@ foreach ($a in $arches) {
   $pv = (Get-Item $exe).VersionInfo.ProductVersion
   if ($pv -notlike "$ver*") { $bad += "$($a.Name) SprkNotes.exe is $pv" }
 }
+# The app is a Windows-subsystem exe: --version prints only when a console is attached, so an
+# empty answer is not a failure here (its VersionInfo is checked above). A wrong answer is.
 $x64 = & (Join-Path $stage 'x64\SprkNotes.exe') --version
-if ($x64 -notmatch [regex]::Escape($ver)) { $bad += "x64 SprkNotes.exe --version said '$x64'" }
+if ($x64 -and $x64 -notmatch [regex]::Escape($ver)) { $bad += "x64 SprkNotes.exe --version said '$x64'" }
 $ctl = & (Join-Path $stage 'x64\sprkctl.exe') --version
 if ($ctl -notmatch [regex]::Escape($ver)) { $bad += "sprkctl --version said '$ctl'" }
 if (-not $SkipMsi) {
@@ -183,6 +185,11 @@ if (-not $SkipMsi) {
     $r = $v.GetType().InvokeMember('Fetch', 'InvokeMethod', $null, $v, $null)
     $mv = $r.GetType().InvokeMember('StringData', 'GetProperty', $null, $r, 1)
     if ($mv -ne $ver) { $bad += "$($a.Name) MSI ProductVersion is $mv" }
+    # An MSI that harvested nothing still builds: require files in the File table.
+    $fv = $db.GetType().InvokeMember('OpenView', 'InvokeMethod', $null, $db, @('SELECT File FROM File'))
+    $fv.GetType().InvokeMember('Execute', 'InvokeMethod', $null, $fv, $null) | Out-Null
+    $fr = $fv.GetType().InvokeMember('Fetch', 'InvokeMethod', $null, $fv, $null)
+    if (-not $fr) { $bad += "$($a.Name) MSI contains no files" }
   }
 }
 if (-not $SkipMsix) {
