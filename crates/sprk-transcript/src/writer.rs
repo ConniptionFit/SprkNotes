@@ -191,21 +191,46 @@ impl TranscriptWriter {
     }
 }
 
-/// Replace the front matter block and `# Title` heading, keeping the body byte-for-byte.
+/// Drop `## Participants` and `## Audio sources` sections so rewriting is idempotent.
+fn strip_generated_sections(body: &str) -> String {
+    let mut out = String::new();
+    let mut skipping = false;
+    for line in body.split_inclusive('\n') {
+        if line.starts_with("## ") {
+            skipping = line.starts_with("## Participants") || line.starts_with("## Audio sources");
+        }
+        if !skipping {
+            out.push_str(line);
+        }
+    }
+    out
+}
+
+/// Replace the front matter block and `# Title` heading, add the Participants and Audio sources
+/// sections rebuilt from the event lines, and keep every statement and event line unchanged.
 pub(crate) fn rewrite_head(path: &Path, meta: &Meta) -> Result<(), TranscriptError> {
     let text = std::fs::read_to_string(path)?;
     let rest = strip_front_matter(&text).ok_or(TranscriptError::NotATranscript)?;
+    let rest = strip_generated_sections(rest);
+    let extras = crate::extras::Extras::from_events(&rest);
     let mut body = String::new();
     let mut heading_done = false;
     for line in rest.split_inclusive('\n') {
         if !heading_done && line.starts_with("# ") {
             body.push_str(&format!("# {}\n", meta.title));
             heading_done = true;
+        } else if line.starts_with("## Transcript") {
+            body.push_str(&extras.sections());
+            body.push_str(line);
         } else {
             body.push_str(line);
         }
     }
-    let new = format!("{}{}", meta.front_matter(), body);
+    let new = format!(
+        "{}{}",
+        meta.front_matter_with(&extras.front_matter_blocks()),
+        body
+    );
     let tmp = path.with_extension("md.tmp");
     {
         let mut f = File::create(&tmp)?;

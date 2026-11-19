@@ -1,6 +1,7 @@
 # Changelog
 
 ## 0.0.1 (unreleased)
+- M7 (portable core): transcript parser (front matter, statements, events, optional sidecar merge), `Exporter` trait with txt, json and docx adapters, Participants and Audio sources sections and `call:`/`audio_sources:` front matter rebuilt at finalize from event lines.
 - M15 (everything not needing a key): SSHSIG Ed25519 verification (namespace `sprknotes-model`), trusted key parsing and fingerprints, two-key rotation, trust tiers (signing always required from 1.0, cannot be disabled by policy), load-time signature re-check, `sprkctl model sign` via ssh-keygen and the 1Password agent, `docs/manual-checks.md`.
 - M10 (portable core): model stores (active.json, activate, rollback, prune, remove), resolver (pinned, machine, user, bundled, allow-list, fallback), .sprkmodel pack and verify (zip-slip, size limits, allow-list, signature trait), import flow with staging, smoke test and rejects, `sprkctl model pack|verify|hash|install|import|list|activate|rollback|remove` with RMM exit codes.
 - M11/M12 (portable core): audio source activity tracker with the 18.4 timing rules and exclusions; call title parsing and labeling modes with two-poll hysteresis and spec event lines.
