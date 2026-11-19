@@ -8,7 +8,9 @@
     <MajorUpgrade DowngradeErrorMessage="A newer version of SprkNotes is already installed." />
     <MediaTemplate EmbedCab="yes" />
 
-    <StandardDirectory Id="ProgramFiles64Folder" />
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="SprkNotes" />
+    </StandardDirectory>
     <Feature Id="Main" Title="SprkNotes" Level="1">
       <Files Include="$(StageDir)\**" />
       <ComponentRef Id="StartMenuShortcut" />
