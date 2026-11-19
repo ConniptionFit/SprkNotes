@@ -1,6 +1,7 @@
 # Changelog
 
 ## 0.0.1 (unreleased)
+- sprkctl: `model list` with no scope now shows every store the app reads (bundled next to the exe, machine, user) with a store column; `--scope user` now uses `%AppData%` like the app (it used `%LocalAppData%`, so user installs were invisible to the app).
 - CI: the Linux job now runs on the Forgejo runner (it never had; it died in 3 s on a third-party Rust action the runner cannot fetch). Rust comes from rustup, the workflow moved to `.forgejo/workflows/ci.yml`, and it checks fmt, clippy (host plus both Windows targets), tests, terms and version alignment. The Windows and ARM jobs were removed (no such runners; Windows is checked by `winvm.sh`). Fixed the findings from newer clippy and removed unused dependencies.
 - Notices: `scripts/gen-notices.py` regenerates the license summary and crate table and fails when a dependency has no license; run before each release. The Tauri shell's own dependency list still needs adding.
 - M14 (policy): typed admin policy (`AppPolicy`) read from `HKLM` then `HKCU` `Software\Policies\SprkNotes` (read-only registry store, bad values ignored); the app uses it for the transcripts root, commit delay, filler removal, audio source detection and windows, exclusion patterns, call context, poll interval and 1:1 naming. UI lock indicators still to do.
