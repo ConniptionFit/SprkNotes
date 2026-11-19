@@ -50,6 +50,7 @@
     role="log"
     aria-live="off"
     aria-label="Live transcript"
+    aria-keyshortcuts="End"
     tabindex="0"
   >
     {#each lines as l (l.id)}
@@ -106,6 +107,11 @@
     contain-intrinsic-size: auto 2.4rem;
   }
   .line:hover { background: var(--surface-2); }
+  @media (max-width: 30rem) {
+    .line { grid-template-columns: auto 1fr; }
+    .text { grid-column: 1 / -1; }
+    .event .text { grid-column: 1 / -1; }
+  }
   time { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 0.8rem; }
   strong { font-size: 0.85rem; font-weight: 650; }
   .me strong { color: var(--me); }
