@@ -9,6 +9,7 @@ use std::path::Path;
 mod engine;
 #[cfg(all(feature = "live", any(feature = "engine", feature = "engine-shared")))]
 mod live;
+mod models_cmd;
 
 fn load(dir: &Path) -> Result<Manifest> {
     let text = std::fs::read_to_string(dir.join("model.json"))
@@ -36,14 +37,12 @@ fn engine_args(args: &[String]) -> Result<engine::Args> {
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.iter().map(String::as_str).collect::<Vec<_>>().as_slice() {
+        ["model", rest @ ..] if !matches!(rest.first(), Some(&"inspect")) => {
+            std::process::exit(models_cmd::run(rest)?);
+        }
         ["model", "inspect", dir] => {
             let m = load(Path::new(dir))?;
             println!("{}", serde_json::to_string_pretty(&m)?);
-        }
-        ["model", "verify", dir] => {
-            let dir = Path::new(dir);
-            load(dir)?.verify_files(dir)?;
-            println!("ok");
         }
         #[cfg(any(feature = "engine", feature = "engine-shared"))]
         ["transcribe", ..] => {
@@ -60,7 +59,8 @@ fn main() -> Result<()> {
         ["bench", "accuracy", ..] => engine::bench_accuracy(&engine_args(&args[2..])?)?,
         [] | ["--version"] => println!("sprkctl {}", env!("CARGO_PKG_VERSION")),
         _ => bail!(
-            "usage: sprkctl model <inspect|verify> <model-folder>\n       \
+            "usage: sprkctl model inspect <model-folder>\n       \
+             sprkctl model <pack|verify|hash|install|import|list|activate|rollback|remove> ...   (SPEC 16.7)\n       \
              sprkctl transcribe <model-folder> <wav> [--vad <vad-folder>]    (--features engine)\n       \
              sprkctl transcribe <model-folder> --mic --vad <vad-folder> [--seconds N] [--device NAME]  (--features live)\n       \
              sprkctl devices                                                  (--features live)\n       \
