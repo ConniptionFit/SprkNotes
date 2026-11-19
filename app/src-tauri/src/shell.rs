@@ -282,7 +282,8 @@ fn load_positions(app: &AppHandle) {
 }
 
 fn save_positions(app: &AppHandle) {
-    let (Some(f), Ok(p)) = (positions_file(app), app.state::<Shell>().positions.lock()) else {
+    let shell = app.state::<Shell>();
+    let (Some(f), Ok(p)) = (positions_file(app), shell.positions.lock()) else {
         return;
     };
     let saved = Saved {
