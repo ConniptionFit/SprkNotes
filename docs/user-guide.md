@@ -7,6 +7,10 @@
 
 ![Ready](screenshots/main-ready.png)
 
+The same window running on Windows 11 (empty state, no transcript data):
+
+![Windows](screenshots/windows-main.png)
+
 ## While transcribing
 - **Me (mic)** and **Others (system)** toggles turn each source on or off.
 - **Pause** stops capture and writes a pause line. **Resume** continues. Timestamps keep counting, so the gap is visible.
