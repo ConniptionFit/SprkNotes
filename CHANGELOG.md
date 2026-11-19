@@ -1,6 +1,7 @@
 # Changelog
 
 ## 0.0.1 (unreleased)
+- Docs: README, user guide, admin guide, architecture overview, third-party notices, synthetic-data screenshots of the main window.
 - M5 (UI half): main window with session name, source toggles, status pill, Start/Pause/Resume/End, live pane with follow mode, "Return to live" pill and End key (SPEC 8.2), typed backend API with a browser mock, vitest for the follow rules. Tauri commands behind it arrive with Windows capture.
 - M2 (portable core): `Session` orchestrator (Me/Others streams, VAD, decode, commit buffer, writer sink, pause/resume with visible gaps, source toggles, remote label that never rewrites committed lines), counters-only stats.
 - M8/M9 (portable core): meeting selection rules (cancelled, all-day, free skipped; in-progress first, then within 15 min), platform detection, redacting `Meeting` Debug, Meeting context section; handoff prompt template (user, admin, bundled), Claude link builder with 14k cap and clipboard fallback, Copilot plan, policy visibility, `Launcher` seam.

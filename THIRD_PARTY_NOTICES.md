@@ -1,0 +1,140 @@
+# Third-party notices
+
+Generated from `cargo metadata` (Rust dependencies of the portable workspace) plus the items below. Regenerate before each release; the release script must fail if a license is missing.
+
+## Speech model and runtime
+- **NVIDIA Parakeet TDT 0.6B v2** (default transcription model): CC-BY-4.0. Attribution: "Parakeet TDT 0.6B v2 by NVIDIA, licensed under CC BY 4.0." Wording pending approval (see docs/manual-checks.md).
+- **sherpa-onnx** and **ONNX Runtime**: Apache-2.0 and MIT respectively.
+- **Silero VAD**: MIT.
+
+## License summary (Rust crates)
+- MIT OR Apache-2.0: 55
+- Apache-2.0 OR MIT: 13
+- MIT: 11
+- MIT/Apache-2.0: 4
+- BSD-3-Clause: 3
+- Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT: 3
+- Unlicense OR MIT: 2
+- MIT OR Zlib OR Apache-2.0: 2
+- BSD-3-Clause OR Apache-2.0: 2
+- BSD-2-Clause OR Apache-2.0 OR MIT: 2
+- MIT OR Apache-2.0 OR Zlib: 2
+- 0BSD OR MIT OR Apache-2.0: 1
+- Zlib OR Apache-2.0 OR MIT: 1
+- (Apache-2.0 OR MIT) AND BSD-3-Clause: 1
+- MIT OR Apache-2.0 OR BSD-1-Clause: 1
+- MIT OR Apache-2.0 OR LGPL-2.1-or-later: 1
+- (MIT OR Apache-2.0) AND Unicode-3.0: 1
+- Zlib: 1
+- Apache-2.0: 1
+
+## Crates
+| Crate | Version | License |
+|---|---|---|
+| adler2 | 2.0.1 | 0BSD OR MIT OR Apache-2.0 |
+| anyhow | 1.0.104 | MIT OR Apache-2.0 |
+| arbitrary | 1.5.0 | MIT OR Apache-2.0 |
+| autocfg | 1.5.1 | Apache-2.0 OR MIT |
+| base64 | 0.22.1 | MIT OR Apache-2.0 |
+| base64ct | 1.8.3 | Apache-2.0 OR MIT |
+| bitflags | 2.13.2 | MIT OR Apache-2.0 |
+| block-buffer | 0.10.4 | MIT OR Apache-2.0 |
+| bumpalo | 3.20.4 | MIT OR Apache-2.0 |
+| bytemuck | 1.25.2 | Zlib OR Apache-2.0 OR MIT |
+| byteorder-lite | 0.1.0 | Unlicense OR MIT |
+| cfg-if | 1.0.5 | MIT OR Apache-2.0 |
+| color_quant | 1.1.0 | MIT |
+| const-oid | 0.9.6 | Apache-2.0 OR MIT |
+| core_detect | 1.0.0 | MIT/Apache-2.0 |
+| cpufeatures | 0.2.17 | MIT OR Apache-2.0 |
+| crc32fast | 1.5.5 | MIT OR Apache-2.0 |
+| crossbeam-utils | 0.8.23 | MIT OR Apache-2.0 |
+| crunchy | 0.2.4 | MIT |
+| crypto-common | 0.1.7 | MIT OR Apache-2.0 |
+| curve25519-dalek | 4.1.3 | BSD-3-Clause |
+| curve25519-dalek-derive | 0.1.1 | MIT/Apache-2.0 |
+| der | 0.7.10 | Apache-2.0 OR MIT |
+| derive_arbitrary | 1.5.0 | MIT OR Apache-2.0 |
+| digest | 0.10.7 | MIT OR Apache-2.0 |
+| docx-rs | 0.4.22 | MIT |
+| ed25519 | 2.2.3 | Apache-2.0 OR MIT |
+| ed25519-dalek | 2.2.0 | BSD-3-Clause |
+| encoding_rs | 0.8.44 | (Apache-2.0 OR MIT) AND BSD-3-Clause |
+| equivalent | 1.0.3 | Apache-2.0 OR MIT |
+| errno | 0.3.15 | MIT OR Apache-2.0 |
+| fastrand | 2.5.0 | Apache-2.0 OR MIT |
+| fax | 0.2.7 | MIT |
+| fdeflate | 0.3.7 | MIT OR Apache-2.0 |
+| fiat-crypto | 0.2.9 | MIT OR Apache-2.0 OR BSD-1-Clause |
+| flate2 | 1.1.11 | MIT OR Apache-2.0 |
+| generic-array | 0.14.7 | MIT |
+| getrandom | 0.2.17 | MIT OR Apache-2.0 |
+| getrandom | 0.4.3 | MIT OR Apache-2.0 |
+| gif | 0.14.2 | MIT OR Apache-2.0 |
+| half | 2.7.1 | MIT OR Apache-2.0 |
+| hashbrown | 0.17.1 | MIT OR Apache-2.0 |
+| hex | 0.4.3 | MIT OR Apache-2.0 |
+| image | 0.25.10 | MIT OR Apache-2.0 |
+| indexmap | 2.14.2 | Apache-2.0 OR MIT |
+| itoa | 1.0.19 | MIT OR Apache-2.0 |
+| libc | 0.2.191 | MIT OR Apache-2.0 |
+| linux-raw-sys | 0.12.1 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |
+| log | 0.4.35 | MIT OR Apache-2.0 |
+| memchr | 2.8.3 | Unlicense OR MIT |
+| miniz_oxide | 0.8.9 | MIT OR Zlib OR Apache-2.0 |
+| miniz_oxide | 0.9.1 | MIT OR Zlib OR Apache-2.0 |
+| moxcms | 0.8.1 | BSD-3-Clause OR Apache-2.0 |
+| multiversion_no_op | 1.0.0 | Apache-2.0 OR MIT |
+| num-traits | 0.2.19 | MIT OR Apache-2.0 |
+| once_cell | 1.21.4 | MIT OR Apache-2.0 |
+| pkcs8 | 0.10.2 | Apache-2.0 OR MIT |
+| png | 0.18.1 | MIT OR Apache-2.0 |
+| proc-macro2 | 1.0.107 | MIT OR Apache-2.0 |
+| pxfm | 0.1.30 | BSD-3-Clause OR Apache-2.0 |
+| quick-error | 2.0.1 | MIT/Apache-2.0 |
+| quick-xml | 0.41.0 | MIT |
+| quote | 1.0.47 | MIT OR Apache-2.0 |
+| r-efi | 6.0.0 | MIT OR Apache-2.0 OR LGPL-2.1-or-later |
+| rand_core | 0.6.4 | MIT OR Apache-2.0 |
+| rustc_version | 0.4.1 | MIT OR Apache-2.0 |
+| rustix | 1.1.6 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |
+| rustversion | 1.0.23 | MIT OR Apache-2.0 |
+| scopeguard | 1.2.0 | MIT OR Apache-2.0 |
+| semver | 1.0.28 | MIT OR Apache-2.0 |
+| serde | 1.0.229 | MIT OR Apache-2.0 |
+| serde_core | 1.0.229 | MIT OR Apache-2.0 |
+| serde_derive | 1.0.229 | MIT OR Apache-2.0 |
+| serde_json | 1.0.154 | MIT OR Apache-2.0 |
+| sha2 | 0.10.9 | MIT OR Apache-2.0 |
+| signature | 2.2.0 | Apache-2.0 OR MIT |
+| simd-adler32 | 0.3.10 | MIT |
+| simdutf8 | 0.1.5 | MIT OR Apache-2.0 |
+| smallvec | 1.16.6 | MIT OR Apache-2.0 |
+| spki | 0.7.3 | Apache-2.0 OR MIT |
+| subtle | 2.6.1 | BSD-3-Clause |
+| syn | 2.0.119 | MIT OR Apache-2.0 |
+| syn | 3.0.10 | MIT OR Apache-2.0 |
+| tempfile | 3.27.0 | MIT OR Apache-2.0 |
+| thiserror | 1.0.69 | MIT OR Apache-2.0 |
+| thiserror | 2.0.21 | MIT OR Apache-2.0 |
+| thiserror-impl | 1.0.69 | MIT OR Apache-2.0 |
+| thiserror-impl | 2.0.21 | MIT OR Apache-2.0 |
+| tiff | 0.11.3 | MIT |
+| typed-path | 0.12.4 | MIT OR Apache-2.0 |
+| typenum | 1.20.1 | MIT OR Apache-2.0 |
+| unicode-ident | 1.0.27 | (MIT OR Apache-2.0) AND Unicode-3.0 |
+| version_check | 0.9.5 | MIT/Apache-2.0 |
+| wasi | 0.11.1+wasi-snapshot-preview1 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |
+| weezl | 0.1.12 | MIT OR Apache-2.0 |
+| windows-link | 0.2.1 | MIT OR Apache-2.0 |
+| windows-sys | 0.61.2 | MIT OR Apache-2.0 |
+| zerocopy | 0.8.63 | BSD-2-Clause OR Apache-2.0 OR MIT |
+| zerocopy-derive | 0.8.63 | BSD-2-Clause OR Apache-2.0 OR MIT |
+| zeroize | 1.9.2 | Apache-2.0 OR MIT |
+| zip | 2.6.1 | MIT |
+| zip | 8.6.0 | MIT |
+| zlib-rs | 0.6.8 | Zlib |
+| zmij | 1.0.23 | MIT |
+| zopfli | 0.8.4 | Apache-2.0 |
+| zune-core | 0.5.3 | MIT OR Apache-2.0 OR Zlib |
+| zune-jpeg | 0.5.15 | MIT OR Apache-2.0 OR Zlib |
