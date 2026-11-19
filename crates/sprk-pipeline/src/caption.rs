@@ -1,0 +1,304 @@
+//! Live captions (ADR-006): a rolling look at the speech still in progress.
+//!
+//! Captions are never committed, written or logged. They are a transient view for the overlay
+//! of the last few seconds of audio per source, re-decoded every 0.7 s or so. The committed
+//! transcript is untouched: it still comes only from finished VAD utterances (rule 13).
+//!
+//! Cost control: the decode time is measured and the next decode waits at least twice that long,
+//! so captions never take more than about a third of the session thread. If decoding stays far
+//! slower than real time, captions switch themselves off for the rest of the session.
+use crate::Speaker;
+use sprk_asr::Engine;
+use sprk_audio::Source;
+use std::time::Instant;
+
+const RATE: usize = 16_000;
+/// Only the last 10 s of an utterance are decoded.
+const MAX_SAMPLES: usize = 10 * RATE;
+/// Need at least 0.6 s of audio before there is anything worth showing.
+const MIN_SAMPLES: usize = RATE * 6 / 10;
+const BASE_INTERVAL_MS: u64 = 700;
+const MAX_INTERVAL_MS: u64 = 5_000;
+/// A decode slower than this counts as "falling behind".
+const SLOW_MS: u64 = 3_000;
+const SLOW_LIMIT: u32 = 3;
+/// Peak level below which the recent audio is treated as silence and not decoded.
+const SILENCE_PEAK: f32 = 0.005;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Caption {
+    pub speaker: Speaker,
+    pub text: String,
+}
+
+#[derive(Default)]
+struct Lane {
+    buf: Vec<f32>,
+    last_text: String,
+    next_at_ms: u64,
+}
+
+impl Lane {
+    fn reset(&mut self) {
+        self.buf.clear();
+        self.last_text.clear();
+    }
+
+    fn push(&mut self, s: &[f32]) {
+        self.buf.extend_from_slice(s);
+        if self.buf.len() > MAX_SAMPLES {
+            let cut = self.buf.len() - MAX_SAMPLES;
+            self.buf.drain(..cut);
+        }
+    }
+
+    fn quiet(&self) -> bool {
+        let tail = self.buf.len().saturating_sub(RATE / 2);
+        self.buf[tail..].iter().all(|x| x.abs() < SILENCE_PEAK)
+    }
+}
+
+pub struct Captioner {
+    mic: Lane,
+    system: Lane,
+    on: bool,
+    me: bool,
+    slow: u32,
+    disabled: bool,
+}
+
+impl Default for Captioner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Captioner {
+    pub fn new() -> Self {
+        Captioner {
+            mic: Lane::default(),
+            system: Lane::default(),
+            on: false,
+            me: false,
+            slow: 0,
+            disabled: false,
+        }
+    }
+
+    /// What the UI wants: captions on, and whether the microphone ("Me") is included.
+    pub fn set_wanted(&mut self, on: bool, me: bool) {
+        self.on = on && !self.disabled;
+        self.me = me;
+        if !self.on {
+            self.mic.reset();
+            self.system.reset();
+        } else if !me {
+            self.mic.reset();
+        }
+    }
+
+    pub fn wants(&self, source: Source) -> bool {
+        self.on && (source == Source::System || self.me)
+    }
+
+    /// True once captions switched themselves off because decoding could not keep up.
+    pub fn gave_up(&self) -> bool {
+        self.disabled
+    }
+
+    fn lane(&mut self, source: Source) -> &mut Lane {
+        match source {
+            Source::Mic => &mut self.mic,
+            Source::System => &mut self.system,
+        }
+    }
+
+    /// New audio for `source`. `finished` is true when the VAD just closed an utterance: the
+    /// committed line takes over, so the in-progress text starts over.
+    pub fn push(&mut self, source: Source, samples: &[f32], finished: bool) {
+        if !self.wants(source) {
+            return;
+        }
+        let lane = self.lane(source);
+        if finished {
+            lane.reset();
+        }
+        lane.push(samples);
+    }
+
+    /// Drop everything buffered (pause, resume, end).
+    pub fn clear(&mut self) {
+        self.mic.reset();
+        self.system.reset();
+    }
+
+    /// Decode the in-progress speech of every wanted source that is due. `remote` is the label
+    /// for the system stream.
+    pub fn poll(&mut self, now_ms: u64, engine: &mut dyn Engine, remote: &Speaker) -> Vec<Caption> {
+        let mut out = Vec::new();
+        for source in [Source::System, Source::Mic] {
+            if !self.wants(source) {
+                continue;
+            }
+            let speaker = match source {
+                Source::System => remote.clone(),
+                Source::Mic => Speaker::Me,
+            };
+            let lane = self.lane(source);
+            if now_ms < lane.next_at_ms || lane.buf.len() < MIN_SAMPLES || lane.quiet() {
+                continue;
+            }
+            let began = Instant::now();
+            let text = engine.transcribe(&lane.buf).map(|segs| {
+                segs.into_iter()
+                    .map(|s| s.text)
+                    .collect::<Vec<_>>()
+                    .join(" ")
+                    .trim()
+                    .to_string()
+            });
+            let cost = began.elapsed().as_millis() as u64;
+            lane.next_at_ms = now_ms + (cost * 2).clamp(BASE_INTERVAL_MS, MAX_INTERVAL_MS);
+            if cost > SLOW_MS {
+                self.slow += 1;
+            } else {
+                self.slow = 0;
+            }
+            let text = match text {
+                Ok(t) if !t.is_empty() => t,
+                _ => String::new(),
+            };
+            let lane = self.lane(source);
+            if !text.is_empty() && text != lane.last_text {
+                lane.last_text = text.clone();
+                out.push(Caption { speaker, text });
+            }
+            if self.slow >= SLOW_LIMIT {
+                self.disabled = true;
+                self.on = false;
+                self.mic.reset();
+                self.system.reset();
+                break;
+            }
+        }
+        out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sprk_asr::{AsrError, Segment};
+
+    /// Says how many seconds of audio it was given; counts calls.
+    struct Counting(u32);
+    impl Engine for Counting {
+        fn transcribe(&mut self, s: &[f32]) -> Result<Vec<Segment>, AsrError> {
+            self.0 += 1;
+            Ok(vec![Segment {
+                start_ms: 0,
+                end_ms: 0,
+                text: format!("heard {} ms", s.len() * 1000 / RATE),
+            }])
+        }
+    }
+
+    fn loud(ms: usize) -> Vec<f32> {
+        vec![0.1; RATE * ms / 1000]
+    }
+
+    fn on(me: bool) -> Captioner {
+        let mut c = Captioner::new();
+        c.set_wanted(true, me);
+        c
+    }
+
+    #[test]
+    fn off_means_nothing_is_buffered_or_decoded() {
+        let mut c = Captioner::new();
+        let mut e = Counting(0);
+        c.push(Source::System, &loud(2_000), false);
+        assert!(c.poll(10_000, &mut e, &Speaker::Others).is_empty());
+        assert_eq!(e.0, 0);
+    }
+
+    #[test]
+    fn others_only_by_default_skips_the_mic() {
+        let mut c = on(false);
+        let mut e = Counting(0);
+        c.push(Source::Mic, &loud(2_000), false);
+        c.push(Source::System, &loud(2_000), false);
+        let caps = c.poll(1_000, &mut e, &Speaker::Others);
+        assert_eq!(caps.len(), 1);
+        assert_eq!(caps[0].speaker, Speaker::Others);
+        assert_eq!(e.0, 1, "the mic stream was never decoded");
+    }
+
+    #[test]
+    fn me_is_included_when_asked() {
+        let mut c = on(true);
+        let mut e = Counting(0);
+        c.push(Source::Mic, &loud(1_000), false);
+        c.push(Source::System, &loud(1_000), false);
+        let caps = c.poll(1_000, &mut e, &Speaker::Others);
+        assert_eq!(caps.len(), 2);
+        assert!(caps.iter().any(|c| c.speaker == Speaker::Me));
+    }
+
+    #[test]
+    fn decodes_at_most_every_interval_and_only_new_text() {
+        let mut c = on(false);
+        let mut e = Counting(0);
+        c.push(Source::System, &loud(1_000), false);
+        assert_eq!(c.poll(1_000, &mut e, &Speaker::Others).len(), 1);
+        // Too soon: nothing, even with more audio.
+        c.push(Source::System, &loud(300), false);
+        assert!(c.poll(1_300, &mut e, &Speaker::Others).is_empty());
+        assert_eq!(e.0, 1);
+        // Due again with longer audio: new text.
+        assert_eq!(c.poll(1_800, &mut e, &Speaker::Others).len(), 1);
+        // Same audio length again: same text, not repeated.
+        assert!(c.poll(3_000, &mut e, &Speaker::Others).is_empty());
+    }
+
+    #[test]
+    fn silence_and_short_audio_are_not_decoded() {
+        let mut c = on(false);
+        let mut e = Counting(0);
+        c.push(Source::System, &loud(300), false);
+        assert!(c.poll(1_000, &mut e, &Speaker::Others).is_empty());
+        c.push(Source::System, &vec![0.0; RATE * 2], false);
+        assert!(c.poll(2_000, &mut e, &Speaker::Others).is_empty());
+        assert_eq!(e.0, 0);
+    }
+
+    #[test]
+    fn only_the_last_ten_seconds_are_decoded() {
+        let mut c = on(false);
+        let mut e = Counting(0);
+        c.push(Source::System, &loud(15_000), false);
+        let caps = c.poll(1_000, &mut e, &Speaker::Others);
+        assert_eq!(caps[0].text, "heard 10000 ms");
+    }
+
+    #[test]
+    fn a_finished_utterance_starts_the_caption_over() {
+        let mut c = on(false);
+        let mut e = Counting(0);
+        c.push(Source::System, &loud(2_000), false);
+        assert_eq!(c.poll(1_000, &mut e, &Speaker::Others).len(), 1);
+        c.push(Source::System, &loud(1_000), true);
+        let caps = c.poll(3_000, &mut e, &Speaker::Others);
+        assert_eq!(caps[0].text, "heard 1000 ms");
+    }
+
+    #[test]
+    fn turning_off_drops_buffered_audio() {
+        let mut c = on(true);
+        c.push(Source::Mic, &loud(2_000), false);
+        c.set_wanted(true, false);
+        let mut e = Counting(0);
+        assert!(c.poll(5_000, &mut e, &Speaker::Others).is_empty());
+        assert_eq!(e.0, 0);
+    }
+}

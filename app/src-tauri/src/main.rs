@@ -40,6 +40,15 @@ enum LinePayload {
     },
 }
 
+/// Live caption payload (ADR-006). Transient: the UI shows it and forgets it.
+#[derive(Serialize, Clone)]
+struct CaptionPayload {
+    speaker: String,
+    text: String,
+    #[serde(rename = "final")]
+    is_final: bool,
+}
+
 struct TauriEvents(AppHandle);
 
 impl Events for TauriEvents {
@@ -71,6 +80,20 @@ impl Events for TauriEvents {
     }
     fn problem(&self, kind: &str) {
         let _ = self.0.emit("session-problem", kind);
+    }
+    fn captions_wanted(&self) -> (bool, bool) {
+        shell::captions_wanted(&self.0)
+    }
+    fn caption(&self, speaker: &str, text: &str) {
+        // In-progress text only; a committed line arrives as `transcript-line` and is the final.
+        let _ = self.0.emit(
+            "caption",
+            CaptionPayload {
+                speaker: speaker.to_string(),
+                text: text.to_string(),
+                is_final: false,
+            },
+        );
     }
 }
 

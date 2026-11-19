@@ -1,6 +1,7 @@
 //! Session pipeline logic: statement rules, bleed dedupe and the commit buffer
 //! (SPEC 4.2 to 4.4). Pure and deterministic: time is passed in, nothing reads a clock.
 
+pub mod caption;
 pub mod commit;
 pub mod dedupe;
 pub mod host;

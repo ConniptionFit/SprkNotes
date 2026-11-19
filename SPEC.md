@@ -164,6 +164,10 @@ sprknotes/
 - Finalized segments wait **6 s** (configurable 3 to 15 s) for dedupe and merge, then commit in timestamp order.
 - On pause, end, or panic: flush the buffer immediately.
 
+### 4.4a Live captions
+
+Live captions (ADR-006) show speech in progress in the overlay. They are transient: never written to the transcript, logged or stored, and the committed lines (4.4) are unchanged. The last 10 s of audio per wanted source is re-decoded about every 0.7 s (Others by default, Me optional); the decode interval backs off when slow, and captions switch themselves off if the engine cannot keep up. Default off until the overlay's captions toggle turns them on.
+
 ### 4.5 Pause / resume / end
 - **Pause:** capture stops, buffer flushes, a pause event line is written.
 - **Resume:** capture restarts, a resume event line is written. Timestamps are wall-clock elapsed since start, so gaps stay visible.

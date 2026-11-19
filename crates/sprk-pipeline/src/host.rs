@@ -67,6 +67,13 @@ pub trait Events: Send + Sync {
     fn status(&self, s: UiStatus);
     /// A short, text-free reason (`write_failed`). Never transcript text or names.
     fn problem(&self, kind: &str);
+    /// Live caption text for speech in progress (ADR-006). `speaker` is `Me` or `Others`.
+    /// Never stored or logged by the host. Default: ignore.
+    fn caption(&self, _speaker: &str, _text: &str) {}
+    /// What the UI wants now: `(captions on, include Me)`. Polled by the session thread.
+    fn captions_wanted(&self) -> (bool, bool) {
+        (false, false)
+    }
 }
 
 pub struct StartParams {
@@ -380,6 +387,16 @@ fn run(
             }
         }
         drain(&mut capture, &mut session);
+        let (cap_on, cap_me) = events.captions_wanted();
+        session.set_captions(cap_on, cap_me);
+        for c in session.captions(t) {
+            let who = if c.speaker == Speaker::Me {
+                "Me"
+            } else {
+                "Others"
+            };
+            events.caption(who, &c.text);
+        }
         if let Some(c) = ctx.as_mut() {
             if session.state() == crate::session::State::Running {
                 c.poll(t, &mut session);

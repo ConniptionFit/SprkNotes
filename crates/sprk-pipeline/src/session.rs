@@ -4,6 +4,7 @@
 //!
 //! Hard rules honored here: audio stays in memory (nothing is written but transcript text),
 //! committed lines are never rewritten (rule 13), errors never carry transcript text.
+use crate::caption::{Caption, Captioner};
 use crate::commit::{CommitBuffer, Config};
 use crate::{Segment, Speaker};
 use sprk_asr::{transcribe_utterance, Engine, Vad};
@@ -79,6 +80,7 @@ pub struct Session {
     remote: Speaker,
     state: State,
     stats: Stats,
+    captions: Captioner,
 }
 
 impl Session {
@@ -108,6 +110,7 @@ impl Session {
             remote: Speaker::Others,
             state: State::Running,
             stats: Stats::default(),
+            captions: Captioner::new(),
         }
     }
 
@@ -147,6 +150,7 @@ impl Session {
         }
         let utterances = stream.vad.accept(samples);
         let base = stream.base_ms;
+        self.captions.push(source, samples, !utterances.is_empty());
         self.decode(utterances, base, &speaker);
     }
 
@@ -170,6 +174,21 @@ impl Session {
                 Err(_) => self.stats.decode_errors += 1,
             }
         }
+    }
+
+    /// Live captions (ADR-006): what the UI wants right now. Captions are a transient view of
+    /// speech in progress; they are never committed, written or logged.
+    pub fn set_captions(&mut self, on: bool, me: bool) {
+        self.captions.set_wanted(on, me);
+    }
+
+    /// In-progress captions that are due. Empty unless running and wanted.
+    pub fn captions(&mut self, now_ms: u64) -> Vec<Caption> {
+        if self.state != State::Running {
+            return Vec::new();
+        }
+        let remote = self.remote.clone();
+        self.captions.poll(now_ms, self.engine.as_mut(), &remote)
     }
 
     /// Commit whatever has aged past the delay. Call about once a second.
@@ -205,6 +224,7 @@ impl Session {
         if self.state != State::Running {
             return Ok(());
         }
+        self.captions.clear();
         self.drain_all(now_ms)?;
         self.sink.event(now_ms, "Transcription paused")?;
         self.state = State::Paused;
@@ -446,5 +466,21 @@ mod tests {
         let text = std::fs::read_to_string(path).unwrap();
         assert!(text.contains("**Me:** written straight to disk"));
         assert!(text.contains("Transcription paused"));
+    }
+
+    #[test]
+    fn captions_are_transient_and_never_reach_the_sink() {
+        let (mut s, log) = make(&["first line", "second line", "in progress words"]);
+        s.set_captions(true, false);
+        // The test VAD closes an utterance per feed, which uses up the first two answers.
+        s.feed(Source::System, &ONE_SEC);
+        s.feed(Source::System, &ONE_SEC);
+        let caps = s.captions(1_000);
+        assert_eq!(caps.len(), 1);
+        assert_eq!(caps[0].text, "in progress words");
+        assert_eq!(caps[0].speaker, Speaker::Others);
+        assert!(log.0.lock().unwrap().is_empty(), "nothing written yet");
+        s.pause(2_000).unwrap();
+        assert!(s.captions(10_000).is_empty(), "none while paused");
     }
 }
