@@ -1,6 +1,7 @@
 # Changelog
 
 ## 0.0.1 (unreleased)
+- Model download (ADR-005): portable core (`sprk_models::remote`: index parsing with https and path checks, version comparison, download then checksum then the normal import) with fake-tested paths, a WinHTTP client in the app, Tauri commands `model_status`, `model_check_update`, `model_download` with `model-download` progress and `model-update` launch-check events, policy keys `ModelDownload`, `ModelUpdateCheck`, `ModelIndexUrl` (plus the model trust keys now parsed), `sprkctl model index`. The Settings pane button is for the redesign thread. CLAUDE.md rule 2 and SPEC amended.
 - sprkctl: `model list` with no scope now shows every store the app reads (bundled next to the exe, machine, user) with a store column; `--scope user` now uses `%AppData%` like the app (it used `%LocalAppData%`, so user installs were invisible to the app).
 - CI: the Linux job now runs on the Forgejo runner (it never had; it died in 3 s on a third-party Rust action the runner cannot fetch). Rust comes from rustup, the workflow moved to `.forgejo/workflows/ci.yml`, and it checks fmt, clippy (host plus both Windows targets), tests, terms and version alignment. The Windows and ARM jobs were removed (no such runners; Windows is checked by `winvm.sh`). Fixed the findings from newer clippy and removed unused dependencies.
 - Notices: `scripts/gen-notices.py` regenerates the license summary and crate table and fails when a dependency has no license; run before each release. The Tauri shell's own dependency list still needs adding.

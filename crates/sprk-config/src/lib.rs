@@ -65,6 +65,16 @@ pub struct AppPolicy {
     pub call_poll_seconds: Option<u64>,
     pub name_one_to_one_speakers: Option<bool>,
     pub teams_local_api: Option<bool>,
+    /// "Download model" button and downloads at all (default on). ADR-005.
+    pub model_download: Option<bool>,
+    /// Check for a newer model at launch (default on). ADR-005.
+    pub model_update_check: Option<bool>,
+    /// https address of an internal mirror's `models-index.json`.
+    pub model_index_url: Option<String>,
+    pub require_signed_models: Option<bool>,
+    pub model_public_keys: Vec<String>,
+    pub allowed_model_hashes: Vec<String>,
+    pub keep_model_versions: Option<u64>,
 }
 
 fn flag(s: &dyn PolicyStore, k: &str) -> Option<bool> {
@@ -107,6 +117,19 @@ impl AppPolicy {
             call_poll_seconds: num(s, "CallPollSeconds"),
             name_one_to_one_speakers: flag(s, "NameOneToOneSpeakers"),
             teams_local_api: flag(s, "TeamsLocalApi"),
+            model_download: flag(s, "ModelDownload"),
+            model_update_check: flag(s, "ModelUpdateCheck"),
+            model_index_url: text("ModelIndexUrl")
+                .filter(|v| v.to_ascii_lowercase().starts_with("https://")),
+            require_signed_models: flag(s, "RequireSignedModels"),
+            model_public_keys: s.get_multi("ModelPublicKeys"),
+            allowed_model_hashes: s
+                .get_multi("AllowedModelHashes")
+                .into_iter()
+                .map(|h| h.trim().to_string())
+                .filter(|h| !h.is_empty())
+                .collect(),
+            keep_model_versions: num(s, "KeepModelVersions"),
         }
     }
 }
@@ -155,6 +178,26 @@ mod tests {
         assert_eq!(p.commit_delay_seconds, None);
         assert_eq!(p.calendar_provider, None);
         assert_eq!(p.audio_source_exclude_patterns, vec!["banking", "vault"]);
+    }
+
+    #[test]
+    fn model_download_keys_parse_and_http_mirrors_are_ignored() {
+        let p = AppPolicy::load(&fake(&[
+            ("ModelDownload", "0"),
+            ("ModelUpdateCheck", "0"),
+            (
+                "ModelIndexUrl",
+                "https://models.example.internal/models-index.json",
+            ),
+        ]));
+        assert_eq!(p.model_download, Some(false));
+        assert_eq!(p.model_update_check, Some(false));
+        assert_eq!(
+            p.model_index_url.as_deref(),
+            Some("https://models.example.internal/models-index.json")
+        );
+        let p = AppPolicy::load(&fake(&[("ModelIndexUrl", "http://insecure/index.json")]));
+        assert_eq!(p.model_index_url, None);
     }
 
     #[test]

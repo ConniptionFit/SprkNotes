@@ -3,6 +3,7 @@
 pub mod import;
 pub mod manifest;
 pub mod pack;
+pub mod remote;
 pub mod resolver;
 pub mod sshsig;
 pub mod store;

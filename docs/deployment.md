@@ -44,6 +44,7 @@ powershell.exe -ExecutionPolicy Bypass -File .\Install-SprkModel.ps1 -Pack .\<id
 Exit codes: the app script returns the `msiexec` exit code (0 success, 3010 reboot requested). `Install-SprkModel.ps1` returns `sprkctl` codes (10 verify failed, 12 incompatible, 20 not elevated). Uninstall: `Install-SprkNotes.ps1 -Uninstall`. Everything logs under `%ProgramData%\SprkNotes`.
 
 ## Models at scale
+- **Download model button (default on).** The light build gets its model from the Settings pane and checks for a newer one at launch (details in ADR-005). Allow https to the model host in your firewall, or run an internal mirror: publish `models-index.json` and the packs on an internal web server and set `ModelIndexUrl` to its https address. `ModelDownload=0` turns all model network use off; `ModelUpdateCheck=0` stops only the launch check. Use a `with-model` build or `Install-SprkModel.ps1` on locked-down PCs.
 - One default model can be bundled with the app, or shipped as a pack with `Install-SprkModel.ps1` (machine scope).
 - A new model activates at the next session start. A failed load falls back to the previous good model.
 - To force a model, set `PinnedModel` to `id@version`. To stop users adding their own, set `AllowUserModels` to `0`.
@@ -72,7 +73,7 @@ New-ItemProperty $k -Name TranscriptsRoot -Value 'D:\Transcripts' -PropertyType 
 New-ItemProperty $k -Name NameOneToOneSpeakers -Value 0 -PropertyType DWord -Force | Out-Null
 New-ItemProperty $k -Name AudioSourceExcludePatterns -Value @('banking','vault') -PropertyType MultiString -Force | Out-Null
 ```
-Policy is read when a session starts. Values it cannot parse are ignored and the default applies. Registry policy for the transcripts root, commit delay, filler removal, audio sources and call context is wired in; other keys are read as the matching features land.
+Policy is read when a session starts or a download is requested. Values it cannot parse are ignored and the default applies. Registry policy for the transcripts root, commit delay, filler removal, audio sources and call context is wired in; other keys are read as the matching features land.
 
 ## Verify a deployment
 ```powershell
