@@ -49,12 +49,19 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
         .show_menu_on_left_click(false)
         .on_menu_event(|app, ev| act(app, ev.id().as_ref()))
         .on_tray_icon_event(|tray, ev| {
-            if let TrayIconEvent::Click {
-                button: MouseButton::Left,
-                button_state: MouseButtonState::Up,
-                ..
-            } = ev
-            {
+            // Single left click or double click restores the window (Windows; Linux tray hosts
+            // built on libayatana-appindicator send no click events, so the menu is the way there).
+            if matches!(
+                ev,
+                TrayIconEvent::Click {
+                    button: MouseButton::Left,
+                    button_state: MouseButtonState::Up,
+                    ..
+                } | TrayIconEvent::DoubleClick {
+                    button: MouseButton::Left,
+                    ..
+                }
+            ) {
                 open_main(tray.app_handle());
             }
         });
@@ -76,6 +83,16 @@ pub fn on_status(app: &AppHandle, status: &str) {
 
 /// Called for main-window events that can mean minimize or restore.
 pub fn on_main_event(app: &AppHandle, event: &WindowEvent) {
+    // Closing the window hides it to the tray; the tray menu's Quit really exits. A destroyed
+    // window could never be brought back by "Open SprkNotes".
+    if let WindowEvent::CloseRequested { api, .. } = event {
+        api.prevent_close();
+        if let Some(w) = app.get_webview_window("main") {
+            let _ = w.hide();
+        }
+        sync_mini(app);
+        return;
+    }
     if matches!(event, WindowEvent::Resized(_) | WindowEvent::Focused(_)) {
         sync_mini(app);
     }
