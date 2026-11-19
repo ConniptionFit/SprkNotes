@@ -1760,6 +1760,7 @@ name = "sprk-context"
 version = "0.0.1"
 dependencies = [
  "thiserror 1.0.69",
+ "windows 0.58.0",
 ]
 
 [[package]]
@@ -1819,6 +1820,7 @@ dependencies = [
  "sha2 0.10.9",
  "sprk-asr",
  "sprk-audio",
+ "sprk-context",
  "sprk-models",
  "tempfile",
 ]

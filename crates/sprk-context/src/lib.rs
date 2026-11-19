@@ -2,6 +2,9 @@
 //! they never appear in logs or error strings.
 pub mod activity;
 pub mod labeling;
+pub mod sources;
+#[cfg(windows)]
+pub mod win;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Window {
