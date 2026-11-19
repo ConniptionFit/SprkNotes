@@ -154,7 +154,14 @@ mod monitor {
 
     pub fn open(device: &str) -> Result<Box<dyn PcmStream>, AudioError> {
         let mut child = Command::new("parec")
-            .args(["-d", device, "--raw", "--format=float32le", "--rate=16000", "--channels=1"])
+            .args([
+                "-d",
+                device,
+                "--raw",
+                "--format=float32le",
+                "--rate=16000",
+                "--channels=1",
+            ])
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .spawn()
