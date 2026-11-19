@@ -1,6 +1,6 @@
 # SprkNotes Specification
 
-**Status:** Draft v0.5 (v0.5: Linux dev host + Windows VM test environment, 13.4 and 3.4; v0.2: model management + extensibility, 16 and 17; v0.3: model trust tiers 16.10, audio sources 18, call context 19; v0.4: fully on-device, no Entra/Graph or external APIs, 1Password SSH signing, Teams roster reader removed) · **Owner:** John Powers · **Repo:** Forgejo `SprkNotes` (public)
+**Status:** Draft v0.5 (v0.5: Linux dev host + Windows VM test environment, 13.4 and 3.4; v0.2: model management + extensibility, 16 and 17; v0.3: model trust tiers 16.10, audio sources 18, call context 19; v0.4: fully on-device, no Entra/Graph or external APIs, 1Password SSH signing, Teams roster reader removed) · **Owner:** John · **Repo:** Forgejo `SprkNotes` (public)
 
 ---
 
