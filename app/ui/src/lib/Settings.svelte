@@ -1,6 +1,8 @@
 <script lang="ts">
   import type { DownloadProgress, ModelStatus } from "./types";
   import ModelDownload from "./ModelDownload.svelte";
+  import Segmented from "./Segmented.svelte";
+  import { prefs, setPref, type CaptionWho, type Theme } from "./prefs.svelte";
 
   let {
     model,
@@ -60,6 +62,66 @@
       />
     </div>
   </div>
+
+  <div class="panel">
+    <div class="row">
+      <div class="what">
+        <h3>Appearance</h3>
+        <p class="help">The overlay is dark by default. Choose Light to make the overlay light too.</p>
+      </div>
+      <Segmented
+        name="theme"
+        label="Appearance"
+        value={prefs.theme}
+        options={[
+          { value: "system", text: "System" },
+          { value: "light", text: "Light" },
+          { value: "dark", text: "Dark" },
+        ]}
+        onchange={(v: Theme) => setPref("theme", v)}
+      />
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="stack">
+      <div class="row">
+        <div class="what">
+          <h3>Live captions</h3>
+          <p class="help">
+            Show words on the overlay while people are still speaking. Captions are never saved and the
+            transcript is unchanged.
+          </p>
+        </div>
+        <label class="switch">
+          <input
+            type="checkbox"
+            role="switch"
+            checked={prefs.captionsOn}
+            onchange={(e) => setPref("captionsOn", e.currentTarget.checked)}
+          />
+          <span class="track" aria-hidden="true"></span>
+          <span class="sr-only">Show live captions on the overlay</span>
+        </label>
+      </div>
+      <div class="row">
+        <div class="what">
+          <p class="plain">Whose words</p>
+          <p class="help">Others only is the default, and the quickest.</p>
+        </div>
+        <Segmented
+          name="caption-who"
+          label="Whose words appear in captions"
+          value={prefs.captionsWho}
+          options={[
+            { value: "others", text: "Others only" },
+            { value: "both", text: "Others and Me" },
+          ]}
+          onchange={(v: CaptionWho) => setPref("captionsWho", v)}
+        />
+      </div>
+    </div>
+  </div>
 </section>
 
 <style>
@@ -82,5 +144,14 @@
   .what { display: flex; flex-direction: column; gap: 0.25rem; }
   .status { margin: 0; font-weight: 600; color: var(--ok-text); }
   .status.missing { color: var(--warn); }
+  .stack { display: grid; gap: 1.1rem; }
+  .plain { margin: 0; font-weight: 600; }
+  .switch { position: relative; display: inline-block; width: 46px; height: 26px; }
+  .switch input { position: absolute; opacity: 0; inset: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; z-index: 1; }
+  .track { position: absolute; inset: 0; border-radius: 13px; background: var(--surface-2); border: 1px solid var(--border); transition: background 120ms; }
+  .track::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--muted); transition: transform 120ms, background 120ms; }
+  input:checked + .track { background: var(--accent); border-color: transparent; }
+  input:checked + .track::after { transform: translateX(20px); background: var(--on-accent); }
+  .switch:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 13px; }
   .help { margin: 0; color: var(--muted); font-size: 0.9rem; max-width: 34rem; }
 </style>

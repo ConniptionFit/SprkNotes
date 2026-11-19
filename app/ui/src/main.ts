@@ -2,9 +2,11 @@ import { mount } from "svelte";
 import "./app.css";
 import App from "./App.svelte";
 import Mini from "./lib/Mini.svelte";
+import { bindTheme } from "./lib/prefs.svelte";
 
-// The floating mini controller is the same bundle, loaded at index.html#mini.
-const mini = location.hash === "#mini";
-if (mini) document.documentElement.classList.add("mini-view");
+// The floating overlay is the same bundle, loaded at index.html#mini.
+const overlay = location.hash === "#mini";
+if (overlay) document.documentElement.classList.add("mini-view");
+bindTheme(overlay);
 
-mount(mini ? Mini : App, { target: document.getElementById("app")! });
+mount(overlay ? Mini : App, { target: document.getElementById("app")! });
