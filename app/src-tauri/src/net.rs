@@ -95,7 +95,8 @@ impl WinHttp {
                 return Err(RemoteError::Network);
             }
             WinHttpSendRequest(req.0, None, None, 0, 0, 0).map_err(|_| RemoteError::Network)?;
-            WinHttpReceiveResponse(req.0, std::ptr::null_mut()).map_err(|_| RemoteError::Network)?;
+            WinHttpReceiveResponse(req.0, std::ptr::null_mut())
+                .map_err(|_| RemoteError::Network)?;
 
             let mut status = 0u32;
             let mut len = std::mem::size_of::<u32>() as u32;
@@ -141,7 +142,12 @@ impl WinHttp {
             let mut n = 0u32;
             // SAFETY: `buf` is valid for `buf.len()` bytes and `n` receives the count read.
             unsafe {
-                WinHttpReadData(req.0, buf.as_mut_ptr() as *mut c_void, buf.len() as u32, &mut n)
+                WinHttpReadData(
+                    req.0,
+                    buf.as_mut_ptr() as *mut c_void,
+                    buf.len() as u32,
+                    &mut n,
+                )
             }
             .map_err(|_| RemoteError::Network)?;
             if n == 0 {
