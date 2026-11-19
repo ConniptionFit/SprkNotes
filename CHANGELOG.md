@@ -1,6 +1,7 @@
 # Changelog
 
 ## 0.0.1 (unreleased)
+- M13 (written, VM check pending): `scripts/release.ps1` (aligned x64 and arm64 builds, MSIs, MSIX bundle, portable zip with launcher, hashes, version alignment gate), WiX package, MSIX manifest template, `Install-SprkNotes.ps1`, `Install-SprkModel.ps1`, Intune notes, `SprkNotes.exe --version`.
 - M12 (host wiring): the session host polls audio sources (every 250 ms) and call context (hysteresis, Teams titles only), writes `Audio source` and call mode event lines, closes activities at Pause and End, and only names the remote speaker in a confirmed 1:1 call. The Tauri `start_session` turns it on for Windows builds. Teams local API probe, media sessions and tab strips are still to do.
 - M11 (logic + Windows): `SourcePoller` (300 ms audibility hold, -50 dBFS, ignorable sessions, exclusions before storage), title resolver chain (media session, tab, window title, app name) with browser suffix stripping; Windows window enumeration and WASAPI session metering with browser helper-process walk-up. UI Automation tab strips and media sessions are still to do.
 - M8/M9 (Windows): classic Outlook calendar provider over COM late binding (read-only, silent when unavailable), Windows shell launcher for the handoff (open link, clipboard, reveal in Explorer, toasts). Verified to compile for both Windows targets; real Outlook check pending (docs/manual-checks.md).

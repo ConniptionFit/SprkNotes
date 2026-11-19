@@ -58,3 +58,12 @@ SprkNotes makes no outbound connections. Expect only `localhost` traffic (Teams 
 - **Calendar names missing:** classic Outlook with a profile is required. New Outlook is reported unavailable silently.
 - **Teams names missing:** the Teams local API may be off; the title falls back to the call window title or `Others`.
 - **Interrupted transcript:** the file is complete up to the last committed line.
+
+## Building a release (maintainers)
+On the Windows VM, from the repo root:
+```powershell
+pwsh scripts/release.ps1 -SherpaX64 <dir> -SherpaArm64 <dir> -ModelsDir <store> -CertThumbprint <sha1>
+```
+It builds both architectures, the MSIs, the MSIX bundle, the portable zip and the install scripts, then
+fails the release if any artifact reports a different version than the root `Cargo.toml`. Without a
+certificate thumbprint the output is marked unsigned and is for development only.

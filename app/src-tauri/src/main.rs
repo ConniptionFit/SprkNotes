@@ -200,6 +200,11 @@ fn open_app(app: AppHandle) {
 }
 
 fn main() -> anyhow::Result<()> {
+    // Used by scripts/release.ps1 to check every artifact reports the same version.
+    if std::env::args().any(|a| a == "--version") {
+        println!("SprkNotes {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
     tauri::Builder::default()
         .manage(AppState::default())
         .manage(shell::Shell::default())
