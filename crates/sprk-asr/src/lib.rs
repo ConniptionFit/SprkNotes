@@ -2,7 +2,7 @@
 pub mod wav;
 pub mod wer;
 
-#[cfg(feature = "sherpa")]
+#[cfg(any(feature = "sherpa-static", feature = "sherpa-shared"))]
 pub mod sherpa;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Segment {

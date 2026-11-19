@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Fetch the prebuilt sherpa-onnx static libs for the targets we build (dev tooling only).
 # Nothing here is committed or shipped: libs go to $SPRK_CACHE (default ~/.cache/sprknotes).
-# Usage: scripts/fetch-sherpa.sh [linux-x64|win-x64|win-arm64 ...]   (default: all three)
+# Usage: scripts/fetch-sherpa.sh [linux-x64|win-x64|win-arm64|win-x64-shared|win-arm64-shared ...]
+#   (default: linux-x64 win-x64 win-arm64-shared)
 # Then build with, for example:
 #   SHERPA_ONNX_LIB_DIR="$(scripts/fetch-sherpa.sh --print linux-x64)" cargo test -p sprk-asr --features sherpa
 set -euo pipefail
@@ -14,13 +15,15 @@ archive() {
     linux-x64) echo "sherpa-onnx-v$VER-linux-x64-static-lib" ;;
     win-x64)   echo "sherpa-onnx-v$VER-win-x64-static-MT-Release-lib" ;;
     win-arm64) echo "sherpa-onnx-v$VER-win-arm64-static-MT-Release-lib" ;;
-    *) echo "unknown target '$1' (linux-x64|win-x64|win-arm64)" >&2; exit 2 ;;
+    win-x64-shared)   echo "sherpa-onnx-v$VER-win-x64-shared-MT-Release-lib" ;;
+    win-arm64-shared) echo "sherpa-onnx-v$VER-win-arm64-shared-MT-Release-lib" ;;
+    *) echo "unknown target '$1' (linux-x64|win-x64|win-arm64|win-x64-shared|win-arm64-shared)" >&2; exit 2 ;;
   esac
 }
 
 print_only=0
 [ "${1:-}" = "--print" ] && { print_only=1; shift; }
-targets=("$@"); [ ${#targets[@]} -eq 0 ] && targets=(linux-x64 win-x64 win-arm64)
+targets=("$@"); [ ${#targets[@]} -eq 0 ] && targets=(linux-x64 win-x64 win-arm64-shared)
 
 mkdir -p "$CACHE"
 for t in "${targets[@]}"; do

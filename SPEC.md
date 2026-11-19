@@ -525,7 +525,7 @@ Intel devices that miss the gates are documented as unsupported. Gates are measu
 | # | Milestone | Acceptance |
 |---|---|---|
 | M0 | Scaffold + dev environment | Workspace with platform seam (3.4); portable crates test on the Linux host; both Windows targets cross-compile with cargo-xwin; `scripts/winvm.sh` syncs and runs tests in the Windows VM; Tauri app opens in the VM; version script; ADR-001 and ADR-002-dev-environment |
-| M1 | Engine spike + model format | Engine trait with one sherpa-onnx adapter; `model.json` v1 schema; CLI transcribes a WAV and live mic from a model folder (no hard-coded paths); benchmark candidates on ARM and Intel; ADR-002 picks the default model |
+| M1 | Engine spike + model format | Engine trait with one sherpa-onnx adapter; `model.json` v1 schema; CLI transcribes a WAV and live mic from a model folder (no hard-coded paths); benchmark candidates on ARM and Intel; ADR-003 picks the default model |
 | M2 | Capture | Mic + loopback captured together, device changes handled, Me/Others labels in CLI output |
 | M3 | Writer | Format 5.1 exactly, append + flush, commit buffer, finalize, recovery; crash test passes |
 | M4 | Bleed | Windows AEC control, APM fallback, transcript dedupe; bleed test passes |
@@ -637,6 +637,7 @@ If the chosen model fails verification or loading, fall back to the next valid c
   "notes": "Changelog for this model version"
 }
 ```
+- `files` keys are roles the adapter looks up (`sherpa-onnx/offline-transducer`: encoder, decoder, joiner, tokens; `sherpa-onnx/whisper`: encoder, decoder, tokens; `sherpa-onnx/vad-silero`: vad). A voice activity model is a pack of its own with `features` all false.
 - `engine` must match an adapter compiled into the app (17.2). New weights for a supported engine family need **no app update**. A new engine family needs an app release with a new adapter.
 - Versions use `YYYY.MM.patch` so they sort correctly.
 

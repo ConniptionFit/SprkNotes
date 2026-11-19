@@ -5,9 +5,9 @@ use anyhow::{bail, Context, Result};
 use sprk_models::Manifest;
 use std::path::Path;
 
-#[cfg(feature = "engine")]
+#[cfg(any(feature = "engine", feature = "engine-shared"))]
 mod engine;
-#[cfg(feature = "live")]
+#[cfg(all(feature = "live", any(feature = "engine", feature = "engine-shared")))]
 mod live;
 
 fn load(dir: &Path) -> Result<Manifest> {
@@ -16,7 +16,7 @@ fn load(dir: &Path) -> Result<Manifest> {
     Ok(Manifest::from_json(&text)?)
 }
 
-#[cfg(feature = "engine")]
+#[cfg(any(feature = "engine", feature = "engine-shared"))]
 fn engine_args(args: &[String]) -> Result<engine::Args> {
     // args: <model-dir> [positional...] [--vad <dir>] [flags...]
     let model = args.first().context("missing <model-folder>")?.into();
@@ -45,18 +45,18 @@ fn main() -> Result<()> {
             load(dir)?.verify_files(dir)?;
             println!("ok");
         }
-        #[cfg(feature = "engine")]
+        #[cfg(any(feature = "engine", feature = "engine-shared"))]
         ["transcribe", ..] => {
             let a = engine_args(&args[1..])?;
-            #[cfg(feature = "live")]
+            #[cfg(all(feature = "live", any(feature = "engine", feature = "engine-shared")))]
             if a.rest.iter().any(|r| r == "--mic") {
                 return live::transcribe_mic(&a);
             }
             engine::transcribe_file(&a)?;
         }
-        #[cfg(feature = "live")]
+        #[cfg(all(feature = "live", any(feature = "engine", feature = "engine-shared")))]
         ["devices"] => live::list_devices()?,
-        #[cfg(feature = "engine")]
+        #[cfg(any(feature = "engine", feature = "engine-shared"))]
         ["bench", "accuracy", ..] => engine::bench_accuracy(&engine_args(&args[2..])?)?,
         [] | ["--version"] => println!("sprkctl {}", env!("CARGO_PKG_VERSION")),
         _ => bail!(
