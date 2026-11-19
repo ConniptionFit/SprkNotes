@@ -16,7 +16,7 @@
 </nav>
 
 <style>
-  nav { display: flex; gap: 0.25rem; }
+  nav { display: flex; flex-wrap: wrap; gap: 0.25rem; }
   button {
     display: inline-flex;
     align-items: center;

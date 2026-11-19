@@ -31,6 +31,7 @@
 </script>
 
 <main>
+  <h1 class="sr-only">SprkNotes</h1>
   <TopBar
     bind:name
     {status}

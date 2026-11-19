@@ -53,6 +53,10 @@
   const hover = (on: boolean) => ((hovering = on), refresh());
 </script>
 
+<main>
+<h1 class="sr-only">SprkNotes mini controller</h1>
+<!-- Hover and focus only reveal the buttons; every action is a real button inside. -->
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
   class="mini"
   bind:this={root}
@@ -62,6 +66,7 @@
   onmouseleave={() => hover(false)}
   onfocusin={refresh}
   onfocusout={() => setTimeout(refresh)}
+  onkeydown={(e) => e.key === "Escape" && ((document.activeElement as HTMLElement | null)?.blur(), setExpanded(false))}
 >
   <div class="grip" data-tauri-drag-region title="Drag to move">
     <svg viewBox="0 0 10 18" aria-hidden="true">
@@ -70,8 +75,11 @@
       <circle cx="3" cy="15" r="1.3" /><circle cx="7" cy="15" r="1.3" />
     </svg>
   </div>
-  <Light {status} size={11} />
-  <span class="clock" class:idle={status === "ready"}>{clock}</span>
+  <!-- Focusable so keyboard users can open the controls; the tray menu offers the same actions. -->
+  <button class="summary" aria-expanded={expanded} aria-label="Elapsed {clock}. Show controls">
+    <Light {status} size={11} />
+    <span class="clock" class:idle={status === "ready"}>{clock}</span>
+  </button>
 
   {#if expanded}
     <div class="actions">
@@ -89,6 +97,7 @@
     </div>
   {/if}
 </div>
+</main>
 
 <style>
   .mini {
@@ -115,6 +124,8 @@
   }
   .grip:active { cursor: grabbing; }
   .grip svg { width: 0.55rem; height: 1rem; fill: currentColor; pointer-events: none; }
+  .summary { display: inline-flex; align-items: center; gap: 0.6rem; padding: 0.2rem 0.3rem; border: 0; background: transparent; border-radius: 999px; }
+  .summary:hover { background: transparent; }
   .clock { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 0.9rem; min-width: 4.3rem; }
   .clock.idle { color: var(--muted); font-weight: 500; }
   .actions { display: flex; gap: 0.35rem; align-items: center; margin-left: 0.25rem; }

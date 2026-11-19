@@ -91,4 +91,10 @@
   .chip.on.me { background: var(--me-soft); color: var(--me); border-color: transparent; }
   .chip.on.others { background: var(--others-soft); color: var(--others); border-color: transparent; }
   .chip.on .dot { background: currentColor; }
+
+  /* High contrast: a checked source shows a filled dot and a heavier outline. */
+  @media (forced-colors: active) {
+    .chip.on { border-width: 2px; }
+    .chip.on .dot { forced-color-adjust: none; background: Highlight; border-color: Highlight; }
+  }
 </style>
