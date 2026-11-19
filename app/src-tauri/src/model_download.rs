@@ -247,7 +247,9 @@ pub fn install(f: &dyn Fetcher, p: &AppPolicy, app: &AppHandle) -> Result<(), St
         };
         let opts = ImportOptions {
             verify: trust.verify_options(&engines, &verifier),
-            activate: true,
+            // Only transcription models become the active model; the voice activity pack
+            // is a helper and must not displace it.
+            activate: entry.role == "transcription",
             keep_versions: p.keep_model_versions.map_or(2, |k| k.clamp(1, 10) as usize),
             now: &now,
         };
