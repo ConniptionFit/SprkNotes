@@ -238,18 +238,24 @@ impl Host {
         let join = std::thread::Builder::new()
             .name("sprk-session".into())
             .spawn(move || {
-                run(
-                    rx,
-                    shared,
-                    engine,
-                    make_vad,
-                    make_backend,
-                    clock,
-                    events,
-                    commit,
-                    root,
-                    context,
-                );
+                let guard = (shared.clone(), events.clone());
+                let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    run(
+                        rx,
+                        shared,
+                        engine,
+                        make_vad,
+                        make_backend,
+                        clock,
+                        events,
+                        commit,
+                        root,
+                        context,
+                    );
+                }));
+                if outcome.is_err() {
+                    interrupted(&guard.0, guard.1.as_ref());
+                }
             })
             .map_err(|_| HostError::Gone)?;
         Ok(Host {
@@ -281,6 +287,20 @@ impl Host {
             None => Ok(()),
         }
     }
+}
+
+/// The session thread panicked: every committed line is already on disk, so close the file as
+/// interrupted (SPEC 12, CLAUDE.md rule 6) and tell the UI. Nothing from the panic is logged.
+fn interrupted(shared: &SharedWriter, events: &dyn Events) {
+    if let Some(w) = lock(shared).take() {
+        let path = w.path().to_path_buf();
+        drop(w);
+        if sprk_transcript::recovery::mark_interrupted(&path).is_err() {
+            events.problem("finalize_failed");
+        }
+    }
+    events.problem("session_panicked");
+    events.status(UiStatus::Ready);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -850,5 +870,45 @@ mod tests {
             "{text}"
         );
         assert!(text.contains("## Audio sources"));
+    }
+
+    struct PanicEngine;
+    impl Engine for PanicEngine {
+        fn transcribe(&mut self, _: &[f32]) -> Result<Vec<AsrSeg>, AsrError> {
+            panic!("engine blew up");
+        }
+    }
+
+    #[test]
+    fn a_panic_closes_the_file_as_interrupted_and_keeps_committed_lines() {
+        let dir = tempfile::tempdir().unwrap();
+        let ev = Arc::new(Collect::default());
+        let audio = Arc::new(Mutex::new(Some(vec![0.1f32; 16_000])));
+        let host = Host::start(
+            StartParams {
+                root: dir.path().to_path_buf(),
+                name: "Crash".into(),
+                app_version: "0.0.1".into(),
+                engine_label: "test@2026.11.0".into(),
+                commit: Config::default(),
+            },
+            Box::new(PanicEngine),
+            Box::new(|| Box::new(ChunkVad(0))),
+            Box::new(move || Box::new(OneMicBackend(audio))),
+            Box::new(FixedClock),
+            ev.clone(),
+            None,
+        )
+        .unwrap();
+        std::thread::sleep(Duration::from_millis(400));
+        host.end().unwrap();
+        let text = only_md(dir.path());
+        assert!(text.contains("status: interrupted"), "{text}");
+        assert!(text.contains("Transcription interrupted"));
+        assert!(ev
+            .problems
+            .lock()
+            .unwrap()
+            .contains(&"session_panicked".to_string()));
     }
 }

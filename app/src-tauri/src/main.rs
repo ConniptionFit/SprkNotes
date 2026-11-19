@@ -205,6 +205,13 @@ fn main() -> anyhow::Result<()> {
         println!("SprkNotes {}", env!("CARGO_PKG_VERSION"));
         return Ok(());
     }
+    // Panic messages can carry text from anywhere: report only where it happened (CLAUDE.md rule 4).
+    // The session thread closes its transcript as interrupted on its own.
+    std::panic::set_hook(Box::new(|info| {
+        if let Some(l) = info.location() {
+            eprintln!("panic at {}:{}", l.file(), l.line());
+        }
+    }));
     tauri::Builder::default()
         .manage(AppState::default())
         .manage(shell::Shell::default())
