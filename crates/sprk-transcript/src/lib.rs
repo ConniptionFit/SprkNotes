@@ -1,10 +1,18 @@
-//! Format `sprknotes-transcript/1`. Writer, recovery and exporters arrive in M3 and M7.
+//! Transcript format `sprknotes-transcript/1`, crash-safe writer, naming and recovery
+//! (SPEC 5 and 6). Pure std: no clock, no OS calls beyond files, fully testable on Linux.
+
+pub mod format;
+pub mod naming;
+pub mod recovery;
+pub mod writer;
+
 pub const FORMAT: &str = "sprknotes-transcript/1";
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn format_id_is_stable() {
-        assert_eq!(super::FORMAT, "sprknotes-transcript/1");
-    }
+/// Why transcript operations fail. Messages never contain transcript text or names.
+#[derive(Debug, thiserror::Error)]
+pub enum TranscriptError {
+    #[error("file operation failed: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("not a sprknotes transcript")]
+    NotATranscript,
 }

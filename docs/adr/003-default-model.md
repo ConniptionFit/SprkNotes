@@ -1,7 +1,7 @@
 # ADR-003: Default transcription model and speech engine adapter
 
-Status: **proposed**. Accuracy and dev-host numbers are in; the ARM64 and Intel laptop numbers
-(SPEC 13.3) are pending and decide whether this becomes *accepted*.
+Status: **accepted** (Parakeet TDT 0.6B v2 int8 chosen as the default by John, 2026-11-19). Accuracy and dev-host numbers are in. The ARM64 and Intel laptop numbers
+(SPEC 13.3) are still pending; if a gate fails, revisit this decision.
 
 ## Context
 M1 needs one speech engine adapter and a default transcription model, chosen on measured
