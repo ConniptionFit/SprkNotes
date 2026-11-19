@@ -41,7 +41,11 @@ Once the Windows-only code lands, one pass in `sprk-winvm` covers it:
 - [ ] `./scripts/winvm.sh test` (full workspace on Windows).
 - [ ] `./scripts/winvm.sh run-app`: open the main window, confirm Start/Pause/End and the live pane scroll
   behavior (scroll up, "Return to live" pill, End key) once the Tauri commands are wired.
-- [ ] Windows installers and packaging (M13) through `./scripts/winvm.sh release`.
+- [x] Windows installers and packaging (M13) through `release.ps1`: both MSIs have files, per-user install and uninstall leave nothing behind, version gate passes (2026-11-19, VM, throwaway cert).
+- [ ] MSIX install: needs the signing cert in `LocalMachine\TrustedPeople` (admin, changes the VM trust store); run with a throwaway cert and remove it afterwards.
+- [ ] Per-machine MSI (`ALLUSERS=1`) install and uninstall, and `Install-SprkNotes.ps1` as SYSTEM.
+- [ ] arm64 MSI and portable build run on the Snapdragon laptop.
+- [ ] Dev tools: WiX v5 (not v7, which needs the OSMF EULA accepted by a person), ARM64 MSVC component, Windows SDK tools.
 
 ## Windows capture and session (next VM run)
 - [ ] `capture-check` with a real mic signal: route a host virtual source (for example a PipeWire null-sink monitor) into the VM's SPICE input. Loopback was verified; the VM mic read silence (no input signal available).
