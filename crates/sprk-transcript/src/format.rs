@@ -92,6 +92,11 @@ pub struct Meta {
 
 impl Meta {
     pub fn front_matter(&self) -> String {
+        self.front_matter_with("")
+    }
+
+    /// Front matter with extra YAML blocks (call, audio_sources) placed before `engine`.
+    pub fn front_matter_with(&self, blocks: &str) -> String {
         let mut s = String::from("---\n");
         s.push_str(&format!("format: {}\n", crate::FORMAT));
         s.push_str(&format!("title: {}\n", yaml_str(&self.title)));
@@ -108,6 +113,7 @@ impl Meta {
         let sp: Vec<String> = self.speakers.iter().map(|x| yaml_str(x)).collect();
         s.push_str(&format!("speakers: [{}]\n", sp.join(", ")));
         s.push_str(&format!("name_source: {}\n", self.name_source.as_str()));
+        s.push_str(blocks);
         s.push_str(&format!("engine: {}\n", yaml_str(&self.engine)));
         s.push_str(&format!("app: {}\n", yaml_str(&self.app)));
         s.push_str("---\n");
