@@ -6,3 +6,25 @@ export type Line =
   | { kind: "event"; id: number; t: string; text: string };
 
 export type Source = "mic" | "system";
+
+/** Mirrors the Rust `ModelStatus` (camelCase). No network call behind it. */
+export type ModelStatus = {
+  ready: boolean;
+  downloadEnabled: boolean;
+  updateCheckEnabled: boolean;
+  customSource: boolean;
+  busy: boolean;
+};
+
+export type PackInfo = { id: string; version: string; installed?: string | null };
+export type UpdateInfo = { available: boolean; packs: PackInfo[] };
+
+export type DownloadStage = "checking" | "downloading" | "verifying" | "done" | "error";
+export type DownloadProgress = {
+  stage: DownloadStage;
+  pack?: string | null;
+  done: number;
+  total?: number | null;
+  /** Already plain language, never a URL. Shown as is. */
+  error?: string | null;
+};

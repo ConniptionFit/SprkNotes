@@ -1,11 +1,13 @@
-<script lang="ts"></script>
+<script lang="ts">
+  let { onsettings, settingsOpen = false }: { onsettings: () => void; settingsOpen?: boolean } = $props();
+</script>
 
 <nav aria-label="More">
   <button disabled title="Arrives with the library">
     <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 4.5h12M4 10h12M4 15.5h8" /></svg>
     Library
   </button>
-  <button disabled title="Arrives with settings">
+  <button onclick={onsettings} aria-pressed={settingsOpen} class:active={settingsOpen}>
     <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="2.5" /><path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M4.7 15.3l1.4-1.4M13.9 6.1l1.4-1.4" /></svg>
     Settings
   </button>
@@ -28,5 +30,7 @@
     color: var(--muted);
   }
   button:disabled { opacity: 0.6; }
+  button:not(:disabled):hover { background: var(--surface-2); color: var(--text); }
+  button.active { background: var(--accent-soft); color: var(--accent); }
   svg { width: 1.1rem; height: 1.1rem; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 </style>
