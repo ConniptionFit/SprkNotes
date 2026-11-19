@@ -1,6 +1,7 @@
 # Changelog
 
 ## 0.0.1 (unreleased)
+- M2 (capture): `LiveCapture` follows default mic and render devices (device change, unplug, recovery events, failed-open keeps old stream) behind a `Backend` seam; cpal backend (WASAPI mic + loopback) in `sprk-audio` behind `cpal-backend`; `sprkctl capture-check` prints per-source counts and levels without storing audio.
 - Docs: README, user guide, admin guide, architecture overview, third-party notices, synthetic-data screenshots of the main window.
 - M5 (UI half): main window with session name, source toggles, status pill, Start/Pause/Resume/End, live pane with follow mode, "Return to live" pill and End key (SPEC 8.2), typed backend API with a browser mock, vitest for the follow rules. Tauri commands behind it arrive with Windows capture.
 - M2 (portable core): `Session` orchestrator (Me/Others streams, VAD, decode, commit buffer, writer sink, pause/resume with visible gaps, source toggles, remote label that never rewrites committed lines), counters-only stats.

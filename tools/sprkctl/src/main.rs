@@ -5,6 +5,8 @@ use anyhow::{bail, Context, Result};
 use sprk_models::Manifest;
 use std::path::Path;
 
+#[cfg(feature = "live")]
+mod capture_check;
 #[cfg(any(feature = "engine", feature = "engine-shared"))]
 mod engine;
 #[cfg(all(feature = "live", any(feature = "engine", feature = "engine-shared")))]
@@ -57,12 +59,15 @@ fn main() -> Result<()> {
         ["devices"] => live::list_devices()?,
         #[cfg(any(feature = "engine", feature = "engine-shared"))]
         ["bench", "accuracy", ..] => engine::bench_accuracy(&engine_args(&args[2..])?)?,
+        #[cfg(feature = "live")]
+        ["capture-check", rest @ ..] => capture_check::run(rest)?,
         [] | ["--version"] => println!("sprkctl {}", env!("CARGO_PKG_VERSION")),
         _ => bail!(
             "usage: sprkctl model inspect <model-folder>\n       \
              sprkctl model <pack|verify|hash|install|import|list|activate|rollback|remove> ...   (SPEC 16.7)\n       \
              sprkctl transcribe <model-folder> <wav> [--vad <vad-folder>]    (--features engine)\n       \
              sprkctl transcribe <model-folder> --mic --vad <vad-folder> [--seconds N] [--device NAME]  (--features live)\n       \
+             sprkctl capture-check [--seconds N]                              (--features live)\n       \
              sprkctl devices                                                  (--features live)\n       \
              sprkctl bench accuracy <model-folder> <fixtures-dir> [--vad <vad-folder>]  (--features engine)"
         ),
