@@ -1,35 +1,13 @@
 name: diag
 on: [push]
 jobs:
-  j-checkout-action:
+  j-rustup:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-  j-has-git:
+      - run: curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal -c clippy,rustfmt -t x86_64-pc-windows-msvc,aarch64-pc-windows-msvc
+      - run: . "$HOME/.cargo/env" && cargo --version && cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings
+  j-xwin-net:
     runs-on: ubuntu-latest
     steps:
-      - run: git --version
-  j-has-cargo:
-    runs-on: ubuntu-latest
-    steps:
-      - run: cargo --version
-  j-has-rustup:
-    runs-on: ubuntu-latest
-    steps:
-      - run: rustup --version
-  j-has-node:
-    runs-on: ubuntu-latest
-    steps:
-      - run: node --version
-  j-has-cc:
-    runs-on: ubuntu-latest
-    steps:
-      - run: cc --version
-  j-net-crates:
-    runs-on: ubuntu-latest
-    steps:
-      - run: curl -sSfI https://index.crates.io/config.json
-  j-net-github:
-    runs-on: ubuntu-latest
-    steps:
-      - run: curl -sSfI https://github.com
+      - run: curl -sSfI https://aka.ms/vs/17/release/channel
