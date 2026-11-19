@@ -17,7 +17,7 @@
     onsource: (s: Source, on: boolean) => void;
   } = $props();
 
-  const label: Record<Status, string> = {
+  const label: { [K in Status]: string } = {
     ready: "Ready",
     transcribing: "Transcribing",
     paused: "Paused",
