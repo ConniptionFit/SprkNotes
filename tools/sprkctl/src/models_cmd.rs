@@ -24,7 +24,12 @@ fn supported_engines() -> Vec<&'static str> {
     {
         let mut reg = sprk_asr::Registry::default();
         sprk_asr::sherpa::register(&mut reg);
-        reg.engines()
+        let mut engines = reg.engines();
+        // The voice activity model is loaded by the VAD wrapper, not the transcription registry.
+        if !engines.contains(&sprk_asr::sherpa::ENGINE_VAD_SILERO) {
+            engines.push(sprk_asr::sherpa::ENGINE_VAD_SILERO);
+        }
+        engines
     }
     #[cfg(not(any(feature = "engine", feature = "engine-shared")))]
     {

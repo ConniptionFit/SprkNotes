@@ -1,6 +1,7 @@
 # Changelog
 
 ## 0.0.1 (unreleased)
+- Fix: engine builds (the app and `sprkctl --features engine`) rejected the voice activity pack with `unknown engine 'sherpa-onnx/vad-silero'`, so Download model could not install it. Found by the real download test on the VM; the VAD engine is now in the supported list.
 - Model download: packs can be published as parts (`sprkctl model index --split-mb 80 --parts-dir <dir>`), because the release host rejects uploads over about 100 MB. The index lists each part with its own checksum; the app joins them, checks the whole-pack checksum, then imports as usual.
 - Model download (ADR-005): portable core (`sprk_models::remote`: index parsing with https and path checks, version comparison, download then checksum then the normal import) with fake-tested paths, a WinHTTP client in the app, Tauri commands `model_status`, `model_check_update`, `model_download` with `model-download` progress and `model-update` launch-check events, policy keys `ModelDownload`, `ModelUpdateCheck`, `ModelIndexUrl` (plus the model trust keys now parsed), `sprkctl model index`. The Settings pane button is for the redesign thread. CLAUDE.md rule 2 and SPEC amended.
 - sprkctl: `model list` with no scope now shows every store the app reads (bundled next to the exe, machine, user) with a store column; `--scope user` now uses `%AppData%` like the app (it used `%LocalAppData%`, so user installs were invisible to the app).
