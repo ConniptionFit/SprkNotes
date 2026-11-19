@@ -1,0 +1,32 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/sprk-audio", "crates/sprk-asr", "crates/sprk-models", "crates/sprk-context",
+  "crates/sprk-pipeline", "crates/sprk-transcript", "crates/sprk-calendar",
+  "crates/sprk-handoff", "crates/sprk-config", "tools/sprkctl",
+]
+# app/src-tauri needs WebView2 / webkit2gtk, so it builds on Windows only (see ADR-002).
+exclude = ["app/src-tauri"]
+
+[workspace.package]
+# The ONLY version source. scripts/bump-version.sh keeps app/src-tauri in step.
+version = "0.0.1"
+edition = "2021"
+license = "MIT"
+rust-version = "1.80"
+
+[workspace.dependencies]
+thiserror = "1"
+anyhow = "1"
+tracing = "0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+hex = "0.4"
+tempfile = "3"
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"

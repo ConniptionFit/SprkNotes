@@ -87,7 +87,11 @@ cargo xwin build --release --target x86_64-pc-windows-msvc
 cargo xwin build --release --target aarch64-pc-windows-msvc
 
 # Engine accuracy on fixtures (Linux build of sherpa-onnx; speed numbers here are NOT gates)
+# First run fetches native libs and models into ~/.cache/sprknotes (scripts/fetch-sherpa.sh, fetch-models.sh)
 ./scripts/bench.sh --accuracy-only
+
+# Transcribe a WAV or live input from a model folder (engine needs SHERPA_ONNX_LIB_DIR; see docs/dev-environment.md)
+cargo run --release -p sprkctl --features engine,live -- transcribe <model-folder> <wav> --vad <vad-folder>
 
 # --- Windows VM (one command from the dev host) ---
 # Syncs the current branch to sprk-winvm and runs the Windows test suite there

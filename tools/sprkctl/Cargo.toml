@@ -1,0 +1,27 @@
+[package]
+name = "sprkctl"
+description = "Admin CLI for model packs (SPEC 16.7)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+# `engine` adds `transcribe` and `bench` (needs the sherpa-onnx native libs: SHERPA_ONNX_LIB_DIR).
+# `engine` links them statically; `engine-shared` uses the DLL import libs instead (Windows ARM64).
+engine = ["dep:sprk-asr", "sprk-asr/sherpa-static"]
+engine-shared = ["dep:sprk-asr", "sprk-asr/sherpa-shared"]
+# `live` adds `transcribe --mic` (cpal: WASAPI on Windows, ALSA/PipeWire on Linux).
+# Use it together with `engine` or `engine-shared`.
+live = ["dep:cpal", "dep:ringbuf", "dep:sprk-audio"]
+
+[dependencies]
+sprk-models = { path = "../../crates/sprk-models" }
+sprk-asr = { path = "../../crates/sprk-asr", optional = true }
+sprk-audio = { path = "../../crates/sprk-audio", optional = true }
+cpal = { version = "0.15", optional = true }
+ringbuf = { version = "0.4", optional = true }
+anyhow.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,26 @@
+[package]
+name = "sprk-asr"
+description = "Speech engine trait; sherpa-onnx adapters arrive in M1"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+sprk-models = { path = "../sprk-models" }
+
+sherpa-onnx = { version = "=2.0.1", optional = true, default-features = false }
+
+[features]
+# sherpa-onnx adapters. Off by default so plain `cargo test --workspace` never needs the
+# native libs; set SHERPA_ONNX_LIB_DIR (scripts/fetch-sherpa.sh) when enabling.
+# Pick exactly one link mode: `sherpa-static` (Linux, Windows x64) or `sherpa-shared`
+# (Windows ARM64: the xwin MSVC runtime lacks the ARM64 STL helpers the static libs need).
+sherpa-static = ["dep:sherpa-onnx", "sherpa-onnx/static"]
+sherpa-shared = ["dep:sherpa-onnx", "sherpa-onnx/shared"]
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,12 @@
+[package]
+name = "sprk-context"
+description = "Audio source detection and call context seams (SPEC 18, 19). Read-only"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+
+[lints]
+workspace = true

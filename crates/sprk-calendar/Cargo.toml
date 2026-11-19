@@ -1,0 +1,12 @@
+[package]
+name = "sprk-calendar"
+description = "Calendar provider seam; Outlook COM arrives in M8"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+
+[lints]
+workspace = true
