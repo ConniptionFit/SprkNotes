@@ -20,7 +20,7 @@ sync() {
 }
 
 case "$cmd" in
-  check) ssh_run "echo reachable && ver" ;;
+  check) ssh_run "powershell -NoProfile -Command \"'reachable'; [Environment]::OSVersion.VersionString\"" ;;
   test) sync; ssh_run "powershell -NoProfile -Command \"cd '$DIR'; cargo test --workspace\"" ;;
   run-app) sync; ssh_run "powershell -NoProfile -Command \"cd '$DIR/app/ui'; npm ci; npm run tauri dev\"" ;;
   release) sync; ssh_run "powershell -NoProfile -Command \"cd '$DIR'; pwsh scripts/release.ps1\"" ;;
