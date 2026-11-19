@@ -5,6 +5,9 @@
 //! No network: a plan may name an `https://` page to open in the user's own app or browser,
 //! but SprkNotes itself makes no request.
 
+#[cfg(windows)]
+pub mod shell;
+
 /// Prompt text cap for a link (SPEC 9.1, about 14,000 characters).
 pub const MAX_PROMPT_CHARS: usize = 14_000;
 
