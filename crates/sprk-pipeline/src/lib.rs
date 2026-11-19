@@ -3,6 +3,7 @@
 
 pub mod commit;
 pub mod dedupe;
+pub mod host;
 pub mod rules;
 pub mod session;
 

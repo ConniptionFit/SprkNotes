@@ -5,8 +5,14 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+# cpal capture backend (WASAPI mic + loopback on Windows). Off by default.
+cpal-backend = ["dep:cpal", "dep:ringbuf"]
+
 [dependencies]
 thiserror.workspace = true
+cpal = { version = "0.15", optional = true }
+ringbuf = { version = "0.4", optional = true }
 
 [lints]
 workspace = true
