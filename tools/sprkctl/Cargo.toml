@@ -12,12 +12,13 @@ engine = ["dep:sprk-asr", "sprk-asr/sherpa-static"]
 engine-shared = ["dep:sprk-asr", "sprk-asr/sherpa-shared"]
 # `live` adds `transcribe --mic` (cpal: WASAPI on Windows, ALSA/PipeWire on Linux).
 # Use it together with `engine` or `engine-shared`.
-live = ["dep:cpal", "dep:ringbuf", "dep:sprk-audio", "sprk-audio/cpal-backend"]
+live = ["dep:cpal", "dep:ringbuf", "dep:sprk-audio", "dep:sprk-context", "sprk-audio/cpal-backend"]
 
 [dependencies]
 sprk-models = { path = "../../crates/sprk-models" }
 sprk-asr = { path = "../../crates/sprk-asr", optional = true }
 sprk-audio = { path = "../../crates/sprk-audio", optional = true }
+sprk-context = { path = "../../crates/sprk-context", optional = true }
 cpal = { version = "0.15", optional = true }
 ringbuf = { version = "0.4", optional = true }
 anyhow.workspace = true

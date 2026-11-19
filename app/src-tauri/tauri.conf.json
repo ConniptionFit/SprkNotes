@@ -9,7 +9,26 @@
     "frontendDist": "../ui/dist"
   },
   "app": {
-    "windows": [{ "label": "main", "title": "SprkNotes", "width": 900, "height": 640 }],
+    "windows": [
+      { "label": "main", "title": "SprkNotes", "width": 900, "height": 640 },
+      {
+        "label": "mini",
+        "title": "SprkNotes mini controller",
+        "url": "index.html#mini",
+        "width": 130,
+        "height": 44,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "maximizable": false,
+        "minimizable": false,
+        "focus": false,
+        "visible": false
+      }
+    ],
     "security": {
       "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
     }

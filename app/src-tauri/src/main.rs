@@ -2,6 +2,7 @@
 
 mod clock;
 mod models;
+mod shell;
 
 use serde::Serialize;
 use sprk_audio::cpal_backend::CpalBackend;
@@ -62,6 +63,7 @@ impl Events for TauriEvents {
             UiStatus::Paused => "paused",
         };
         let _ = self.0.emit("session-status", v);
+        shell::on_status(&self.0, v);
     }
     fn problem(&self, kind: &str) {
         let _ = self.0.emit("session-problem", kind);
@@ -80,6 +82,36 @@ fn transcripts_root(app: &AppHandle) -> Result<PathBuf, String> {
         .document_dir()
         .map_err(|_| "no Documents folder".to_string())?;
     Ok(docs.join("SprkNotes").join("Transcripts"))
+}
+
+/// Audio source and call context detection (SPEC 18, 19). Windows only; the inputs are built on
+/// the session thread. Defaults until the policy settings are wired in (M14).
+#[cfg(windows)]
+fn context_config() -> Option<sprk_pipeline::host::ContextConfig> {
+    use sprk_context::sources::AudioSessionSource;
+    use sprk_context::win::{WasapiSessions, Windows};
+    use sprk_context::WindowEnumerator;
+    use sprk_pipeline::host::{ContextConfig, ContextInputs};
+    Some(ContextConfig {
+        make_inputs: Box::new(|| {
+            let (w, s) = (Windows, WasapiSessions::default());
+            ContextInputs {
+                windows: Box::new(move || w.windows()),
+                sessions: Box::new(move || s.sessions()),
+            }
+        }),
+        audio_sources: true,
+        call_context: true,
+        name_one_to_one: true,
+        timing: sprk_context::activity::Timing::default(),
+        exclusions: Vec::new(),
+        call_poll_ms: 15_000,
+    })
+}
+
+#[cfg(not(windows))]
+fn context_config() -> Option<sprk_pipeline::host::ContextConfig> {
+    None
 }
 
 #[tauri::command]
@@ -103,6 +135,7 @@ fn start_session(app: AppHandle, state: State<AppState>, name: String) -> Result
         Box::new(|| Box::new(CpalBackend::default()) as Box<dyn Backend>),
         Box::new(clock::LocalClock),
         Arc::new(TauriEvents(app)),
+        context_config(),
     )
     .map_err(|e| e.to_string())?;
     *slot = Some(host);
@@ -154,6 +187,18 @@ fn end_session(state: State<AppState>) -> Result<(), String> {
     }
 }
 
+/// The mini controller's hover expand and collapse.
+#[tauri::command]
+fn mini_expand(app: AppHandle, expanded: bool) {
+    shell::set_mini_expanded(&app, expanded);
+}
+
+/// Bring the main window back (also hides the mini controller).
+#[tauri::command]
+fn open_app(app: AppHandle) {
+    shell::open_main(&app);
+}
+
 fn main() -> anyhow::Result<()> {
     // Used by scripts/release.ps1 to check every artifact reports the same version.
     if std::env::args().any(|a| a == "--version") {
@@ -162,6 +207,16 @@ fn main() -> anyhow::Result<()> {
     }
     tauri::Builder::default()
         .manage(AppState::default())
+        .manage(shell::Shell::default())
+        .setup(|app| {
+            shell::init(app.handle())?;
+            Ok(())
+        })
+        .on_window_event(|window, event| match window.label() {
+            "main" => shell::on_main_event(window.app_handle(), event),
+            "mini" => shell::on_mini_event(window.app_handle(), event),
+            _ => {}
+        })
         .invoke_handler(tauri::generate_handler![
             app_version,
             start_session,
@@ -169,7 +224,9 @@ fn main() -> anyhow::Result<()> {
             resume_session,
             end_session,
             rename_session,
-            set_source
+            set_source,
+            mini_expand,
+            open_app
         ])
         .run(tauri::generate_context!())?;
     Ok(())

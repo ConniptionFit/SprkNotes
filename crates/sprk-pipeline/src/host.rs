@@ -7,10 +7,14 @@
 //! (the writer does that), so a crash or a dropped `Host` loses nothing already committed.
 use crate::commit::Config;
 use crate::session::{Session, SessionError, Sink, VadFactory};
-use crate::Segment;
+use crate::{Segment, Speaker};
 use sprk_asr::Engine;
 use sprk_audio::live::{Backend, CaptureEvent, LiveCapture};
 use sprk_audio::Source;
+use sprk_context::activity::{ActivityTracker, Exclusions, Timing};
+use sprk_context::labeling::{parse_call_title, LabelTracker, Observation, TitleRules};
+use sprk_context::sources::{AudioSession, NoTabs, SourcePoller};
+use sprk_context::Window;
 use sprk_transcript::format::{timestamp, Meta, NameSource, Status};
 use sprk_transcript::naming::{file_name, unique_path};
 use sprk_transcript::writer::TranscriptWriter;
@@ -82,6 +86,25 @@ pub enum HostError {
     Start(#[from] sprk_transcript::TranscriptError),
     #[error("the session thread stopped")]
     Gone,
+}
+
+/// Platform inputs for context detection. Built on the session thread (COM must be
+/// initialized per thread), so the closure that makes them is what crosses threads.
+pub struct ContextInputs {
+    pub windows: Box<dyn Fn() -> Vec<Window>>,
+    pub sessions: Box<dyn Fn() -> Vec<AudioSession>>,
+}
+
+/// SPEC 18 and 19 settings that reach the host. `None` disables context entirely.
+pub struct ContextConfig {
+    pub make_inputs: Box<dyn FnOnce() -> ContextInputs + Send>,
+    pub audio_sources: bool,
+    pub call_context: bool,
+    pub name_one_to_one: bool,
+    pub timing: Timing,
+    pub exclusions: Vec<String>,
+    /// Window title poll interval for call context (SPEC 19.3: 15 s, 5 to 60 s in the app).
+    pub call_poll_ms: u64,
 }
 
 enum Cmd {
@@ -173,6 +196,7 @@ impl Host {
         make_backend: Box<dyn FnOnce() -> Box<dyn Backend> + Send>,
         clock: Box<dyn Clock>,
         events: Arc<dyn Events>,
+        context: Option<ContextConfig>,
     ) -> Result<Host, HostError> {
         let stamp = clock.now();
         let title = if p.name.trim().is_empty() {
@@ -224,6 +248,7 @@ impl Host {
                     events,
                     commit,
                     root,
+                    context,
                 );
             })
             .map_err(|_| HostError::Gone)?;
@@ -269,7 +294,9 @@ fn run(
     events: Arc<dyn Events>,
     commit: Config,
     root: PathBuf,
+    context: Option<ContextConfig>,
 ) {
+    let mut ctx = context.map(Ctx::new);
     let mut capture = LiveCapture::new(make_backend());
     let sink = UiSink {
         writer: shared.clone(),
@@ -294,6 +321,9 @@ fn run(
             Ok(Cmd::Pause) => {
                 capture.poll(now_ms(&start));
                 drain(&mut capture, &mut session);
+                if let Some(c) = ctx.as_mut() {
+                    c.pause(now_ms(&start), &mut session);
+                }
                 if let Err(e) = session.pause(now_ms(&start)) {
                     problem(e);
                 }
@@ -330,6 +360,11 @@ fn run(
             }
         }
         drain(&mut capture, &mut session);
+        if let Some(c) = ctx.as_mut() {
+            if session.state() == crate::session::State::Running {
+                c.poll(t, &mut session);
+            }
+        }
         if t.saturating_sub(last_tick) >= 1_000 {
             last_tick = t;
             if let Err(e) = session.tick(t) {
@@ -342,6 +377,11 @@ fn run(
     let t = now_ms(&start);
     capture.poll(t);
     drain(&mut capture, &mut session);
+    if let Some(c) = ctx.as_mut() {
+        if session.state() == crate::session::State::Running {
+            c.pause(t, &mut session);
+        }
+    }
     if let Err(e) = session.end(t) {
         problem(e);
     }
@@ -359,6 +399,131 @@ fn run(
         }
     }
     events.status(UiStatus::Ready);
+}
+
+/// Context detection running on the session thread: audio sources (SPEC 18) and call context
+/// (SPEC 19). Titles and names only ever go into transcript event lines (CLAUDE.md rule 11).
+struct Ctx {
+    cfg: ContextConfig,
+    inputs: Option<ContextInputs>,
+    poller: SourcePoller,
+    labels: LabelTracker,
+    rules: TitleRules,
+    last_sources_ms: Option<u64>,
+    last_call_ms: Option<u64>,
+    windows: Vec<Window>,
+    last_label: String,
+}
+
+impl Ctx {
+    fn new(mut cfg: ContextConfig) -> Self {
+        let make = std::mem::replace(&mut cfg.make_inputs, Box::new(unreachable_inputs));
+        let inputs = Some(make());
+        let poller = SourcePoller::new(ActivityTracker::new(
+            cfg.timing.clone(),
+            Exclusions(cfg.exclusions.clone()),
+        ));
+        Ctx {
+            cfg,
+            inputs,
+            poller,
+            labels: LabelTracker::new(),
+            rules: TitleRules::default(),
+            last_sources_ms: None,
+            last_call_ms: None,
+            windows: Vec::new(),
+            last_label: "Others".into(),
+        }
+    }
+
+    fn write(session: &mut Session, at_ms: u64, text: &str) {
+        let _ = session.event(at_ms, text);
+    }
+
+    fn poll(&mut self, t: u64, session: &mut Session) {
+        let Some(inputs) = self.inputs.as_ref() else {
+            return;
+        };
+        if self.cfg.audio_sources
+            && self
+                .last_sources_ms
+                .is_none_or(|l| t.saturating_sub(l) >= 250)
+        {
+            self.last_sources_ms = Some(t);
+            // Titles come from a window list refreshed at most every 2 s.
+            if self.windows.is_empty() || t % 2_000 < 250 {
+                self.windows = (inputs.windows)();
+            }
+            let sessions = (inputs.sessions)();
+
+            for ev in self.poller.poll(t, &sessions, &[], &NoTabs, &self.windows) {
+                Self::write(session, ev.at_ms(), &ev.text());
+            }
+        }
+        if self.cfg.call_context
+            && self
+                .last_call_ms
+                .is_none_or(|l| t.saturating_sub(l) >= self.cfg.call_poll_ms)
+        {
+            self.last_call_ms = Some(t);
+            let wins = (inputs.windows)();
+            let obs = self.observe(&wins);
+            if let Some(change) = self.labels.observe(&obs, t) {
+                Self::write(session, change.at_ms, &change.text);
+            }
+            // Never guess: a name is only used once the mode is confirmed.
+            let label = self.labels.remote_label().to_string();
+            if label != self.last_label {
+                session.set_remote_speaker(if label == "Others" {
+                    Speaker::Others
+                } else {
+                    Speaker::Named(label.clone())
+                });
+                self.last_label = label;
+            }
+        }
+    }
+
+    /// Strongest signal among the Teams windows: a parsed call beats Unknown.
+    fn observe(&self, wins: &[Window]) -> Observation {
+        let mut best = Observation::Unknown;
+        for w in wins {
+            if !self
+                .rules
+                .strip_suffixes
+                .iter()
+                .any(|s| w.title.ends_with(s.as_str()))
+            {
+                continue;
+            }
+            match parse_call_title(&w.title, &self.rules) {
+                Observation::Unknown => {}
+                Observation::OneToOne(n) => {
+                    if !self.cfg.name_one_to_one {
+                        return Observation::Unknown;
+                    }
+                    if best == Observation::Unknown {
+                        best = Observation::OneToOne(n);
+                    }
+                }
+                Observation::Group => return Observation::Group,
+            }
+        }
+        best
+    }
+
+    fn pause(&mut self, t: u64, session: &mut Session) {
+        for ev in self.poller.pause(t) {
+            Self::write(session, ev.at_ms(), &ev.text());
+        }
+    }
+}
+
+fn unreachable_inputs() -> ContextInputs {
+    ContextInputs {
+        windows: Box::new(Vec::new),
+        sessions: Box::new(Vec::new),
+    }
 }
 
 fn label(s: Source) -> &'static str {
@@ -380,6 +545,7 @@ mod tests {
     use sprk_asr::{AsrError, Segment as AsrSeg, Utterance, Vad};
     use sprk_audio::live::PcmStream;
     use sprk_audio::AudioError;
+    use sprk_context::activity::Timing;
 
     struct ChunkVad(u64);
     impl Vad for ChunkVad {
@@ -479,6 +645,7 @@ mod tests {
             Box::new(move || Box::new(OneMicBackend(audio))),
             Box::new(FixedClock),
             ev.clone(),
+            None,
         )
         .unwrap();
         (host, ev, dir)
@@ -569,5 +736,119 @@ mod tests {
             .contains("Transcript"));
         let text = std::fs::read_to_string(&files[0]).unwrap();
         assert!(text.contains("name_source: default"));
+    }
+
+    fn launch_with_context(cfg: ContextConfig) -> (Host, tempfile::TempDir) {
+        let dir = tempfile::tempdir().unwrap();
+        let host = Host::start(
+            StartParams {
+                root: dir.path().to_path_buf(),
+                name: "Ctx".into(),
+                app_version: "0.0.1".into(),
+                engine_label: "test@2026.11.0".into(),
+                commit: Config::default(),
+            },
+            Box::new(QueueEngine(Arc::new(Mutex::new(vec![])))),
+            Box::new(|| Box::new(ChunkVad(0))),
+            Box::new(|| Box::new(OneMicBackend(Arc::new(Mutex::new(None))))),
+            Box::new(FixedClock),
+            Arc::new(Collect::default()),
+            Some(cfg),
+        )
+        .unwrap();
+        (host, dir)
+    }
+
+    fn ctx_cfg(windows: Vec<Window>, sessions: Vec<AudioSession>) -> ContextConfig {
+        ContextConfig {
+            make_inputs: Box::new(move || ContextInputs {
+                windows: Box::new(move || windows.clone()),
+                sessions: Box::new(move || sessions.clone()),
+            }),
+            audio_sources: true,
+            call_context: true,
+            name_one_to_one: true,
+            timing: Timing {
+                merge_general_ms: 30_000,
+                merge_call_ms: 120_000,
+                min_activity_ms: 1_000, // the tracker clamps to SPEC 18.4's 1 s floor
+            },
+            exclusions: vec![],
+            call_poll_ms: 40,
+        }
+    }
+
+    fn only_md(dir: &std::path::Path) -> String {
+        std::fs::read_to_string(&md_files(dir)[0]).unwrap()
+    }
+
+    #[test]
+    fn one_to_one_call_is_confirmed_by_two_polls_and_written_as_an_event() {
+        let win = vec![Window {
+            pid: 1,
+            title: "Sam Sample | Microsoft Teams".into(),
+        }];
+        let (host, dir) = launch_with_context(ctx_cfg(win, vec![]));
+        std::thread::sleep(Duration::from_millis(400));
+        host.end().unwrap();
+        let text = only_md(dir.path());
+        assert!(
+            text.contains("Call with Sam Sample: remote speaker labeled Sam Sample"),
+            "{text}"
+        );
+        // Finalize rebuilt the participants section from that event.
+        assert!(text.contains("## Participants"));
+    }
+
+    #[test]
+    fn group_titles_label_others_and_names_can_be_switched_off() {
+        let group = vec![Window {
+            pid: 1,
+            title: "Weekly meeting | Microsoft Teams".into(),
+        }];
+        let (host, dir) = launch_with_context(ctx_cfg(group, vec![]));
+        std::thread::sleep(Duration::from_millis(400));
+        host.end().unwrap();
+        assert!(only_md(dir.path())
+            .contains("Call became a group call: remote speakers labeled Others"));
+
+        let one = vec![Window {
+            pid: 1,
+            title: "Sam Sample | Microsoft Teams".into(),
+        }];
+        let mut cfg = ctx_cfg(one, vec![]);
+        cfg.name_one_to_one = false;
+        let (host, dir) = launch_with_context(cfg);
+        std::thread::sleep(Duration::from_millis(300));
+        host.end().unwrap();
+        assert!(!only_md(dir.path()).contains("Sam Sample"));
+    }
+
+    #[test]
+    fn audible_apps_become_audio_source_events_and_close_at_end() {
+        let sess = vec![AudioSession {
+            owner_pid: 7,
+            exe: "firefox".into(),
+            peak: 0.2,
+            muted: false,
+            ignorable: false,
+        }];
+        let win = vec![Window {
+            pid: 7,
+            title: "Safety training - Mozilla Firefox".into(),
+        }];
+        let (host, dir) = launch_with_context(ctx_cfg(win, sess));
+        std::thread::sleep(Duration::from_millis(2_400));
+        host.end().unwrap();
+        let text = only_md(dir.path());
+        assert!(
+            text.contains("Audio source started: Firefox \"Safety training\""),
+            "{text}"
+        );
+        assert!(
+            text.contains("Audio source ended: Firefox \"Safety training\""),
+            "{text}"
+        );
+        assert!(text.contains("## Audio sources"));
     }
 }
