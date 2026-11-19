@@ -1,13 +1,26 @@
 name: diag
 on: [push]
 jobs:
-  j-rustup:
+  k-install:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal -c clippy,rustfmt -t x86_64-pc-windows-msvc,aarch64-pc-windows-msvc
-      - run: . "$HOME/.cargo/env" && cargo --version && cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings
-  j-xwin-net:
+  k-fmt:
     runs-on: ubuntu-latest
     steps:
-      - run: curl -sSfI https://aka.ms/vs/17/release/channel
+      - uses: actions/checkout@v4
+      - run: curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal -c clippy,rustfmt -t x86_64-pc-windows-msvc,aarch64-pc-windows-msvc
+      - run: . "$HOME/.cargo/env" && cargo fmt --all --check
+  k-clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal -c clippy,rustfmt -t x86_64-pc-windows-msvc,aarch64-pc-windows-msvc
+      - run: . "$HOME/.cargo/env" && cargo clippy --workspace --all-targets -- -D warnings
+  k-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal -c clippy,rustfmt -t x86_64-pc-windows-msvc,aarch64-pc-windows-msvc
+      - run: . "$HOME/.cargo/env" && cargo test --workspace
