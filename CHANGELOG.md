@@ -1,6 +1,7 @@
 # Changelog
 
 ## 0.0.1 (unreleased)
+- Notices: `scripts/gen-notices.py` regenerates the license summary and crate table and fails when a dependency has no license; run before each release. The Tauri shell's own dependency list still needs adding.
 - M14 (policy): typed admin policy (`AppPolicy`) read from `HKLM` then `HKCU` `Software\Policies\SprkNotes` (read-only registry store, bad values ignored); the app uses it for the transcripts root, commit delay, filler removal, audio source detection and windows, exclusion patterns, call context, poll interval and 1:1 naming. UI lock indicators still to do.
 - M14 (start): a panic on the session thread closes the transcript as `interrupted` (committed lines are already on disk) and reports to the UI; the app's panic hook prints only the source location, never the message.
 - M13 (written, VM check pending): `scripts/release.ps1` (aligned x64 and arm64 builds, MSIs, MSIX bundle, portable zip with launcher, hashes, version alignment gate), WiX package, MSIX manifest template, `Install-SprkNotes.ps1`, `Install-SprkModel.ps1`, Intune notes, `SprkNotes.exe --version`.
