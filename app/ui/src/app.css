@@ -63,3 +63,4 @@ input:focus-visible,
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+html.mini-view, html.mini-view body { background: transparent; overflow: hidden; }

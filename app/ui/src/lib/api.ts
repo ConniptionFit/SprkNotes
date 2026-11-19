@@ -8,6 +8,10 @@ export interface Backend {
   end(): Promise<void>;
   rename(name: string): Promise<void>;
   setSource(source: Source, on: boolean): Promise<void>;
+  /** Mini controller only: grow or shrink the floating window. */
+  miniExpand(expanded: boolean): Promise<void>;
+  /** Mini controller only: bring the main window back. */
+  openApp(): Promise<void>;
   onLine(cb: (l: Line) => void): Promise<() => void>;
   onStatus(cb: (s: Status) => void): Promise<() => void>;
 }
@@ -24,6 +28,8 @@ async function tauri(): Promise<Backend> {
     end: () => invoke("end_session"),
     rename: (name) => invoke("rename_session", { name }),
     setSource: (source, on) => invoke("set_source", { source, on }),
+    miniExpand: (expanded) => invoke("mini_expand", { expanded }),
+    openApp: () => invoke("open_app"),
     onLine: (cb) => listen<Line>("transcript-line", (e) => cb(e.payload)),
     onStatus: (cb) => listen<Status>("session-status", (e) => cb(e.payload)),
   };
@@ -76,6 +82,8 @@ export function mockBackend(): Backend {
     },
     rename: async () => {},
     setSource: async () => {},
+    miniExpand: async () => {},
+    openApp: async () => {},
     onLine: async (cb) => ((lineCb = cb), () => {}),
     onStatus: async (cb) => ((statusCb = cb), () => {}),
   };
