@@ -1,6 +1,7 @@
 # Changelog
 
 ## 0.0.1 (unreleased)
+- M2 (portable core): `Session` orchestrator (Me/Others streams, VAD, decode, commit buffer, writer sink, pause/resume with visible gaps, source toggles, remote label that never rewrites committed lines), counters-only stats.
 - M8/M9 (portable core): meeting selection rules (cancelled, all-day, free skipped; in-progress first, then within 15 min), platform detection, redacting `Meeting` Debug, Meeting context section; handoff prompt template (user, admin, bundled), Claude link builder with 14k cap and clipboard fallback, Copilot plan, policy visibility, `Launcher` seam.
 - M7 (portable core): transcript parser (front matter, statements, events, optional sidecar merge), `Exporter` trait with txt, json and docx adapters, Participants and Audio sources sections and `call:`/`audio_sources:` front matter rebuilt at finalize from event lines.
 - M15 (everything not needing a key): SSHSIG Ed25519 verification (namespace `sprknotes-model`), trusted key parsing and fingerprints, two-key rotation, trust tiers (signing always required from 1.0, cannot be disabled by policy), load-time signature re-check, `sprkctl model sign` via ssh-keygen and the 1Password agent, `docs/manual-checks.md`.
