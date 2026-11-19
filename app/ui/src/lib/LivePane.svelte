@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { tick } from "svelte";
+  import { tick, type Snippet } from "svelte";
   import type { Line, Status } from "./types";
   import { isNearBottom, initialFollow, onScroll, onLines, returnToLive } from "./follow";
 
-  let { lines, status = "ready" }: { lines: Line[]; status?: Status } = $props();
+  let { lines, status = "ready", needsModel = false, empty }: { lines: Line[]; status?: Status; needsModel?: boolean; empty?: Snippet } = $props();
 
   let box: HTMLDivElement;
   let state = $state(initialFollow);
@@ -64,7 +64,11 @@
     {:else}
       <div class="empty">
         <svg viewBox="0 0 48 32" aria-hidden="true"><rect x="4" y="12" width="5" height="8" rx="2.5" /><rect x="13" y="6" width="5" height="20" rx="2.5" /><rect x="22" y="1" width="5" height="30" rx="2.5" /><rect x="31" y="8" width="5" height="16" rx="2.5" /><rect x="40" y="12" width="5" height="8" rx="2.5" /></svg>
-        {#if status === "ready"}
+        {#if needsModel}
+          <h2>One quick step first</h2>
+          <p>SprkNotes needs a transcription model to turn speech into text.</p>
+          {@render empty?.()}
+        {:else if status === "ready"}
           <h2>Ready when you are</h2>
           <p>Press Start and your meeting appears here as it happens.</p>
         {:else}
