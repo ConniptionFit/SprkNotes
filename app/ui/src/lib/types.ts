@@ -28,3 +28,6 @@ export type DownloadProgress = {
   /** Already plain language, never a URL. Shown as is. */
   error?: string | null;
 };
+
+/** A live caption: a partial (final=false) that later settles into a committed transcript line. */
+export type Caption = { speaker: string; text: string; final: boolean };

@@ -6,15 +6,16 @@
 //! Nothing here logs or stores session names, titles or transcript text.
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use tauri::image::Image;
 use tauri::menu::{Menu, MenuBuilder, MenuItemBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, WebviewWindow, WindowEvent};
 
-/// Logical size of the mini controller. Keep in step with `app/ui/src/lib/Mini.svelte`.
-const MINI_COLLAPSED: (f64, f64) = (130.0, 44.0);
-const MINI_EXPANDED: (f64, f64) = (372.0, 44.0);
+/// Default overlay width in logical pixels, used only to centre it the first time. After that the
+/// UI sizes the window to its own content (`resize_mini`).
+const MINI_DEFAULT_WIDTH: f64 = 200.0;
 
 const ICON_READY: &[u8] = include_bytes!("../icons/tray-ready.png");
 const ICON_LIVE: &[u8] = include_bytes!("../icons/tray-transcribing.png");
@@ -26,6 +27,11 @@ pub struct Shell {
     status: Mutex<String>,
     /// Last mini position per monitor name (physical pixels).
     positions: Mutex<HashMap<String, (i32, i32)>>,
+    /// Live captions wanted by the overlay: (on, include "Me"). Read by the caption path.
+    captions_on: AtomicBool,
+    captions_me: AtomicBool,
+    /// False when the desktop has no system tray (some Linux setups).
+    no_tray: AtomicBool,
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -61,7 +67,10 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
     if let Ok(img) = Image::from_bytes(ICON_READY) {
         b = b.icon(img);
     }
-    b.build(app)?;
+    // Some Linux desktops have no tray host. The app must still start; Close then minimizes.
+    if b.build(app).is_err() {
+        app.state::<Shell>().no_tray.store(true, Ordering::Relaxed);
+    }
     Ok(())
 }
 
@@ -210,7 +219,6 @@ fn monitor_key(w: &WebviewWindow) -> String {
 
 /// Restore the last position on this monitor, or default to top centre of the primary monitor.
 fn place_mini(app: &AppHandle, mini: &WebviewWindow) {
-    let _ = mini.set_size(LogicalSize::new(MINI_COLLAPSED.0, MINI_COLLAPSED.1));
     let monitors = app.available_monitors().unwrap_or_default();
     let saved = app
         .state::<Shell>()
@@ -224,7 +232,7 @@ fn place_mini(app: &AppHandle, mini: &WebviewWindow) {
     }
     if let Ok(Some(m)) = mini.primary_monitor() {
         let scale = m.scale_factor();
-        let w = (MINI_COLLAPSED.0 * scale) as i32;
+        let w = (MINI_DEFAULT_WIDTH * scale) as i32;
         let x = m.position().x + (m.size().width as i32 - w) / 2;
         let y = m.position().y + (24.0 * scale) as i32;
         let _ = mini.set_position(PhysicalPosition::new(x, y));
@@ -239,26 +247,47 @@ fn inside_any(monitors: &[tauri::Monitor], x: i32, y: i32) -> bool {
     })
 }
 
-/// Grow or shrink the mini from its left edge; keep it on its monitor when it grows.
-pub fn set_mini_expanded(app: &AppHandle, expanded: bool) {
+/// Size the overlay to its content. It grows right and down from its top-left corner, so the
+/// orb never moves; it is only nudged when it would leave the screen.
+pub fn resize_mini(app: &AppHandle, width: f64, height: f64) {
     let Some(mini) = app.get_webview_window("mini") else {
         return;
     };
-    let (w, h) = if expanded { MINI_EXPANDED } else { MINI_COLLAPSED };
-    if expanded {
-        if let (Ok(pos), Ok(Some(m))) = (mini.outer_position(), mini.current_monitor()) {
-            let scale = m.scale_factor();
-            let right = m.position().x + m.size().width as i32;
-            let max_x = right - (w * scale) as i32;
-            if pos.x > max_x {
-                let _ = mini.set_position(PhysicalPosition::new(max_x, pos.y));
-            }
+    let (w, h) = (width.clamp(40.0, 900.0), height.clamp(30.0, 600.0));
+    if let (Ok(pos), Ok(Some(m))) = (mini.outer_position(), mini.current_monitor()) {
+        let s = m.scale_factor();
+        let right = m.position().x + m.size().width as i32;
+        let bottom = m.position().y + m.size().height as i32;
+        let x = pos.x.min(right - (w * s) as i32).max(m.position().x);
+        let y = pos.y.min(bottom - (h * s) as i32).max(m.position().y);
+        if (x, y) != (pos.x, pos.y) {
+            let _ = mini.set_position(PhysicalPosition::new(x, y));
         }
     }
     let _ = mini.set_size(LogicalSize::new(w, h));
-    if !expanded {
-        save_positions(app);
-    }
+}
+
+/// The UI says which captions it wants, so the engine can skip the rest.
+pub fn set_captions(app: &AppHandle, on: bool, me: bool) {
+    let s = app.state::<Shell>();
+    s.captions_on.store(on, Ordering::Relaxed);
+    s.captions_me.store(me, Ordering::Relaxed);
+}
+
+/// (captions on, include Me). For the caption path in the session host.
+#[allow(dead_code)]
+pub fn captions_wanted(app: &AppHandle) -> (bool, bool) {
+    let s = app.state::<Shell>();
+    (
+        s.captions_on.load(Ordering::Relaxed),
+        s.captions_me.load(Ordering::Relaxed),
+    )
+}
+
+/// True when a system tray icon exists, so Close may hide to it instead of minimizing.
+#[allow(dead_code)]
+pub fn tray_available(app: &AppHandle) -> bool {
+    !app.state::<Shell>().no_tray.load(Ordering::Relaxed)
 }
 
 fn positions_file(app: &AppHandle) -> Option<std::path::PathBuf> {
