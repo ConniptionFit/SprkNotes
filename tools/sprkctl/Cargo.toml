@@ -5,8 +5,18 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+# `engine` adds `transcribe` and `bench` (needs the sherpa-onnx native libs: SHERPA_ONNX_LIB_DIR).
+engine = ["dep:sprk-asr", "sprk-asr/sherpa"]
+# `live` adds `transcribe --mic` (cpal: WASAPI on Windows, ALSA/PipeWire on Linux).
+live = ["engine", "dep:cpal", "dep:ringbuf", "dep:sprk-audio"]
+
 [dependencies]
 sprk-models = { path = "../../crates/sprk-models" }
+sprk-asr = { path = "../../crates/sprk-asr", optional = true }
+sprk-audio = { path = "../../crates/sprk-audio", optional = true }
+cpal = { version = "0.15", optional = true }
+ringbuf = { version = "0.4", optional = true }
 anyhow.workspace = true
 serde_json.workspace = true
 

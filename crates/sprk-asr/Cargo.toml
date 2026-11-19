@@ -9,6 +9,13 @@ license.workspace = true
 thiserror.workspace = true
 sprk-models = { path = "../sprk-models" }
 
+sherpa-onnx = { version = "=2.0.1", optional = true }
+
+[features]
+# sherpa-onnx adapters. Off by default so plain `cargo test --workspace` never needs the
+# native libs; set SHERPA_ONNX_LIB_DIR (scripts/fetch-sherpa.sh) when enabling.
+sherpa = ["dep:sherpa-onnx"]
+
 [dev-dependencies]
 tempfile.workspace = true
 
