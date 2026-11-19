@@ -1,8 +1,7 @@
 # ADR-003: Default transcription model and speech engine adapter
 
-Status: **proposed**, awaiting John's direct confirmation that Parakeet TDT 0.6B v2 int8 is the default
-(the choice was relayed through the build coordinator, not recorded from John). The ARM64 and Intel laptop
-numbers (SPEC 13.3) are also pending. Flip this to *accepted* once John confirms.
+Status: **accepted** (Parakeet TDT 0.6B v2 int8 chosen as the default by John, 2026-11-19). Accuracy and dev-host numbers are in. The ARM64 and Intel laptop numbers
+(SPEC 13.3) are still pending; if a gate fails, revisit this decision.
 
 ## Context
 M1 needs one speech engine adapter and a default transcription model, chosen on measured
@@ -41,12 +40,6 @@ on Linux; WASAPI device enumeration works on Windows via the same code path.
 - Fastest of the three on the dev host: 4 to 5x faster than Whisper small.en at similar accuracy, and ahead of base.en, so it has the most headroom for two concurrent streams.
 - Native punctuation and casing, which the transcript format needs; no separate punctuation model.
 - English-only, which matches v1 scope.
-
-## Conditions that apply if Parakeet is the default
-1. **Attribution (CC-BY-4.0).** Parakeet TDT 0.6B v2 (NVIDIA) is CC-BY-4.0. The About screen, README and installer
-   notice must credit the model, name the licence and link its source. Tracked in `docs/manual-checks.md`.
-2. **Shared recognizer.** The pipeline loads one recognizer per session and shares it between the Me and Others
-   streams (decode serialized on one worker). Two instances would exceed the 1.5 GB RAM gate.
 
 ## Risks and open items (need John's laptops)
 1. **Memory.** 1.14 GB for one stream is inside the 1.5 GB gate, but two model instances would not be.
