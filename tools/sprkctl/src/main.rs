@@ -68,7 +68,7 @@ fn main() -> Result<()> {
         [] | ["--version"] => println!("sprkctl {}", env!("CARGO_PKG_VERSION")),
         _ => bail!(
             "usage: sprkctl model inspect <model-folder>\n       \
-             sprkctl model <pack|verify|hash|install|import|list|activate|rollback|remove> ...   (SPEC 16.7)\n       \
+             sprkctl model <pack|verify|hash|install|import|list|activate|rollback|remove|index> ...   (SPEC 16.7)\n       \
              sprkctl transcribe <model-folder> <wav> [--vad <vad-folder>]    (--features engine)\n       \
              sprkctl transcribe <model-folder> --mic --vad <vad-folder> [--seconds N] [--device NAME]  (--features live)\n       \
              sprkctl capture-check [--seconds N]                              (--features live)\n       \

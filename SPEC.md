@@ -63,7 +63,7 @@ SprkNotes is a minimal Windows desktop app that transcribes the user's microphon
 | Hardware (primary) | Dell Snapdragon X, Copilot+, 16 GB RAM, ARM64. |
 | Hardware (secondary) | Intel x64, 16 GB RAM, no dGPU. In scope if M1 benchmarks pass the gates in 13.3; otherwise documented as unsupported. |
 | Privilege | Runs and installs at user level (no admin) for MSIX, per-user MSI and portable. |
-| Network | **SprkNotes makes no outbound network connections.** Local-only interfaces: Outlook COM (classic Outlook) and the optional Teams local API on `localhost`. The AI handoff only launches Claude/Copilot and copies a prompt; any upload happens in those apps, by the user. |
+| Network | **SprkNotes makes no outbound network connections** except model downloads (ADR-005): https GETs for the model index at launch and for model packs when the user presses "Download model", verified by checksum and the import rules, switchable off by policy (`ModelDownload`, `ModelUpdateCheck`, `ModelIndexUrl`). Local-only interfaces: Outlook COM (classic Outlook) and the optional Teams local API on `localhost`. The AI handoff only launches Claude/Copilot and copies a prompt; any upload happens in those apps, by the user. |
 | Outlook | Mixed classic and new Outlook. Classic: calendar read locally via COM. New Outlook has no local programming interface, so those users get naming from call context and audio sources instead (6.2). |
 
 ---
@@ -461,7 +461,7 @@ One release = one version = all artifacts, built by `scripts/release.ps1` from t
 ## 12. Security and privacy checklist
 
 - [ ] No audio written to disk anywhere (code search + runtime file-activity test).
-- [ ] No outbound network connections from SprkNotes (firewall log during tests shows only `localhost` Teams API traffic). sprkctl's only network use is the admin-run `model sync` from an internal UNC share.
+- [ ] No outbound network connections from SprkNotes except the model index and pack downloads (firewall log shows only `localhost` Teams API traffic, plus the model host when downloads are on; nothing at all with `ModelDownload=0`). sprkctl's only network use is the admin-run `model sync` from an internal UNC share.
 - [ ] Logs redacted: no transcript text, subjects, names, bodies.
 - [ ] WER heap dumps disabled for the app.
 - [ ] Tauri CSP strict, no remote content, capabilities minimal per window.

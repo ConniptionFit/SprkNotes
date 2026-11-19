@@ -31,3 +31,7 @@ engine-shared = ["sprk-asr/sherpa-shared"]
 [lints.clippy]
 unwrap_used = "deny"
 expect_used = "deny"
+
+[target.'cfg(windows)'.dependencies]
+# WinHTTP: the model download uses the system proxy and certificate store (ADR-005).
+windows = { version = "0.58", features = ["Win32_Foundation", "Win32_Networking_WinHttp"] }

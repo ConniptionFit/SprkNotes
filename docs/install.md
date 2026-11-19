@@ -67,6 +67,10 @@ Then double-click the `.msixbundle`, or `Add-AppxPackage .\SprkNotes_<version>.m
 
 ## Models
 SprkNotes loads a transcription model from a `.sprkmodel` pack. Packs are separate from the app and have their own version.
+
+**Easiest: the Download model button.** In the light portable zip or MSI, open Settings and press **Download model**. The app fetches the current Parakeet model and the voice activity model, checks them, and uses them from the next session. At launch it quietly checks whether a newer model exists and tells you. Downloads need https access to the model host (or your organization's mirror) and are blocked while a session is running. Admins can turn this off (`ModelDownload=0`); then use a bundled build or a pack file as below.
+
+**Offline: bundled build or pack file.** The `with-model` downloads already contain the model. Otherwise install a pack by hand:
 ```powershell
 sprkctl model verify  .\<id>@<version>.sprkmodel
 sprkctl model install .\<id>@<version>.sprkmodel --scope user      # this user only, no admin
@@ -98,7 +102,7 @@ Then open SprkNotes, press Start, speak, and confirm lines appear. Press End and
 | Models bundled with the app | `models\` next to `SprkNotes.exe` |
 | Install log (helper script) | `%ProgramData%\SprkNotes\install.log` |
 
-SprkNotes makes no network connections and stores no audio.
+SprkNotes stores no audio and sends nothing about you or your transcripts anywhere. Its only network use is fetching transcription model packs (see Models).
 
 ## Troubleshooting
 - **App does not start:** install or repair the Edge WebView2 runtime.

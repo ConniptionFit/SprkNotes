@@ -72,6 +72,8 @@ struct Flags {
     pubkey: Option<PathBuf>,
     keys: Option<PathBuf>,
     keep: usize,
+    base_url: Option<String>,
+    url_suffix: String,
     positional: Vec<String>,
 }
 
@@ -86,6 +88,8 @@ fn parse(args: &[&str]) -> Result<Flags> {
         pubkey: None,
         keys: None,
         keep: 2,
+        base_url: None,
+        url_suffix: String::new(),
         positional: vec![],
     };
     let mut it = args.iter();
@@ -110,6 +114,16 @@ fn parse(args: &[&str]) -> Result<Flags> {
                         .context("--keys needs an allowed_signers file")?
                         .into(),
                 )
+            }
+            "--base-url" => {
+                f.base_url = Some(
+                    it.next()
+                        .context("--base-url needs an https address")?
+                        .to_string(),
+                )
+            }
+            "--url-suffix" => {
+                f.url_suffix = it.next().context("--url-suffix needs text")?.to_string()
             }
             "--keep" => f.keep = it.next().context("--keep needs a number")?.parse()?,
             x if x.starts_with("--") => bail!("unknown option {x}"),
@@ -252,6 +266,32 @@ pub fn run(args: &[&str]) -> Result<i32> {
                     Ok(EXIT_VERIFY)
                 }
             }
+        }
+        "index" => {
+            // Maintainer tool: write models-index.json for packs published under --base-url.
+            let base = f
+                .base_url
+                .clone()
+                .context("missing --base-url <https folder>")?;
+            let out = f.output.clone().context("missing -o models-index.json")?;
+            let mut models = Vec::new();
+            for p in &f.positional {
+                match sprk_models::remote::entry_for_pack(Path::new(p), &base, &f.url_suffix, true)
+                {
+                    Ok(e) => models.push(e),
+                    Err(e) => {
+                        eprintln!("{p}: {e}");
+                        return Ok(EXIT_VERIFY);
+                    }
+                }
+            }
+            let index = sprk_models::remote::Index {
+                schema: sprk_models::remote::INDEX_SCHEMA,
+                models,
+            };
+            std::fs::write(&out, serde_json::to_string_pretty(&index)? + "\n")?;
+            println!("wrote {} ({} packs)", out.display(), index.models.len());
+            Ok(0)
         }
         "verify" => {
             let target = Path::new(

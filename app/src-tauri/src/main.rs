@@ -1,7 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod clock;
+mod model_download;
 mod models;
+#[cfg(windows)]
+mod net;
 mod shell;
 
 use serde::Serialize;
@@ -151,6 +154,31 @@ fn commit_config(p: &sprk_config::AppPolicy) -> Config {
     c
 }
 
+/// Settings pane: is a model present, and may this PC download one? No network.
+#[tauri::command]
+fn model_status() -> model_download::ModelStatus {
+    model_download::status(&policy())
+}
+
+/// Ask the model server whether a newer model exists (network, model index only).
+#[tauri::command]
+async fn model_check_update() -> Result<model_download::UpdateInfo, String> {
+    let p = policy();
+    tauri::async_runtime::spawn_blocking(move || model_download::check_now(&p))
+        .await
+        .map_err(|_| "The check was interrupted.".to_string())?
+}
+
+/// "Download model": fetch and install the default model. Progress arrives as `model-download`.
+#[tauri::command]
+fn model_download(app: AppHandle, state: State<AppState>) -> Result<(), String> {
+    let running = state.host.lock().map(|h| h.is_some()).unwrap_or(true);
+    if running {
+        return Err("End the current session before downloading a model.".into());
+    }
+    model_download::start_install(app, policy())
+}
+
 #[tauri::command]
 fn start_session(app: AppHandle, state: State<AppState>, name: String) -> Result<(), String> {
     let mut slot = state.host.lock().map_err(|_| "busy".to_string())?;
@@ -257,6 +285,7 @@ fn main() -> anyhow::Result<()> {
         .manage(shell::Shell::default())
         .setup(|app| {
             shell::init(app.handle())?;
+            model_download::launch_check(app.handle().clone(), policy());
             Ok(())
         })
         .on_window_event(|window, event| match window.label() {
@@ -273,7 +302,10 @@ fn main() -> anyhow::Result<()> {
             rename_session,
             set_source,
             mini_expand,
-            open_app
+            open_app,
+            model_status,
+            model_check_update,
+            model_download
         ])
         .run(tauri::generate_context!())?;
     Ok(())

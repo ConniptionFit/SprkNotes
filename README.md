@@ -15,7 +15,7 @@ On-device Windows app that **transcribes your microphone and the system audio to
 - **Models are data.** The speech model is a signed `.sprkmodel` pack chosen by a resolver, never hard-coded. Default: Parakeet TDT 0.6B.
 
 ## Privacy guarantees
-No audio on disk. No network (the only local interfaces are Outlook COM, the Teams local API on `localhost`, and launching Claude/Copilot). No telemetry, update checks or crash upload. Logs never contain transcript text, subjects or names. Details: [SPEC.md](SPEC.md) section 12 and [CLAUDE.md](CLAUDE.md) hard rules.
+No audio on disk. No network except downloading transcription model packs, which admins can turn off (the only local interfaces are Outlook COM, the Teams local API on `localhost`, and launching Claude/Copilot). No telemetry, app update checks or crash upload. Logs never contain transcript text, subjects or names. Details: [SPEC.md](SPEC.md) section 12 and [CLAUDE.md](CLAUDE.md) hard rules.
 
 ## Status
 Pre-release (0.0.1). Portable cores are built and tested on Linux: transcript format, writer and recovery, exports, commit buffer and dedupe, session orchestration, model packs and signing, calendar selection, handoff plans, context tracking. The main window UI exists. Windows-only code (WASAPI capture, AEC, Outlook COM, Teams API, Tauri wiring) and packaging are in progress. See [CHANGELOG.md](CHANGELOG.md) and the milestone table in SPEC.md section 14.

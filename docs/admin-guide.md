@@ -30,6 +30,9 @@ Uninstall never deletes transcripts. Install steps for one PC are in [install.md
 | `RequireSignedModels` | 0 or 1; always on from 1.0 |
 | `ModelPublicKeys` | `allowed_signers` lines (Ed25519) |
 | `KeepModelVersions` | Default 2 |
+| `ModelDownload` | 0 turns the "Download model" button and all model network use off (default 1) |
+| `ModelUpdateCheck` | 0 stops the launch-time check for a newer model (default 1) |
+| `ModelIndexUrl` | https address of an internal mirror's `models-index.json` |
 | `AudioSourceDetection`, `AudioMergeWindowSeconds`, `AudioSourceExcludePatterns` | Audio source events |
 | `CallContext`, `CallPollSeconds`, `NameOneToOneSpeakers`, `CallMergeWindowSeconds`, `TeamsLocalApi` | Call context |
 
@@ -51,13 +54,23 @@ sprkctl model remove <id>@<ver>
 Packs are signed with Ed25519 (OpenSSH SSHSIG, namespace `sprknotes-model`) through the 1Password SSH agent: `sprkctl model sign <pack> --pubkey <file>`. Two public keys are accepted so keys can rotate. Private keys never touch the repo or endpoints. Pilot builds may use `AllowedModelHashes` instead; 1.0 cannot ship without signature enforcement.
 
 ## Privacy and network
-SprkNotes makes no outbound connections. Expect only `localhost` traffic (Teams local API, if enabled). `sprkctl model sync` (admin-run) reads an internal file share. No telemetry, update checks or crash upload. Logs hold IDs and counts only; context data (titles, names) goes only into transcript files.
+SprkNotes makes no outbound connections except model downloads (ADR-005): at launch it fetches a small model index to see whether a newer model exists, and downloads a pack only when the user presses "Download model". Nothing about the user or any transcript is sent. Set `ModelDownload=0` to turn all of it off, `ModelUpdateCheck=0` to stop only the launch check, or `ModelIndexUrl` to point at an internal mirror. Otherwise expect only `localhost` traffic (Teams local API, if enabled). `sprkctl model sync` (admin-run) reads an internal file share. No telemetry or crash upload, and no app update checks. Logs hold IDs and counts only; context data (titles, names) goes only into transcript files.
 
 ## Troubleshooting
 - **No model available:** the bundled default is read-only in the app folder; check `sprkctl model list`.
 - **Calendar names missing:** classic Outlook with a profile is required. New Outlook is reported unavailable silently.
 - **Teams names missing:** the Teams local API may be off; the title falls back to the call window title or `Others`.
 - **Interrupted transcript:** the file is complete up to the last committed line.
+
+## Publishing a model update (maintainers)
+The app's default index is `models-index.json` on the repository's `models` release. To publish a new model:
+```powershell
+sprkctl model pack .\models-src\<id> -o .\dist\<id>@<ver>.sprkmodel
+# the host only accepts some file types, so upload each pack with a .zip suffix and say so in the index
+sprkctl model index .\dist\parakeet....sprkmodel .\dist\silero-vad....sprkmodel `
+  --base-url https://<host>/<owner>/<repo>/releases/download/models --url-suffix .zip -o models-index.json
+```
+Upload `models-index.json` and each pack (renamed `<file>.zip`) to the `models` release, replacing older assets. The same files work on an internal mirror: change `--base-url`. From 1.0 packs must also be signed (`sprkctl model sign`).
 
 ## Building a release (maintainers)
 On the Windows VM, from the repo root:
