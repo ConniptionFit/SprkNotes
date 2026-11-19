@@ -43,6 +43,12 @@ Once the Windows-only code lands, one pass in `sprk-winvm` covers it:
   behavior (scroll up, "Return to live" pill, End key) once the Tauri commands are wired.
 - [ ] Windows installers and packaging (M13) through `./scripts/winvm.sh release`.
 
+## Windows capture and session (next VM run)
+- [ ] `capture-check` with a real mic signal: route a host virtual source (for example a PipeWire null-sink monitor) into the VM's SPICE input. Loopback was verified; the VM mic read silence (no input signal available).
+- [ ] Full Start to End flow in the app with the engine build (`--features engine-shared` plus `SHERPA_ONNX_LIB_DIR`), a bundled `models` folder next to the exe holding the transcription pack and the voice activity pack, and synthetic speech played on the VM's output. Confirm the `.md` and `.jsonl` appear under `Documents\SprkNotes\Transcripts`, lines appear live, Pause and Resume write events, End finalizes.
+- [ ] Device change test (M2): switch the VM's default output mid-session and confirm a `Source changed` event.
+- [ ] Bleed test on the Snapdragon laptop with speakers on (M4, ADR-004 filter length tuning).
+
 ## Decisions for John
 - [ ] Parakeet needs a CC-BY-4.0 attribution notice: approve the wording for the About screen and README.
 - [ ] Bundle Parakeet in the installer (about 460 MiB) or ship small and add the pack by RMM: chosen **bundle** (2026-11-19). Confirm installer size is acceptable for MSIX and Intune.

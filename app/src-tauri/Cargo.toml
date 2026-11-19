@@ -11,6 +11,19 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = [] }
 anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+sprk-pipeline = { path = "../../crates/sprk-pipeline" }
+sprk-asr = { path = "../../crates/sprk-asr" }
+sprk-audio = { path = "../../crates/sprk-audio", features = ["cpal-backend"] }
+sprk-models = { path = "../../crates/sprk-models" }
+sprk-transcript = { path = "../../crates/sprk-transcript" }
+
+[features]
+# Speech engine (needs the sherpa-onnx native libs, SHERPA_ONNX_LIB_DIR). Without one of these
+# the app still runs but Start reports that this build has no engine.
+engine = ["sprk-asr/sherpa-static"]
+engine-shared = ["sprk-asr/sherpa-shared"]
 
 [lints.clippy]
 unwrap_used = "deny"
