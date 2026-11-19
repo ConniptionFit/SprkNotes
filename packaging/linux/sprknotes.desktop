@@ -4,5 +4,5 @@ Name=SprkNotes
 Comment=On-device meeting transcription
 Exec=env WEBKIT_DISABLE_DMABUF_RENDERER=1 sprknotes
 Icon=sprknotes
-Categories=AudioVideo;Office;
+Categories=AudioVideo;
 Terminal=false
