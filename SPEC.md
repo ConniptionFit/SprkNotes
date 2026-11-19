@@ -352,12 +352,14 @@ Scheduled Teams and Zoom meetings live on the user's Outlook calendar, so one lo
 - While off, show a floating **"Return to live"** pill with a count of new lines. Clicking it smooth-scrolls to the bottom and turns follow mode back on. Keyboard: `End`.
 - Long sessions use list virtualization to stay smooth (target 5,000+ lines).
 
-### 8.3 Floating mini controller
-- Appears when the main window is minimized during a session (and can be pinned on via setting).
-- Small, always-on-top, draggable pill; remembers position per monitor.
-- Contents: live **waveform** (both sources, subtle), elapsed time, context-aware **Start / Pause / Resume / End**, and **Open app**.
+### 8.3 Floating overlay
+- Appears when the main window is minimized or closed to the tray while a session is running (transcribing or paused), and can be pinned on via setting. Once shown it stays until the main window returns, so Pause, Stop and Start never close it.
+- Small, always-on-top, draggable (grip handle); remembers position per monitor. Dark by default; light when the app's Appearance setting is Light.
+- **Always visible, never moving:** grip, status light (no text), elapsed time, captions toggle. These keep their position in every state; everything else grows to the right and below them.
+- **On hover (or keyboard focus):** icon-only buttons with plain tooltips: Start or Pause or Resume, Stop, Open SprkNotes.
+- **Live captions:** the captions toggle opens a fixed-height caption bar under the overlay (about 3 lines, newest at the bottom, the line being spoken in full colour). Default shows Others only; Settings can add Me. Captions are partials (see 4.3 partials), never written to disk or logged.
 - No text says "recording". Tooltip example: "SprkNotes is transcribing".
-- System tray icon mirrors state with the same actions.
+- Close hides the main window to the system tray and the session keeps running; if the desktop has no tray, Close minimizes instead. The tray icon mirrors state with the same actions. On Linux the app runs through XWayland by default so the overlay can be positioned and stay on top (set `SPRKNOTES_WAYLAND=1` to opt out).
 - Optional global hotkeys: start/pause and open app (configurable, off by default).
 
 ### 8.4 Library
@@ -372,6 +374,8 @@ Scheduled Teams and Zoom meetings live on the user's Outlook calendar, so one lo
 - Files: transcripts root, default export format.
 - AI handoff: show Claude button, show Copilot button, edit prompt template.
 - Models (16.7): active model, installed models, Import, Switch, Roll back. Locked with a "Managed by your organization" note when policy pins a model.
+- Appearance: System, Light or Dark (the overlay stays dark unless Light is chosen).
+- Live captions: on or off, and Others only (default) or Others and Me.
 - Startup: launch at sign-in, start minimized to tray.
 
 ---

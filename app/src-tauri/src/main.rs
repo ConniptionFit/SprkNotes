@@ -274,10 +274,16 @@ fn end_session(state: State<AppState>) -> Result<(), String> {
     }
 }
 
-/// The mini controller's hover expand and collapse.
+/// The overlay sizes its window to its content (logical pixels).
 #[tauri::command]
-fn mini_expand(app: AppHandle, expanded: bool) {
-    shell::set_mini_expanded(&app, expanded);
+fn mini_resize(app: AppHandle, width: f64, height: f64) {
+    shell::resize_mini(&app, width, height);
+}
+
+/// Which live captions the overlay wants: on or off, and whether to include "Me".
+#[tauri::command]
+fn set_captions(app: AppHandle, on: bool, me: bool) {
+    shell::set_captions(&app, on, me);
 }
 
 /// Bring the main window back (also hides the mini controller).
@@ -286,7 +292,21 @@ fn open_app(app: AppHandle) {
     shell::open_main(&app);
 }
 
+/// Wayland will not let a window place itself or stay on top, which the overlay needs. Run through
+/// XWayland unless the user opts out with SPRKNOTES_WAYLAND=1 or sets GDK_BACKEND themselves.
+#[cfg(target_os = "linux")]
+fn prefer_x11() {
+    let wayland = std::env::var_os("WAYLAND_DISPLAY").is_some();
+    let chosen = std::env::var_os("GDK_BACKEND").is_some()
+        || std::env::var_os("SPRKNOTES_WAYLAND").is_some();
+    if wayland && !chosen {
+        std::env::set_var("GDK_BACKEND", "x11");
+    }
+}
+
 fn main() -> anyhow::Result<()> {
+    #[cfg(target_os = "linux")]
+    prefer_x11();
     // Used by scripts/release.ps1 to check every artifact reports the same version.
     if std::env::args().any(|a| a == "--version") {
         // A Windows-subsystem build may have no stdout; never panic over that.
@@ -322,7 +342,8 @@ fn main() -> anyhow::Result<()> {
             end_session,
             rename_session,
             set_source,
-            mini_expand,
+            mini_resize,
+            set_captions,
             open_app,
             model_status,
             model_check_update,

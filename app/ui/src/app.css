@@ -29,8 +29,9 @@
   --shadow: 0 1px 2px rgb(28 26 36 / 0.06), 0 4px 16px rgb(28 26 36 / 0.05);
 }
 
+/* Dark tokens apply when the system is dark (unless the user picked Light) or when the user picked Dark. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) { color-scheme: dark;
     --bg: #15131b;
     --surface: #1e1b27;
     --surface-2: #272333;
@@ -56,6 +57,32 @@
     --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 16px rgb(0 0 0 / 0.3);
   }
 }
+:root[data-theme="dark"] { color-scheme: dark;
+    --bg: #15131b;
+    --surface: #1e1b27;
+    --surface-2: #272333;
+    --border: #322e40;
+    --text: #efedf5;
+    --muted: #9a96ab;
+    --accent: #a98bdc;
+    --accent-hover: #bda3e8;
+    --accent-soft: #2f2745;
+    --on-accent: #1a1228;
+    --me: #7db4f0;
+    --me-soft: #1d2a3d;
+    --others: #f0a070;
+    --others-soft: #3a261b;
+    --live: #ef6b63;
+    --ok: #4cc27f;
+    --caution: #f2c14e;
+    --on-light: #1a1228;
+    --ok-text: #6fd59a;
+    --error-text: #f2958f;
+    --warn: #f2c14e;
+    --warn-soft: #3a2f12;
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 16px rgb(0 0 0 / 0.3);
+  }
+:root[data-theme="light"] { color-scheme: light; }
 
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); }
