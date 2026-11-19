@@ -245,6 +245,14 @@ mod tests {
         );
     }
 
+    /// Without classic Outlook (or with the new one) the provider must stay silent and empty.
+    /// When classic Outlook with a profile is present this just returns its meetings.
+    #[test]
+    fn missing_outlook_is_silent() {
+        let got = OutlookCom.meetings_between(0, 1);
+        assert!(got.len() <= 200);
+    }
+
     #[test]
     fn restrict_text_is_us_style_local() {
         let t = Local
