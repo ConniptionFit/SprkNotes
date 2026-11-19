@@ -1771,6 +1771,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "sprk-launcher"
+version = "0.0.1"
+
+[[package]]
 name = "sprk-models"
 version = "0.0.1"
 dependencies = [

@@ -155,6 +155,11 @@ fn end_session(state: State<AppState>) -> Result<(), String> {
 }
 
 fn main() -> anyhow::Result<()> {
+    // Used by scripts/release.ps1 to check every artifact reports the same version.
+    if std::env::args().any(|a| a == "--version") {
+        println!("SprkNotes {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
     tauri::Builder::default()
         .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![
