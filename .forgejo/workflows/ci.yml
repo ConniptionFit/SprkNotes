@@ -1,0 +1,20 @@
+name: CI
+on: [push, pull_request]
+# The Forgejo runner has plain Linux steps only: no Windows or ARM runners and no third-party
+# actions, so Rust comes from rustup directly. Windows code is checked here with
+# `cargo clippy --target ...-pc-windows-msvc` and run in the sprk-winvm VM (scripts/winvm.sh).
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rust toolchain
+        run: |
+          curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal -c clippy,rustfmt -t x86_64-pc-windows-msvc,aarch64-pc-windows-msvc
+      - run: . "$HOME/.cargo/env" && cargo fmt --all --check
+      - run: . "$HOME/.cargo/env" && cargo clippy --workspace --all-targets -- -D warnings
+      - run: . "$HOME/.cargo/env" && cargo clippy --workspace --all-targets --target x86_64-pc-windows-msvc -- -D warnings
+      - run: . "$HOME/.cargo/env" && cargo clippy --workspace --all-targets --target aarch64-pc-windows-msvc -- -D warnings
+      - run: . "$HOME/.cargo/env" && cargo test --workspace
+      - run: scripts/check-terms.sh
+      - run: . "$HOME/.cargo/env" && scripts/bump-version.sh --check

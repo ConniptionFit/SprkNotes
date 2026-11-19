@@ -61,7 +61,7 @@ impl CommitBuffer {
 
     /// Commit everything now (pause, end, panic).
     pub fn flush(&mut self, now_ms: u64) -> Vec<Segment> {
-        let all: Vec<_> = self.pending.drain(..).collect();
+        let all: Vec<_> = std::mem::take(&mut self.pending);
         self.finish(all, now_ms)
     }
 
