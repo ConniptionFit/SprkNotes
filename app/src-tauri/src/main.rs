@@ -2,6 +2,7 @@
 
 mod clock;
 mod models;
+mod shell;
 
 use serde::Serialize;
 use sprk_audio::cpal_backend::CpalBackend;
@@ -62,6 +63,7 @@ impl Events for TauriEvents {
             UiStatus::Paused => "paused",
         };
         let _ = self.0.emit("session-status", v);
+        shell::on_status(&self.0, v);
     }
     fn problem(&self, kind: &str) {
         let _ = self.0.emit("session-problem", kind);
@@ -154,9 +156,31 @@ fn end_session(state: State<AppState>) -> Result<(), String> {
     }
 }
 
+/// The mini controller's hover expand and collapse.
+#[tauri::command]
+fn mini_expand(app: AppHandle, expanded: bool) {
+    shell::set_mini_expanded(&app, expanded);
+}
+
+/// Bring the main window back (also hides the mini controller).
+#[tauri::command]
+fn open_app(app: AppHandle) {
+    shell::open_main(&app);
+}
+
 fn main() -> anyhow::Result<()> {
     tauri::Builder::default()
         .manage(AppState::default())
+        .manage(shell::Shell::default())
+        .setup(|app| {
+            shell::init(app.handle())?;
+            Ok(())
+        })
+        .on_window_event(|window, event| match window.label() {
+            "main" => shell::on_main_event(window.app_handle(), event),
+            "mini" => shell::on_mini_event(window.app_handle(), event),
+            _ => {}
+        })
         .invoke_handler(tauri::generate_handler![
             app_version,
             start_session,
@@ -164,7 +188,9 @@ fn main() -> anyhow::Result<()> {
             resume_session,
             end_session,
             rename_session,
-            set_source
+            set_source,
+            mini_expand,
+            open_app
         ])
         .run(tauri::generate_context!())?;
     Ok(())
