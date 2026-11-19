@@ -4,6 +4,7 @@
 pub mod commit;
 pub mod dedupe;
 pub mod rules;
+pub mod session;
 
 /// Speaker label. Remote speakers are `Others` unless a confirmed 1:1 call names them
 /// (SPEC 19.4); when unsure, never guess a name.

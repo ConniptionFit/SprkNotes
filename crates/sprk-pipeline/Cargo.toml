@@ -7,6 +7,12 @@ license.workspace = true
 
 [dependencies]
 thiserror.workspace = true
+sprk-asr = { path = "../sprk-asr" }
+sprk-audio = { path = "../sprk-audio" }
+sprk-transcript = { path = "../sprk-transcript" }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

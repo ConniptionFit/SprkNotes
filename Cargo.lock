@@ -1741,6 +1741,10 @@ dependencies = [
 name = "sprk-pipeline"
 version = "0.0.1"
 dependencies = [
+ "sprk-asr",
+ "sprk-audio",
+ "sprk-transcript",
+ "tempfile",
  "thiserror 1.0.69",
 ]
 
