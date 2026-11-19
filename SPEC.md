@@ -353,7 +353,7 @@ Scheduled Teams and Zoom meetings live on the user's Outlook calendar, so one lo
 - Small, always-on-top, draggable (grip handle); remembers position per monitor. Dark by default; light when the app's Appearance setting is Light.
 - **Always visible, never moving:** grip, status light (no text), elapsed time, captions toggle. These keep their position in every state; everything else grows to the right and below them.
 - **On hover (or keyboard focus):** icon-only buttons with plain tooltips: Start or Pause or Resume, Stop, Open SprkNotes.
-- **Live captions:** the captions toggle opens a fixed-height caption bar under the overlay (about 3 lines, newest at the bottom, the line being spoken in full colour). Default shows Others only; Settings can add Me. Captions are partials (see 4.5 partials), never written to disk or logged.
+- **Live captions:** the captions toggle opens a fixed-height caption bar under the overlay (about 3 lines, newest at the bottom, the line being spoken in full colour). Default shows Others only; Settings can add Me. Captions are partials (see 4.3 partials), never written to disk or logged.
 - No text says "recording". Tooltip example: "SprkNotes is transcribing".
 - Close hides the main window to the system tray and the session keeps running; if the desktop has no tray, Close minimizes instead. The tray icon mirrors state with the same actions. On Linux the app runs through XWayland by default so the overlay can be positioned and stay on top (set `SPRKNOTES_WAYLAND=1` to opt out).
 - Optional global hotkeys: start/pause and open app (configurable, off by default).
