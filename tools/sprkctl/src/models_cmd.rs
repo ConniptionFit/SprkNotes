@@ -4,7 +4,10 @@ use anyhow::{bail, Context, Result};
 use sprk_models::import::{
     import_pack, process_incoming, ImportOptions, ImportOutcome, SmokeTester,
 };
-use sprk_models::pack::{pack_folder, verify_pack, VerifyOptions};
+use sprk_models::pack::{
+    add_signature, pack_folder, read_manifest_bytes, verify_pack, VerifyOptions,
+};
+use sprk_models::sshsig::{parse_keys, SshSigVerifier};
 use sprk_models::{Manifest, ModelStore, StoreKind};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
@@ -66,6 +69,8 @@ struct Flags {
     no_activate: bool,
     json: bool,
     require_signature: bool,
+    pubkey: Option<PathBuf>,
+    keys: Option<PathBuf>,
     keep: usize,
     positional: Vec<String>,
 }
@@ -78,6 +83,8 @@ fn parse(args: &[&str]) -> Result<Flags> {
         no_activate: false,
         json: false,
         require_signature: false,
+        pubkey: None,
+        keys: None,
         keep: 2,
         positional: vec![],
     };
@@ -96,6 +103,14 @@ fn parse(args: &[&str]) -> Result<Flags> {
             "--no-activate" => f.no_activate = true,
             "--json" => f.json = true,
             "--require-signature" => f.require_signature = true,
+            "--pubkey" => f.pubkey = Some(it.next().context("--pubkey needs a .pub file")?.into()),
+            "--keys" => {
+                f.keys = Some(
+                    it.next()
+                        .context("--keys needs an allowed_signers file")?
+                        .into(),
+                )
+            }
             "--keep" => f.keep = it.next().context("--keep needs a number")?.parse()?,
             x if x.starts_with("--") => bail!("unknown option {x}"),
             x => f.positional.push(x.to_string()),
@@ -169,12 +184,29 @@ pub fn run(args: &[&str]) -> Result<i32> {
     let engines = supported_engines();
     let app_version = env!("CARGO_PKG_VERSION");
     let none: Vec<String> = Vec::new();
+    let key_text = match &f.keys {
+        Some(p) => {
+            std::fs::read_to_string(p).with_context(|| format!("reading {}", p.display()))?
+        }
+        None => String::new(),
+    };
+    let verifier = SshSigVerifier {
+        trusted: parse_keys(&key_text),
+    };
+    // From 1.0 signatures are always required (SPEC 16.10); earlier builds follow the flag.
+    let require = f.require_signature
+        || app_version
+            .split('.')
+            .next()
+            .and_then(|m| m.parse::<u32>().ok())
+            .unwrap_or(0)
+            >= 1;
     let vopts = VerifyOptions {
         supported_engines: &engines,
         app_version,
         allowed_hashes: &none,
-        require_signature: f.require_signature,
-        verifier: None,
+        require_signature: require,
+        verifier: Some(&verifier),
     };
     match *cmd {
         "pack" => {
@@ -351,7 +383,40 @@ pub fn run(args: &[&str]) -> Result<i32> {
                 }
             }
         }
-        "sign" | "allow" | "bench" | "sync" => {
+        "sign" => {
+            // Signing goes through ssh-keygen and the 1Password SSH agent; this code never
+            // reads or stores a private key.
+            let pack = Path::new(f.positional.first().context("missing <file.sprkmodel>")?);
+            let pubkey = f.pubkey.clone().context("--pubkey <key.pub> is required")?;
+            let json = read_manifest_bytes(pack).context("reading model.json from the pack")?;
+            let work = std::env::temp_dir().join(format!("sprkctl-sign-{}", std::process::id()));
+            std::fs::create_dir_all(&work)?;
+            let json_path = work.join("model.json");
+            std::fs::write(&json_path, &json)?;
+            let status = std::process::Command::new("ssh-keygen")
+                .args(["-Y", "sign", "-n", sprk_models::sshsig::NAMESPACE, "-f"])
+                .arg(&pubkey)
+                .arg(&json_path)
+                .status()
+                .context(
+                    "running ssh-keygen (is OpenSSH installed and the 1Password agent running?)",
+                )?;
+            let result = if status.success() {
+                let sig = std::fs::read(work.join("model.json.sig"))
+                    .context("ssh-keygen wrote no signature")?;
+                let tmp = pack.with_extension("sprkmodel.signing");
+                add_signature(pack, &sig, &tmp).map_err(|e| anyhow::anyhow!("{e}"))?;
+                std::fs::rename(&tmp, pack)?;
+                println!("signed {}", pack.display());
+                0
+            } else {
+                eprintln!("ssh-keygen failed to sign");
+                1
+            };
+            let _ = std::fs::remove_dir_all(&work);
+            Ok(result)
+        }
+        "allow" | "bench" | "sync" => {
             eprintln!("`model {cmd}` is not available in this build yet");
             Ok(1)
         }

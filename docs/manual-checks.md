@@ -1,53 +1,41 @@
-# Manual checks (only John can do these)
+# Manual checks (need a person, a laptop or a secret)
 
-Everything here needs hardware, accounts, secrets or a product decision that the dev host and the VM do
-not have. Work continues without them; tick items off and record results in the milestone notes.
-Synthetic audio only, never real meetings. Do not put secrets, real names or tenant IDs in the repo.
+Everything here is something automated tests and the cloud/dev-host cannot do. Each item says
+what it unblocks. Tick them off in the PR that carries the milestone.
 
-Laptop bundle (M1): `~/sprknotes-work/m1-laptop-bundle/` on the dev host.
+## Laptops (SPEC 13.2a and 13.3)
+- [ ] **M1 benchmarks, Snapdragon X (ARM64) and Intel (x64).** Use the laptop bundle (`sprk-m1-*.zip`) and run
+  `.\sprkctl.exe bench accuracy models\parakeet-tdt-0.6b-v2-int8 fx --vad models\silero-vad`.
+  Record `RTF`, `TOTAL` and peak Working Set in the ADR-003 table. Both streams roughly double decode
+  load, so compare RTF x 2 with the gates (0.3 Snapdragon, 0.5 Intel). *Unblocks: ADR-003 final.*
+- [ ] **Per-milestone ARM64 check** for milestones that touch audio, UI or packaging (M2, M5, M6, M13):
+  copy the ARM64 portable build to the Snapdragon laptop, run a 5-minute synthetic session, confirm
+  transcript, labels, scrolling and the mini controller. Note the result in the PR.
 
-## Performance gates (SPEC 13.3), ARM64 Snapdragon and Intel x64
-Unzip the exe zip for the machine plus `sprk-m1-models.zip` into one folder, then in PowerShell:
-```
-.\sprkctl.exe bench accuracy models\parakeet-tdt-0.6b-v2-int8 fx --vad models\silero-vad
-.\sprkctl.exe bench accuracy models\whisper-base.en        fx --vad models\silero-vad
-```
-Record `RTF`, the `TOTAL` WER line, and peak Working Set (Task Manager > Details > sprkctl.exe).
-Both streams roughly double decode load: compare `RTF x 2` with 0.3 (Snapdragon) or 0.5 (Intel).
-- [ ] Snapdragon X: Parakeet and Whisper base.en (results go in the ADR-003 table)
-- [ ] Intel: Parakeet and Whisper base.en
-- [ ] Idle CPU about 0% when not transcribing (Task Manager)
+## Secrets and accounts (never in the repo)
+- [ ] **Model signing keys (M15, 1.0 gate).** Create two Ed25519 SSH keys in 1Password (release owner and a
+  separate backup holder, separate vaults). Export only the **public** keys into an `allowed_signers` file.
+  *Unblocks: signing real packs and shipping 1.0.*
+- [ ] **Interop check of `sprkctl model sign`.** With the 1Password SSH agent running:
+  `sprkctl model sign dist\parakeet@2026.11.0.sprkmodel --pubkey signing.pub`, then
+  `sprkctl model verify dist\parakeet@2026.11.0.sprkmodel --require-signature --keys allowed_signers`.
+  Also confirm `ssh-keygen -Y verify -n sprknotes-model -f allowed_signers -I <principal> -s model.sig < model.json`
+  accepts the same signature. (The verifier is tested with an in-process signer built to the SSHSIG
+  format; real `ssh-keygen` output has not been checked.)
+- [ ] **Code-signing certificate (M13).** Provide it to the Windows build host as an installed certificate or
+  through your secret store. Do not put it in the repo or CI variables.
 
-## Per-milestone ARM64 check (SPEC 13.2a)
-Copy the ARM64 portable build, run a 5-minute synthetic session (fixture played through speakers plus talking),
-confirm transcript, labels, scrolling and the mini controller. Required for M2 (capture), M5, M6.
-- [ ] M2 capture on Snapdragon
-- [ ] M5 main UI on Snapdragon
-- [ ] M6 mini controller and tray on Snapdragon
+## Windows integrations (VM or real machine)
+- [ ] **Classic Outlook test mailbox (M8).** A synthetic mailbox and calendar with Teams and Zoom meetings in the VM. No PHI.
+- [ ] **Teams checks (M12).** 1:1 call, add a third person, drop back, Teams closed, local API disabled
+  (SPEC 13.2 "Call context test").
+- [ ] **Audio source test (M11).** Firefox and Edge: pause 20 s and resume, stop at 1:30 and wait 2:00,
+  switch video, excluded app never appears (SPEC 13.2).
+- [ ] **Bleed test (M4)** on the Snapdragon laptop with speakers on (SPEC 13.2).
+- [ ] **Crash test (M3/M5):** kill the process mid-session, confirm the file holds every committed line
+  and the recovery prompt works.
+- [ ] **Device change test (M2):** plug and unplug a headset and a Bluetooth device mid-session.
 
-## Device tests (SPEC 13.2)
-- [ ] Bleed test: laptop speakers on, fixture through system audio, user silent then talking; target at most 2% duplicate lines (M4)
-- [ ] Device change test: plug and unplug a headset and Bluetooth mid-session (M2)
-- [ ] Crash test on a real laptop: kill the process mid-session, recovery prompt works (M3)
-- [ ] Scroll test: scroll up during a busy session for 60 s (M5)
-- [ ] Offline test: networking disabled, every feature except AI handoff works the same
-- [ ] Audio source test: Firefox and Edge, pause, resume, stop and switch rules (M11)
-- [ ] Call context test: 1:1 Teams call, third person joins, Teams closed or API disabled (M12)
-
-## Accounts and decisions
-- [ ] **Confirm the default model** (ADR-003 is "proposed" until John says so directly): Parakeet TDT 0.6B v2 int8
-- [ ] Classic Outlook test mailbox with a synthetic calendar (M8); new Outlook must show "unavailable" silently
-- [ ] Teams: whether the local API is available on pilot devices (M12 spike)
-- [ ] Claude and Microsoft 365 Copilot approved for PHI under company agreements before handoff buttons are enabled broadly (M9)
-- [ ] Documents folder is OneDrive-redirected on target devices (SPEC 15)
-- [ ] Bundling: ship the Parakeet pack inside the installer, ship the app small, or ship Whisper base.en (Parakeet is about 460 MiB compressed)
-- [ ] Parakeet CC-BY-4.0 attribution wording approved (About screen, README, installer)
-
-## Secrets and signing (never in the repo)
-- [ ] Code-signing certificate source for the pilot (internal certificate via NinjaOne); set the thumbprint as an environment variable on the build VM (M13)
-- [ ] Model signing key (M15, a 1.0 gate): create the Ed25519 keys in the dedicated 1Password vault, name the owner and backup holder, write the one-page key SOP
-- [ ] Two signing keys registered (current and next) for rotation; public keys added to the signers file (M15)
-- [ ] 1Password SSH agent enabled on the signing machine (`ssh-add -L` lists the key)
-
-## Housekeeping
-- [ ] Remove the temporary VM sudo rule from the dev host once the VM is set up
+## Decisions for John
+- [ ] Parakeet needs a CC-BY-4.0 attribution notice: approve the wording for the About screen and README.
+- [ ] Bundle Parakeet in the installer (about 460 MiB) or ship small and add the pack by RMM: chosen **bundle** (2026-11-19). Confirm installer size is acceptable for MSIX and Intune.

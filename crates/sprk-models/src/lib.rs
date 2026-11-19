@@ -4,7 +4,9 @@ pub mod import;
 pub mod manifest;
 pub mod pack;
 pub mod resolver;
+pub mod sshsig;
 pub mod store;
+pub mod trust;
 
 pub use manifest::{Manifest, ManifestError};
 pub use store::{id_version, ActiveFile, Installed, ModelStore, StoreError, StoreKind};

@@ -1,6 +1,7 @@
 # Changelog
 
 ## 0.0.1 (unreleased)
+- M15 (everything not needing a key): SSHSIG Ed25519 verification (namespace `sprknotes-model`), trusted key parsing and fingerprints, two-key rotation, trust tiers (signing always required from 1.0, cannot be disabled by policy), load-time signature re-check, `sprkctl model sign` via ssh-keygen and the 1Password agent, `docs/manual-checks.md`.
 - M10 (portable core): model stores (active.json, activate, rollback, prune, remove), resolver (pinned, machine, user, bundled, allow-list, fallback), .sprkmodel pack and verify (zip-slip, size limits, allow-list, signature trait), import flow with staging, smoke test and rejects, `sprkctl model pack|verify|hash|install|import|list|activate|rollback|remove` with RMM exit codes.
 - M11/M12 (portable core): audio source activity tracker with the 18.4 timing rules and exclusions; call title parsing and labeling modes with two-poll hysteresis and spec event lines.
 - M3 (portable core): transcript format 5.1 writer (append + flush, sidecar JSONL, atomic finalize, rename ranking), naming and sanitizing, crash recovery; commit buffer with filler filter, fragment merge, long-utterance split and bleed dedupe (M4 layer 3). ADR-003 accepted (Parakeet).
