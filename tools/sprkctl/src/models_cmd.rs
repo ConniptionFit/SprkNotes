@@ -138,7 +138,7 @@ fn store_for(f: &Flags) -> Result<ModelStore> {
                 StoreKind::Machine,
             ),
             Some("user") => (
-                std::env::var_os("LOCALAPPDATA")
+                std::env::var_os("APPDATA")
                     .map(|p| PathBuf::from(p).join("SprkNotes").join("models"))
                     .or_else(|| {
                         std::env::var_os("HOME")
@@ -151,6 +151,36 @@ fn store_for(f: &Flags) -> Result<ModelStore> {
         }
     };
     Ok(ModelStore::new(root, kind))
+}
+
+/// The stores the app resolves from: bundled (next to the exe), machine, user.
+fn list_all_stores() -> Vec<(&'static str, ModelStore)> {
+    let mut v = Vec::new();
+    if let Some(dir) = std::env::current_exe()
+        .ok()
+        .and_then(|e| e.parent().map(|p| p.join("models")))
+    {
+        v.push(("bundled", ModelStore::new(dir, StoreKind::Bundled)));
+    }
+    if let Some(p) = std::env::var_os("PROGRAMDATA") {
+        v.push((
+            "machine",
+            ModelStore::new(
+                PathBuf::from(p).join("SprkNotes").join("models"),
+                StoreKind::Machine,
+            ),
+        ));
+    }
+    if let Some(p) = std::env::var_os("APPDATA") {
+        v.push((
+            "user",
+            ModelStore::new(
+                PathBuf::from(p).join("SprkNotes").join("models"),
+                StoreKind::User,
+            ),
+        ));
+    }
+    v
 }
 
 fn iso_now() -> String {
@@ -335,23 +365,36 @@ pub fn run(args: &[&str]) -> Result<i32> {
             Ok(code)
         }
         "list" => {
-            let store = store_for(&f)?;
-            let active = store.active().map(|a| a.active);
-            let items = store.list();
+            // No scope and no --root: show every store the app looks in, bundled one included.
+            let stores: Vec<(&str, ModelStore)> = if f.scope.is_none() && f.root.is_none() {
+                list_all_stores()
+            } else {
+                vec![(
+                    match f.scope.as_deref() {
+                        Some("user") => "user",
+                        Some("machine") => "machine",
+                        _ => "root",
+                    },
+                    store_for(&f)?,
+                )]
+            };
+            let mut rows = Vec::new();
+            for (name, store) in &stores {
+                let active = store.active().map(|a| a.active);
+                for i in store.list() {
+                    let is_active = active.as_deref() == Some(i.id_version.as_str());
+                    rows.push((*name, i.id_version, is_active));
+                }
+            }
             if f.json {
-                let v: Vec<_> = items
+                let v: Vec<_> = rows
                     .iter()
-                    .map(|i| serde_json::json!({ "id_version": i.id_version, "active": active.as_deref() == Some(i.id_version.as_str()) }))
+                    .map(|(s, id, a)| serde_json::json!({ "store": s, "id_version": id, "active": a }))
                     .collect();
                 println!("{}", serde_json::to_string_pretty(&v)?);
             } else {
-                for i in &items {
-                    let mark = if active.as_deref() == Some(i.id_version.as_str()) {
-                        "*"
-                    } else {
-                        " "
-                    };
-                    println!("{mark} {}", i.id_version);
+                for (s, id, a) in &rows {
+                    println!("{} {id}  ({s})", if *a { "*" } else { " " });
                 }
             }
             Ok(0)
