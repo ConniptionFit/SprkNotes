@@ -1,7 +1,11 @@
 # Changelog
 
 ## 0.0.1 (unreleased)
+<<<<<<< HEAD
 - M11 (logic + Windows): `SourcePoller` (300 ms audibility hold, -50 dBFS, ignorable sessions, exclusions before storage), title resolver chain (media session, tab, window title, app name) with browser suffix stripping; Windows window enumeration and WASAPI session metering with browser helper-process walk-up. UI Automation tab strips and media sessions are still to do.
+=======
+- M8/M9 (Windows): classic Outlook calendar provider over COM late binding (read-only, silent when unavailable), Windows shell launcher for the handoff (open link, clipboard, reveal in Explorer, toasts). Verified to compile for both Windows targets; real Outlook check pending (docs/manual-checks.md).
+>>>>>>> origin/main
 - M5 (wiring): Tauri commands `start_session`, `pause_session`, `resume_session`, `end_session`, `rename_session`, `set_source` drive the session host; events `transcript-line` and `session-status`; model chosen through the resolver at Start (bundled, machine, user stores; the voice activity pack is found by engine string). Build with `--features engine` or `engine-shared`.
 - Session host (portable): one thread owns capture, VAD, ASR, commit buffer and the crash-safe writer; UI side gets commands and `Events`. Rename during the session (user name wins), finalize on End or when the UI disappears, capture device events written as source events.
 - M4 (portable core): echo plan by form factor (headset: dedupe only), NLMS software canceller with double-talk guard behind `EchoCanceller` (ADR-004). Windows AEC control and the hardware bleed test are pending.

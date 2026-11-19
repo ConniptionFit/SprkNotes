@@ -16,16 +16,44 @@
 </script>
 
 <div class="controls">
-  <button onclick={onstart} disabled={status !== "ready"}>Start</button>
-  {#if status === "paused"}
-    <button onclick={onresume}>Resume</button>
+  {#if status === "ready"}
+    <button class="primary" onclick={onstart}>
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 4l10 6-10 6z" fill="currentColor" stroke="none" /></svg>
+      Start
+    </button>
   {:else}
-    <button onclick={onpause} disabled={status !== "transcribing"}>Pause</button>
+    <button class="ghost" onclick={onend}>End</button>
+    {#if status === "paused"}
+      <button class="primary" onclick={onresume}>
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 4l10 6-10 6z" fill="currentColor" stroke="none" /></svg>
+        Resume
+      </button>
+    {:else}
+      <button class="primary" onclick={onpause}>
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 4h2.5v12H6zM11.5 4H14v12h-2.5z" fill="currentColor" stroke="none" /></svg>
+        Pause
+      </button>
+    {/if}
   {/if}
-  <button onclick={onend} disabled={status === "ready"}>End</button>
 </div>
 
 <style>
-  .controls { display: flex; gap: 0.5rem; }
-  button { padding: 0.5rem 1.2rem; }
+  .controls { display: flex; gap: 0.5rem; align-items: center; }
+  button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 6.5rem;
+    justify-content: center;
+    padding: 0.65rem 1.4rem;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    font-weight: 600;
+    transition: background 120ms, border-color 120ms;
+  }
+  svg { width: 1rem; height: 1rem; }
+  .primary { background: var(--accent); color: var(--on-accent); box-shadow: var(--shadow); }
+  .primary:hover { background: var(--accent-hover); }
+  .ghost { background: transparent; border-color: var(--border); color: var(--text); }
+  .ghost:hover { background: var(--surface-2); }
 </style>

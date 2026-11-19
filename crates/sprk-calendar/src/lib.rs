@@ -5,6 +5,9 @@
 //! they go only into transcript files. `Meeting` therefore has a redacting `Debug`.
 use std::fmt;
 
+#[cfg(windows)]
+pub mod outlook;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Platform {
     Teams,
