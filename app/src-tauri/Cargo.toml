@@ -35,3 +35,7 @@ expect_used = "deny"
 [target.'cfg(windows)'.dependencies]
 # WinHTTP: the model download uses the system proxy and certificate store (ADR-005).
 windows = { version = "0.58", features = ["Win32_Foundation", "Win32_Networking_WinHttp"] }
+
+[target.'cfg(not(windows))'.dependencies]
+# Model download off Windows: https only, system certificate store.
+ureq = { version = "2", default-features = false, features = ["tls", "native-certs"] }

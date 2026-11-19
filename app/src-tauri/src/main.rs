@@ -5,6 +5,7 @@ mod model_download;
 mod models;
 #[cfg(windows)]
 mod net;
+mod net_unix;
 mod shell;
 
 use serde::Serialize;
