@@ -5,6 +5,7 @@
   import TopBar from "./lib/TopBar.svelte";
   import Controls from "./lib/Controls.svelte";
   import LivePane from "./lib/LivePane.svelte";
+  import Footer from "./lib/Footer.svelte";
 
   let api: Backend | undefined;
   let name = $state("");
@@ -38,22 +39,28 @@
     onrename={(n) => api?.rename(n)}
     onsource={(s: Source, on: boolean) => api?.setSource(s, on)}
   />
-  <Controls
-    {status}
-    onstart={start}
-    onpause={() => api?.pause()}
-    onresume={() => api?.resume()}
-    onend={() => api?.end()}
-  />
-  <LivePane {lines} />
-  <footer>
-    <button disabled title="Arrives with the library">Library</button>
-    <button disabled title="Arrives with settings">Settings</button>
-    <button disabled title="Available after a session ends">Summarize</button>
-  </footer>
+  <LivePane {lines} {status} />
+  <div class="dock">
+    <Footer />
+    <Controls
+      {status}
+      onstart={start}
+      onpause={() => api?.pause()}
+      onresume={() => api?.resume()}
+      onend={() => api?.end()}
+    />
+  </div>
 </main>
 
 <style>
-  main { display: flex; flex-direction: column; gap: 0.75rem; height: 100vh; box-sizing: border-box; padding: 1rem; }
-  footer { display: flex; gap: 0.5rem; justify-content: flex-end; }
+  main {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    height: 100vh;
+    padding: 1.25rem 1.5rem 1rem;
+    max-width: 62rem;
+    margin: 0 auto;
+  }
+  .dock { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
 </style>
