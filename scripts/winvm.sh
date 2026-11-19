@@ -22,7 +22,7 @@ sync() {
 case "$cmd" in
   check) ssh_run "powershell -NoProfile -Command \"'reachable'; [Environment]::OSVersion.VersionString\"" ;;
   test) sync; ssh_run "powershell -NoProfile -Command \"cd '$DIR'; cargo test --workspace\"" ;;
-  run-app) sync; ssh_run "powershell -NoProfile -Command \"cd '$DIR/app/ui'; npm ci; npm run tauri dev\"" ;;
+  run-app) sync; ssh_run "powershell -NoProfile -Command \"cd '$DIR/app'; npm.cmd --prefix ui ci; .\\ui\\node_modules\\.bin\\tauri.cmd dev\"" ;;
   release) sync; ssh_run "powershell -NoProfile -Command \"cd '$DIR'; pwsh scripts/release.ps1\"" ;;
   shell) ssh -t "$HOST" ;;
   *) echo "usage: $0 <check|test|run-app|release|shell>"; exit 2 ;;
