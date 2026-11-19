@@ -62,7 +62,7 @@ Windows Registry Editor Version 5.00
 "CallContext"=dword:00000001
 "NameOneToOneSpeakers"=dword:00000000
 "CallPollSeconds"=dword:0000000f
-"AudioSourceExcludePatterns"=hex(7):62,00,61,00,6e,00,6b,00,69,00,6e,00,67,00,00,00,00,00
+"AudioSourceExcludePatterns"=hex(7):62,00,61,00,6e,00,6b,00,69,00,6e,00,67,00,00,00,00,00,00,00
 ```
 Example PowerShell (as SYSTEM):
 ```powershell
