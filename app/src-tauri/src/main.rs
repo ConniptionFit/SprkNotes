@@ -76,7 +76,22 @@ fn app_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
 
-fn transcripts_root(app: &AppHandle) -> Result<PathBuf, String> {
+/// Admin policy (SPEC 10.2): machine then user registry keys. Nothing is set off Windows.
+fn policy() -> sprk_config::AppPolicy {
+    #[cfg(windows)]
+    {
+        sprk_config::AppPolicy::load(&sprk_config::registry::RegistryPolicy::layered())
+    }
+    #[cfg(not(windows))]
+    {
+        sprk_config::AppPolicy::default()
+    }
+}
+
+fn transcripts_root(app: &AppHandle, policy: &sprk_config::AppPolicy) -> Result<PathBuf, String> {
+    if let Some(root) = &policy.transcripts_root {
+        return Ok(PathBuf::from(root));
+    }
     let docs = app
         .path()
         .document_dir()
@@ -87,7 +102,7 @@ fn transcripts_root(app: &AppHandle) -> Result<PathBuf, String> {
 /// Audio source and call context detection (SPEC 18, 19). Windows only; the inputs are built on
 /// the session thread. Defaults until the policy settings are wired in (M14).
 #[cfg(windows)]
-fn context_config() -> Option<sprk_pipeline::host::ContextConfig> {
+fn context_config(p: &sprk_config::AppPolicy) -> Option<sprk_pipeline::host::ContextConfig> {
     use sprk_context::sources::AudioSessionSource;
     use sprk_context::win::{WasapiSessions, Windows};
     use sprk_context::WindowEnumerator;
@@ -100,18 +115,40 @@ fn context_config() -> Option<sprk_pipeline::host::ContextConfig> {
                 sessions: Box::new(move || s.sessions()),
             }
         }),
-        audio_sources: true,
-        call_context: true,
-        name_one_to_one: true,
-        timing: sprk_context::activity::Timing::default(),
-        exclusions: Vec::new(),
-        call_poll_ms: 15_000,
+        audio_sources: p.audio_source_detection.unwrap_or(true),
+        call_context: p.call_context.unwrap_or(true),
+        name_one_to_one: p.name_one_to_one_speakers.unwrap_or(true),
+        timing: {
+            let d = sprk_context::activity::Timing::default();
+            sprk_context::activity::Timing {
+                merge_general_ms: p
+                    .audio_merge_window_seconds
+                    .map_or(d.merge_general_ms, |s| s * 1000),
+                merge_call_ms: p
+                    .call_merge_window_seconds
+                    .map_or(d.merge_call_ms, |s| s * 1000),
+                min_activity_ms: d.min_activity_ms,
+            }
+        },
+        exclusions: p.audio_source_exclude_patterns.clone(),
+        call_poll_ms: p.call_poll_seconds.unwrap_or(15).clamp(5, 120) * 1000,
     })
 }
 
 #[cfg(not(windows))]
-fn context_config() -> Option<sprk_pipeline::host::ContextConfig> {
+fn context_config(_: &sprk_config::AppPolicy) -> Option<sprk_pipeline::host::ContextConfig> {
     None
+}
+
+fn commit_config(p: &sprk_config::AppPolicy) -> Config {
+    let mut c = Config::default();
+    if let Some(s) = p.commit_delay_seconds {
+        c.delay_ms = s.clamp(1, 30) * 1000;
+    }
+    if let Some(f) = p.filler_removal {
+        c.drop_fillers = f;
+    }
+    c
 }
 
 #[tauri::command]
@@ -121,21 +158,22 @@ fn start_session(app: AppHandle, state: State<AppState>, name: String) -> Result
         return Err("A session is already running.".into());
     }
     // The model is chosen now and never swapped mid-session.
+    let policy = policy();
     let loaded = models::load_active(env!("CARGO_PKG_VERSION"))?;
     let host = Host::start(
         StartParams {
-            root: transcripts_root(&app)?,
+            root: transcripts_root(&app, &policy)?,
             name,
             app_version: env!("CARGO_PKG_VERSION").to_string(),
             engine_label: loaded.label,
-            commit: Config::default(),
+            commit: commit_config(&policy),
         },
         loaded.engine,
         loaded.make_vad,
         Box::new(|| Box::new(CpalBackend::default()) as Box<dyn Backend>),
         Box::new(clock::LocalClock),
         Arc::new(TauriEvents(app)),
-        context_config(),
+        context_config(&policy),
     )
     .map_err(|e| e.to_string())?;
     *slot = Some(host);
