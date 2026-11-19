@@ -1,6 +1,7 @@
 # Changelog
 
 ## 0.0.1 (unreleased)
+- CI: the Linux job now runs on the Forgejo runner (it never had; it died in 3 s on a third-party Rust action the runner cannot fetch). Rust comes from rustup, the workflow moved to `.forgejo/workflows/ci.yml`, and it checks fmt, clippy (host plus both Windows targets), tests, terms and version alignment. The Windows and ARM jobs were removed (no such runners; Windows is checked by `winvm.sh`). Fixed the findings from newer clippy and removed unused dependencies.
 - Notices: `scripts/gen-notices.py` regenerates the license summary and crate table and fails when a dependency has no license; run before each release. The Tauri shell's own dependency list still needs adding.
 - M14 (policy): typed admin policy (`AppPolicy`) read from `HKLM` then `HKCU` `Software\Policies\SprkNotes` (read-only registry store, bad values ignored); the app uses it for the transcripts root, commit delay, filler removal, audio source detection and windows, exclusion patterns, call context, poll interval and 1:1 naming. UI lock indicators still to do.
 - M14 (start): a panic on the session thread closes the transcript as `interrupted` (committed lines are already on disk) and reports to the UI; the app's panic hook prints only the source location, never the message.
