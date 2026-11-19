@@ -192,3 +192,42 @@ pub fn extract_pack(pack: &Path, dest: &Path) -> Result<(), PackError> {
     Manifest::from_json(&text)?.verify_files(dest)?;
     Ok(())
 }
+
+/// Return a copy of `pack` with `model.sig` added or replaced (`sprkctl model sign`).
+/// The signature is made elsewhere (ssh-keygen against the 1Password agent); this only
+/// repackages the zip.
+pub fn add_signature(pack: &Path, signature: &[u8], out: &Path) -> Result<(), PackError> {
+    let mut src =
+        zip::ZipArchive::new(std::fs::File::open(pack)?).map_err(|_| PackError::Corrupt)?;
+    let mut zip = zip::ZipWriter::new(std::fs::File::create(out)?);
+    let opts = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+    for i in 0..src.len() {
+        let mut e = src.by_index(i).map_err(|_| PackError::Corrupt)?;
+        let name = e.name().to_string();
+        if name == "model.sig" {
+            continue;
+        }
+        if !flat_name_ok(&name) {
+            return Err(PackError::UnsafeEntry);
+        }
+        zip.start_file(name.as_str(), opts)
+            .map_err(|_| PackError::Corrupt)?;
+        std::io::copy(&mut e, &mut zip)?;
+    }
+    zip.start_file("model.sig", opts)
+        .map_err(|_| PackError::Corrupt)?;
+    zip.write_all(signature)?;
+    zip.finish().map_err(|_| PackError::Corrupt)?;
+    Ok(())
+}
+
+/// The exact `model.json` bytes of a pack (what gets signed).
+pub fn read_manifest_bytes(pack: &Path) -> Result<Vec<u8>, PackError> {
+    let mut zip =
+        zip::ZipArchive::new(std::fs::File::open(pack)?).map_err(|_| PackError::Corrupt)?;
+    let mut e = zip
+        .by_name("model.json")
+        .map_err(|_| PackError::NoManifest)?;
+    read_limited(&mut e, MAX_MANIFEST_BYTES)
+}

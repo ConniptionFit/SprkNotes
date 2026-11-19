@@ -12,9 +12,16 @@ serde_json.workspace = true
 sha2.workspace = true
 hex.workspace = true
 zip.workspace = true
+ed25519-dalek.workspace = true
+base64.workspace = true
+
+[features]
+# In-process SSHSIG signer for tests only. Never enabled in shipped builds.
+test-support = []
 
 [dev-dependencies]
 tempfile.workspace = true
+sprk-models = { path = ".", features = ["test-support"] }
 
 [lints]
 workspace = true
