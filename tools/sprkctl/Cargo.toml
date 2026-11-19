@@ -23,5 +23,10 @@ ringbuf = { version = "0.4", optional = true }
 anyhow.workspace = true
 serde_json.workspace = true
 
+[dev-dependencies]
+sha2.workspace = true
+hex.workspace = true
+tempfile.workspace = true
+
 [lints]
 workspace = true
