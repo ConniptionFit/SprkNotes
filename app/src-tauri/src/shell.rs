@@ -11,7 +11,9 @@ use std::sync::Mutex;
 use tauri::image::Image;
 use tauri::menu::{Menu, MenuBuilder, MenuItemBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, WebviewWindow, WindowEvent};
+use tauri::{
+    AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, WebviewWindow, WindowEvent,
+};
 
 /// Default overlay width in logical pixels, used only to centre it the first time. After that the
 /// UI sizes the window to its own content (`resize_mini`).
@@ -194,8 +196,10 @@ pub fn open_main(app: &AppHandle) {
 /// Show the mini when the main window is minimized and a session is in progress; keep it
 /// until the main window is back; hide it then.
 fn sync_mini(app: &AppHandle) {
-    let (Some(main), Some(mini)) = (app.get_webview_window("main"), app.get_webview_window("mini"))
-    else {
+    let (Some(main), Some(mini)) = (
+        app.get_webview_window("main"),
+        app.get_webview_window("mini"),
+    ) else {
         return;
     };
     let away = main.is_minimized().unwrap_or(false) || !main.is_visible().unwrap_or(true);
@@ -220,12 +224,11 @@ fn monitor_key(w: &WebviewWindow) -> String {
 /// Restore the last position on this monitor, or default to top centre of the primary monitor.
 fn place_mini(app: &AppHandle, mini: &WebviewWindow) {
     let monitors = app.available_monitors().unwrap_or_default();
-    let saved = app
-        .state::<Shell>()
-        .positions
-        .lock()
-        .ok()
-        .and_then(|p| p.values().copied().find(|&(x, y)| inside_any(&monitors, x, y)));
+    let saved = app.state::<Shell>().positions.lock().ok().and_then(|p| {
+        p.values()
+            .copied()
+            .find(|&(x, y)| inside_any(&monitors, x, y))
+    });
     if let Some((x, y)) = saved {
         let _ = mini.set_position(PhysicalPosition::new(x, y));
         return;
