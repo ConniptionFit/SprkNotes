@@ -1,6 +1,7 @@
 # Changelog
 
 ## 0.0.1 (unreleased)
+- Session host (portable): one thread owns capture, VAD, ASR, commit buffer and the crash-safe writer; UI side gets commands and `Events`. Rename during the session (user name wins), finalize on End or when the UI disappears, capture device events written as source events.
 - M4 (portable core): echo plan by form factor (headset: dedupe only), NLMS software canceller with double-talk guard behind `EchoCanceller` (ADR-004). Windows AEC control and the hardware bleed test are pending.
 - M2 (capture): `LiveCapture` follows default mic and render devices (device change, unplug, recovery events, failed-open keeps old stream) behind a `Backend` seam; cpal backend (WASAPI mic + loopback) in `sprk-audio` behind `cpal-backend`; `sprkctl capture-check` prints per-source counts and levels without storing audio.
 - Docs: README, user guide, admin guide, architecture overview, third-party notices, synthetic-data screenshots of the main window.
