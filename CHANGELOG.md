@@ -1,6 +1,7 @@
 # Changelog
 
 ## 0.0.1 (unreleased)
+- Live captions, engine side (ADR-006): the session re-decodes the speech in progress (last 10 s, about every 0.7 s, Others by default, Me optional) and the app emits a transient `caption` event. Nothing is written or logged. Backs off when decoding is slow and switches itself off if it cannot keep up. The overlay's `set_captions` flags feed `Events::captions_wanted`.
 - Fix: Download model no longer makes the voice activity pack the active model (it displaced Parakeet to `previous`); only transcription packs are activated.
 - Fix: engine builds (the app and `sprkctl --features engine`) rejected the voice activity pack with `unknown engine 'sherpa-onnx/vad-silero'`, so Download model could not install it. Found by the real download test on the VM; the VAD engine is now in the supported list.
 - Model download: packs can be published as parts (`sprkctl model index --split-mb 80 --parts-dir <dir>`), because the release host rejects uploads over about 100 MB. The index lists each part with its own checksum; the app joins them, checks the whole-pack checksum, then imports as usual.
