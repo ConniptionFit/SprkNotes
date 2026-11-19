@@ -1820,6 +1820,7 @@ dependencies = [
  "sha2 0.10.9",
  "sprk-asr",
  "sprk-audio",
+ "sprk-context",
  "sprk-models",
  "tempfile",
 ]

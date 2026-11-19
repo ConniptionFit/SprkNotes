@@ -12,6 +12,8 @@ mod engine;
 #[cfg(all(feature = "live", any(feature = "engine", feature = "engine-shared")))]
 mod live;
 mod models_cmd;
+#[cfg(all(feature = "live", windows))]
+mod sources_check;
 
 fn load(dir: &Path) -> Result<Manifest> {
     let text = std::fs::read_to_string(dir.join("model.json"))
@@ -61,6 +63,8 @@ fn main() -> Result<()> {
         ["bench", "accuracy", ..] => engine::bench_accuracy(&engine_args(&args[2..])?)?,
         #[cfg(feature = "live")]
         ["capture-check", rest @ ..] => capture_check::run(rest)?,
+        #[cfg(all(feature = "live", windows))]
+        ["sources-check", rest @ ..] => sources_check::run(rest)?,
         [] | ["--version"] => println!("sprkctl {}", env!("CARGO_PKG_VERSION")),
         _ => bail!(
             "usage: sprkctl model inspect <model-folder>\n       \
@@ -68,6 +72,7 @@ fn main() -> Result<()> {
              sprkctl transcribe <model-folder> <wav> [--vad <vad-folder>]    (--features engine)\n       \
              sprkctl transcribe <model-folder> --mic --vad <vad-folder> [--seconds N] [--device NAME]  (--features live)\n       \
              sprkctl capture-check [--seconds N]                              (--features live)\n       \
+             sprkctl sources-check [--seconds N]                              (--features live, Windows)\n       \
              sprkctl devices                                                  (--features live)\n       \
              sprkctl bench accuracy <model-folder> <fixtures-dir> [--vad <vad-folder>]  (--features engine)"
         ),
