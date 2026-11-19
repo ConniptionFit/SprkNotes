@@ -1,0 +1,7 @@
+name: diag
+on: [push]
+jobs:
+  echo:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ok; uname -a; which git cargo rustup node || true
