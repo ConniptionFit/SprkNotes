@@ -70,7 +70,7 @@ sprkctl model pack .\models-src\<id> -o .\dist\<id>@<ver>.sprkmodel
 sprkctl model index .\dist\parakeet....sprkmodel .\dist\silero-vad....sprkmodel `
   --base-url https://<host>/<owner>/<repo>/releases/download/models --url-suffix .zip -o models-index.json
 ```
-Upload `models-index.json` and each pack (renamed `<file>.zip`) to the `models` release, replacing older assets. The same files work on an internal mirror: change `--base-url`. From 1.0 packs must also be signed (`sprkctl model sign`).
+Hosts that cap upload size (the maintainers' host rejects bodies over about 100 MB) need big packs split: add `--split-mb 80 --parts-dir .\dist\parts` and the index lists each part with its own checksum (the app joins them and checks the whole-pack checksum before import). Upload the files in `parts` instead of the pack. Otherwise upload `models-index.json` and each pack (renamed `<file>.zip`) to the `models` release, replacing older assets. The same files work on an internal mirror: change `--base-url`. From 1.0 packs must also be signed (`sprkctl model sign`).
 
 ## Building a release (maintainers)
 On the Windows VM, from the repo root:

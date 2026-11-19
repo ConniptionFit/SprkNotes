@@ -35,3 +35,7 @@ model by packing it, running `sprkctl model index`, and replacing the assets on 
   model index and pack downloads described here. Telemetry, analytics, crash upload and any other update check stay forbidden.
 - Firewall allow-lists need the index host (or the internal mirror).
 - Regulated sites can turn it all off with `ModelDownload=0` and keep using the bundled build or `Install-SprkModel.ps1`.
+
+## Addendum: multipart packs
+
+The release host rejects request bodies over about 100 MB, so a large pack is published as parts (about 80 MB each). An index entry may carry `parts` (url, sha256, size each). The client downloads each part, checks its SHA-256, appends it to the partial pack, then checks the whole-pack SHA-256 and size from the entry before the normal import. Parts must sum to `size`, at most 64 parts, https only. Mirrors work unchanged.

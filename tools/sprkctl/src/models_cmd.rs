@@ -74,6 +74,8 @@ struct Flags {
     keep: usize,
     base_url: Option<String>,
     url_suffix: String,
+    split_mb: Option<u64>,
+    parts_dir: Option<PathBuf>,
     positional: Vec<String>,
 }
 
@@ -90,6 +92,8 @@ fn parse(args: &[&str]) -> Result<Flags> {
         keep: 2,
         base_url: None,
         url_suffix: String::new(),
+        split_mb: None,
+        parts_dir: None,
         positional: vec![],
     };
     let mut it = args.iter();
@@ -124,6 +128,12 @@ fn parse(args: &[&str]) -> Result<Flags> {
             }
             "--url-suffix" => {
                 f.url_suffix = it.next().context("--url-suffix needs text")?.to_string()
+            }
+            "--split-mb" => {
+                f.split_mb = Some(it.next().context("--split-mb needs a number")?.parse()?)
+            }
+            "--parts-dir" => {
+                f.parts_dir = Some(it.next().context("--parts-dir needs a folder")?.into())
             }
             "--keep" => f.keep = it.next().context("--keep needs a number")?.parse()?,
             x if x.starts_with("--") => bail!("unknown option {x}"),
@@ -278,7 +288,31 @@ pub fn run(args: &[&str]) -> Result<i32> {
             for p in &f.positional {
                 match sprk_models::remote::entry_for_pack(Path::new(p), &base, &f.url_suffix, true)
                 {
-                    Ok(e) => models.push(e),
+                    Ok(mut e) => {
+                        if let Some(mb) = f.split_mb {
+                            let dir = f
+                                .parts_dir
+                                .clone()
+                                .unwrap_or_else(|| PathBuf::from("parts"));
+                            match sprk_models::remote::split_pack(
+                                Path::new(p),
+                                &dir,
+                                mb * 1024 * 1024,
+                                &base,
+                                &f.url_suffix,
+                            ) {
+                                Ok(parts) => {
+                                    e.parts = parts;
+                                    e.url = String::new();
+                                }
+                                Err(err) => {
+                                    eprintln!("{p}: split failed: {err}");
+                                    return Ok(EXIT_VERIFY);
+                                }
+                            }
+                        }
+                        models.push(e)
+                    }
                     Err(e) => {
                         eprintln!("{p}: {e}");
                         return Ok(EXIT_VERIFY);
