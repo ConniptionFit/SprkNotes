@@ -16,6 +16,7 @@ chrono = { version = "0.4", default-features = false, features = ["clock"] }
 sprk-pipeline = { path = "../../crates/sprk-pipeline" }
 sprk-asr = { path = "../../crates/sprk-asr" }
 sprk-audio = { path = "../../crates/sprk-audio", features = ["cpal-backend"] }
+sprk-context = { path = "../../crates/sprk-context" }
 sprk-models = { path = "../../crates/sprk-models" }
 sprk-transcript = { path = "../../crates/sprk-transcript" }
 
