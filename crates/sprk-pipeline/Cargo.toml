@@ -9,6 +9,7 @@ license.workspace = true
 thiserror.workspace = true
 sprk-asr = { path = "../sprk-asr" }
 sprk-audio = { path = "../sprk-audio" }
+sprk-context = { path = "../sprk-context" }
 sprk-transcript = { path = "../sprk-transcript" }
 
 [lints]

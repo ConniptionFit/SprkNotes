@@ -84,6 +84,36 @@ fn transcripts_root(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(docs.join("SprkNotes").join("Transcripts"))
 }
 
+/// Audio source and call context detection (SPEC 18, 19). Windows only; the inputs are built on
+/// the session thread. Defaults until the policy settings are wired in (M14).
+#[cfg(windows)]
+fn context_config() -> Option<sprk_pipeline::host::ContextConfig> {
+    use sprk_context::sources::AudioSessionSource;
+    use sprk_context::win::{WasapiSessions, Windows};
+    use sprk_context::WindowEnumerator;
+    use sprk_pipeline::host::{ContextConfig, ContextInputs};
+    Some(ContextConfig {
+        make_inputs: Box::new(|| {
+            let (w, s) = (Windows, WasapiSessions::default());
+            ContextInputs {
+                windows: Box::new(move || w.windows()),
+                sessions: Box::new(move || s.sessions()),
+            }
+        }),
+        audio_sources: true,
+        call_context: true,
+        name_one_to_one: true,
+        timing: sprk_context::activity::Timing::default(),
+        exclusions: Vec::new(),
+        call_poll_ms: 15_000,
+    })
+}
+
+#[cfg(not(windows))]
+fn context_config() -> Option<sprk_pipeline::host::ContextConfig> {
+    None
+}
+
 #[tauri::command]
 fn start_session(app: AppHandle, state: State<AppState>, name: String) -> Result<(), String> {
     let mut slot = state.host.lock().map_err(|_| "busy".to_string())?;
@@ -105,6 +135,7 @@ fn start_session(app: AppHandle, state: State<AppState>, name: String) -> Result
         Box::new(|| Box::new(CpalBackend::default()) as Box<dyn Backend>),
         Box::new(clock::LocalClock),
         Arc::new(TauriEvents(app)),
+        context_config(),
     )
     .map_err(|e| e.to_string())?;
     *slot = Some(host);
