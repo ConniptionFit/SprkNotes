@@ -97,6 +97,7 @@ $artifacts = @()
 if (-not $SkipMsi) {
   foreach ($a in $arches) {
     $msi = Join-Path $Out "SprkNotes_${ver}_$($a.Name).msi"
+    # WiX v5 is pinned: v7+ refuses to build until a person accepts the OSMF EULA.
     wix build packaging/wix/Package.wxs -arch $a.Name -d "Version=$ver" -d "StageDir=$(Join-Path $stage $a.Name)" -o $msi
     if ($LASTEXITCODE -ne 0) { throw "wix build failed ($($a.Name))" }
     Sign $msi

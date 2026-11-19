@@ -37,7 +37,7 @@ The DLLs are copied next to `sprkctl.exe` in `target/<triple>/release/`. Needs `
    Set-Service sshd -StartupType Automatic; Start-Service sshd
    ```
    Add your public key to `C:\ProgramData\ssh\administrators_authorized_keys`.
-6. Toolchain on the guest: Visual Studio Build Tools (C++ workload, Windows 11 SDK), `rustup` (stable, MSVC), Node LTS, Git, PowerShell 7, WiX v5+ (`dotnet tool install --global wix`).
+6. Toolchain on the guest: Visual Studio Build Tools (C++ workload, Windows 11 SDK), `rustup` (stable, MSVC), Node LTS, Git, PowerShell 7, WiX v5 (`dotnet tool install --global wix --version 5.*`; v7 and later need the OSMF EULA accepted by a person, so pin v5).
 7. On the host, add to `~/.ssh/config`:
    ```
    Host sprk-winvm
