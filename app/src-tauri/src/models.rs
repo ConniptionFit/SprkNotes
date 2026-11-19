@@ -17,6 +17,16 @@ fn env_dir(var: &str) -> Option<PathBuf> {
     std::env::var_os(var).map(PathBuf::from)
 }
 
+/// Per-user data root: `%APPDATA%` on Windows, `$XDG_DATA_HOME` (or `~/.local/share`) elsewhere.
+pub fn user_data_dir() -> Option<PathBuf> {
+    if cfg!(windows) {
+        return env_dir("APPDATA");
+    }
+    env_dir("XDG_DATA_HOME")
+        .filter(|p| p.is_absolute())
+        .or_else(|| env_dir("HOME").map(|h| h.join(".local").join("share")))
+}
+
 /// bundled (next to the exe), machine (`%ProgramData%`), user (`%APPDATA%`).
 fn stores() -> (Option<ModelStore>, Option<ModelStore>, Option<ModelStore>) {
     let bundled = std::env::current_exe()
@@ -26,7 +36,7 @@ fn stores() -> (Option<ModelStore>, Option<ModelStore>, Option<ModelStore>) {
         .map(|p| ModelStore::new(p, StoreKind::Bundled));
     let machine = env_dir("ProgramData")
         .map(|p| ModelStore::new(p.join("SprkNotes").join("models"), StoreKind::Machine));
-    let user = env_dir("APPDATA")
+    let user = user_data_dir()
         .map(|p| ModelStore::new(p.join("SprkNotes").join("models"), StoreKind::User));
     (bundled, machine, user)
 }

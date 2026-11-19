@@ -39,6 +39,10 @@ impl PcmStream for CpalStream {
 
 impl Backend for CpalBackend {
     fn default_device(&self, source: Source) -> Option<String> {
+        #[cfg(not(windows))]
+        if source == Source::System {
+            return monitor::available().then(|| monitor::DEFAULT_MONITOR.to_string());
+        }
         let d = match source {
             Source::Mic => self.host.default_input_device(),
             Source::System => self.host.default_output_device(),
@@ -47,6 +51,10 @@ impl Backend for CpalBackend {
     }
 
     fn open(&mut self, source: Source, name: &str) -> Result<Box<dyn PcmStream>, AudioError> {
+        #[cfg(not(windows))]
+        if source == Source::System {
+            return monitor::open(name);
+        }
         let device = match source {
             Source::Mic => self
                 .host
@@ -101,5 +109,78 @@ impl Backend for CpalBackend {
             resampler: LinearResampler::new(rate, 16_000),
             scratch: vec![0.0; 8192],
         }))
+    }
+}
+
+/// Linux system audio: the default output's monitor source, read through `parec` (PipeWire and
+/// PulseAudio both serve it). cpal cannot open a render device as an input off Windows.
+#[cfg(not(windows))]
+mod monitor {
+    use super::*;
+    use std::io::Read;
+    use std::process::{Child, Command, Stdio};
+    use std::sync::{Arc, Mutex};
+
+    pub const DEFAULT_MONITOR: &str = "@DEFAULT_MONITOR@";
+
+    pub fn available() -> bool {
+        Command::new("parec")
+            .arg("--version")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .is_ok_and(|s| s.success())
+    }
+
+    struct ParecStream {
+        child: Child,
+        buf: Arc<Mutex<Vec<f32>>>,
+    }
+
+    impl PcmStream for ParecStream {
+        fn read(&mut self, out: &mut Vec<f32>) {
+            if let Ok(mut b) = self.buf.try_lock() {
+                out.append(&mut b);
+            }
+        }
+    }
+
+    impl Drop for ParecStream {
+        fn drop(&mut self) {
+            let _ = self.child.kill();
+            let _ = self.child.wait();
+        }
+    }
+
+    pub fn open(device: &str) -> Result<Box<dyn PcmStream>, AudioError> {
+        let mut child = Command::new("parec")
+            .args(["-d", device, "--raw", "--format=float32le", "--rate=16000", "--channels=1"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|_| AudioError::Unavailable)?;
+        let mut out = child.stdout.take().ok_or(AudioError::Unavailable)?;
+        let buf = Arc::new(Mutex::new(Vec::<f32>::new()));
+        let sink = Arc::clone(&buf);
+        std::thread::spawn(move || {
+            let mut chunk = [0u8; 4096];
+            let mut pending: Vec<u8> = Vec::new();
+            while let Ok(n) = out.read(&mut chunk) {
+                if n == 0 {
+                    break;
+                }
+                pending.extend_from_slice(&chunk[..n]);
+                let whole = pending.len() / 4 * 4;
+                if let Ok(mut b) = sink.lock() {
+                    b.extend(
+                        pending[..whole]
+                            .chunks_exact(4)
+                            .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]])),
+                    );
+                }
+                pending.drain(..whole);
+            }
+        });
+        Ok(Box::new(ParecStream { child, buf }))
     }
 }

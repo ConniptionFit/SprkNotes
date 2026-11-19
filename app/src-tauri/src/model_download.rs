@@ -76,7 +76,7 @@ fn stores() -> (Option<ModelStore>, Option<ModelStore>, Option<ModelStore>) {
         .map(|p| ModelStore::new(p, StoreKind::Bundled));
     let machine = env_dir("ProgramData")
         .map(|p| ModelStore::new(p.join("SprkNotes").join("models"), StoreKind::Machine));
-    let user = env_dir("APPDATA")
+    let user = crate::models::user_data_dir()
         .map(|p| ModelStore::new(p.join("SprkNotes").join("models"), StoreKind::User));
     (bundled, machine, user)
 }
@@ -321,8 +321,8 @@ fn fetcher_install(app: &AppHandle, p: &AppPolicy) -> Result<(), String> {
 }
 
 #[cfg(not(windows))]
-fn fetcher_install(_: &AppHandle, _: &AppPolicy) -> Result<(), String> {
-    Err("Model downloads are only available on Windows.".into())
+fn fetcher_install(app: &AppHandle, p: &AppPolicy) -> Result<(), String> {
+    install(&crate::net_unix::Https, p, app)
 }
 
 #[cfg(windows)]
@@ -331,8 +331,8 @@ pub fn check_now(p: &AppPolicy) -> Result<UpdateInfo, String> {
 }
 
 #[cfg(not(windows))]
-pub fn check_now(_: &AppPolicy) -> Result<UpdateInfo, String> {
-    Err("Model downloads are only available on Windows.".into())
+pub fn check_now(p: &AppPolicy) -> Result<UpdateInfo, String> {
+    check(&crate::net_unix::Https, p)
 }
 
 /// Silent check at launch. Failure is silent (offline, blocked, server down): the user simply

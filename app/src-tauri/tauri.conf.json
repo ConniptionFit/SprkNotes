@@ -10,9 +10,9 @@
   },
   "app": {
     "windows": [
-      { "label": "main", "title": "SprkNotes", "width": 900, "height": 640 },
+      { "label": "main", "dragDropEnabled": false, "title": "SprkNotes", "width": 900, "height": 640 },
       {
-        "label": "mini",
+        "label": "mini", "dragDropEnabled": false,
         "title": "SprkNotes mini controller",
         "url": "index.html#mini",
         "width": 130,
