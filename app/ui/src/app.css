@@ -18,6 +18,8 @@
   --others: #b4470c;
   --others-soft: #fbece2;
   --live: #d6453d;
+  --ok: #2e9e5b;
+  --caution: #e0a100;
   --warn: #8a5a00;
   --warn-soft: #fbf0d4;
   --radius: 12px;
@@ -41,6 +43,8 @@
     --others: #f0a070;
     --others-soft: #3a261b;
     --live: #ef6b63;
+    --ok: #4cc27f;
+    --caution: #f2c14e;
     --warn: #f2c14e;
     --warn-soft: #3a2f12;
     --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 16px rgb(0 0 0 / 0.3);

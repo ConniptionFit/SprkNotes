@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Source, Status } from "./types";
+  import Light from "./Light.svelte";
 
   let {
     name = $bindable(),
@@ -17,11 +18,6 @@
     onsource: (s: Source, on: boolean) => void;
   } = $props();
 
-  const label: { [K in Status]: string } = {
-    ready: "Ready",
-    transcribing: "Transcribing",
-    paused: "Paused",
-  };
 </script>
 
 <header>
@@ -33,7 +29,7 @@
       bind:value={name}
       onchange={() => onrename(name)}
     />
-    <span class="status {status}" role="status"><i></i>{label[status]}</span>
+    <Light {status} size={14} />
   </div>
   <div class="sources" role="group" aria-label="Sound sources">
     <label class="chip me" class:on={mic}>
@@ -71,23 +67,6 @@
   .name:hover { border-color: var(--border); }
   .name:focus { border-color: var(--accent); background: var(--surface); outline: none; }
 
-  .status {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.3rem 0.85rem;
-    border-radius: 999px;
-    background: var(--surface-2);
-    color: var(--muted);
-    font-size: 0.9rem;
-    font-weight: 600;
-    white-space: nowrap;
-  }
-  .status i { width: 0.55rem; height: 0.55rem; border-radius: 50%; background: currentColor; }
-  .status.transcribing { background: var(--accent-soft); color: var(--accent); }
-  .status.transcribing i { background: var(--live); animation: pulse 1.6s ease-in-out infinite; }
-  .status.paused { background: var(--warn-soft); color: var(--warn); }
-  @keyframes pulse { 50% { opacity: 0.35; transform: scale(0.8); } }
 
   .sources { display: flex; gap: 0.5rem; flex-wrap: wrap; }
   .chip {
