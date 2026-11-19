@@ -11,7 +11,7 @@
 | `<id>@<ver>.sprkmodel` | Transcription model packs, versioned separately |
 | `SHA256SUMS.txt`, `release-manifest.json` | Hashes and versions |
 
-Uninstall never deletes transcripts. Packaging status: see CHANGELOG (M13 pending).
+Uninstall never deletes transcripts. Install steps for one PC are in [install.md](install.md); fleet deployment (Intune, GPO, SCCM, RMM as SYSTEM) is in [deployment.md](deployment.md).
 
 ## Policy (registry)
 `HKLM\Software\Policies\SprkNotes` wins over `HKCU\Software\Policies\SprkNotes`, which wins over user settings. A policy locks the matching setting.

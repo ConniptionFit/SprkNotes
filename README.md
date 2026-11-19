@@ -23,6 +23,8 @@ Pre-release (0.0.1). Portable cores are built and tested on Linux: transcript fo
 ## Docs
 | Doc | For |
 |---|---|
+| [Install](docs/install.md) | Installing on one PC: portable zip, MSI, MSIX, models, uninstall |
+| [Deployment](docs/deployment.md) | Intune, GPO, SCCM, RMM as SYSTEM, registry policy |
 | [User guide](docs/user-guide.md) | Using the app |
 | [Admin guide](docs/admin-guide.md) | Deploying, policy keys, model runbook |
 | [Architecture](docs/architecture.md) | Crates, data flow, extension points |
