@@ -53,6 +53,6 @@ Once the Windows-only code lands, one pass in `sprk-winvm` covers it:
 - [ ] Device change test (M2): switch the VM's default output mid-session and confirm a `Source changed` event.
 - [ ] Bleed test on the Snapdragon laptop with speakers on (M4, ADR-004 filter length tuning).
 
-## Decisions for the product owner
+## Decisions for John
 - [ ] Parakeet needs a CC-BY-4.0 attribution notice: approve the wording for the About screen and README.
 - [ ] Bundle Parakeet in the installer (about 460 MiB) or ship small and add the pack by RMM: chosen **bundle** (2026-11-19). Confirm installer size is acceptable for MSIX and Intune.
