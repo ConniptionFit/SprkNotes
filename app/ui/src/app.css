@@ -1,2 +1,13 @@
-:root { font-family: system-ui, "Segoe UI", sans-serif; color-scheme: light dark; }
-body { margin: 0; padding: 2rem; }
+:root {
+  font-family: system-ui, "Segoe UI", sans-serif;
+  color-scheme: light dark;
+  --surface: Canvas;
+  --line: color-mix(in srgb, CanvasText 15%, transparent);
+  --muted: color-mix(in srgb, CanvasText 55%, transparent);
+  --accent: #6b3fa0;
+  --me: #1d6fb8;
+  --others: #c2410c;
+  --warn: #f2c14e;
+}
+body { margin: 0; }
+button:focus-visible, input:focus-visible, .pane:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

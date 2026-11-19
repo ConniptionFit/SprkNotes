@@ -36,6 +36,13 @@ what it unblocks. Tick them off in the PR that carries the milestone.
   and the recovery prompt works.
 - [ ] **Device change test (M2):** plug and unplug a headset and a Bluetooth device mid-session.
 
+## Batched VM run (when the RX9070 is free)
+Once the Windows-only code lands, one pass in `sprk-winvm` covers it:
+- [ ] `./scripts/winvm.sh test` (full workspace on Windows).
+- [ ] `./scripts/winvm.sh run-app`: open the main window, confirm Start/Pause/End and the live pane scroll
+  behavior (scroll up, "Return to live" pill, End key) once the Tauri commands are wired.
+- [ ] Windows installers and packaging (M13) through `./scripts/winvm.sh release`.
+
 ## Decisions for John
 - [ ] Parakeet needs a CC-BY-4.0 attribution notice: approve the wording for the About screen and README.
 - [ ] Bundle Parakeet in the installer (about 460 MiB) or ship small and add the pack by RMM: chosen **bundle** (2026-11-19). Confirm installer size is acceptable for MSIX and Intune.

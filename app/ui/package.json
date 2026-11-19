@@ -7,15 +7,19 @@
     "dev": "vite --port 1420 --strictPort",
     "build": "vite build",
     "check": "svelte-check --tsconfig ./tsconfig.json",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "test": "vitest run"
   },
-  "dependencies": { "@tauri-apps/api": "^2" },
+  "dependencies": {
+    "@tauri-apps/api": "^2"
+  },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5",
     "@tauri-apps/cli": "^2",
     "svelte": "^5",
     "svelte-check": "^4",
     "typescript": "^5",
-    "vite": "^6"
+    "vite": "^6",
+    "vitest": "^2.1.9"
   }
 }
