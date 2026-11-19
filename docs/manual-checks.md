@@ -42,8 +42,8 @@ Once the Windows-only code lands, one pass in `sprk-winvm` covers it:
 - [ ] `./scripts/winvm.sh run-app`: open the main window, confirm Start/Pause/End and the live pane scroll
   behavior (scroll up, "Return to live" pill, End key) once the Tauri commands are wired.
 - [x] Windows installers and packaging (M13) through `release.ps1`: both MSIs have files, per-user install and uninstall leave nothing behind, version gate passes (2026-11-19, VM, throwaway cert).
-- [ ] MSIX install: needs the signing cert in `LocalMachine\TrustedPeople` (admin, changes the VM trust store); run with a throwaway cert and remove it afterwards.
-- [ ] Per-machine MSI (`ALLUSERS=1`) install and uninstall, and `Install-SprkNotes.ps1` as SYSTEM.
+- [x] MSIX x64 install with a throwaway cert in `LocalMachine\TrustedPeople` (needs an interactive elevated session, SSH logons get Access denied); registered, sprkctl present, removed cleanly (2026-11-19). arm64 msix, bundle and launching the app are untested.
+- [x] Per-machine MSI and `Install-SprkNotes.ps1 -Machine` / `-Uninstall` (elevated, VM): clean (2026-11-19). Not yet run as SYSTEM through the RMM.
 - [ ] arm64 MSI and portable build run on the Snapdragon laptop.
 - [ ] Dev tools: WiX v5 (not v7, which needs the OSMF EULA accepted by a person), ARM64 MSVC component, Windows SDK tools.
 
