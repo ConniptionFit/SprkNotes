@@ -1,6 +1,7 @@
 //! Audio capture seam. Samples live in memory only; nothing here writes audio to disk.
 use std::sync::{Arc, Mutex};
 
+pub mod aec;
 #[cfg(feature = "cpal-backend")]
 pub mod cpal_backend;
 pub mod live;
