@@ -90,8 +90,16 @@ Export to `.txt`, `.json` or `.docx`.
 ## Who is "Others"?
 Everyone you hear through the speakers. On a confirmed 1:1 Teams call the other person is named. On group calls, or when nobody can be identified, it stays `Others`. Speech from a video or other app playing sound is shown as an audio source event; it may not be a person in the meeting. Live captions and the live line always say `Others`.
 
+## Library
+**Library** lists your transcripts, newest first. Search finds names and words inside transcripts. Open one to read it, **View in folder**, **Export** (Word, plain text or JSON, saved next to the transcript) or **Summarize**. No setup is needed; it reads the same folder transcripts are saved to. (Folders, rename and delete are not in the Library yet.)
+
 ## Summarize with Claude or Copilot
-After a session, **Summarize** opens Claude (file attached) or copies the prompt for Microsoft 365 Copilot and highlights the file. SprkNotes sends nothing: you review and send inside that app. (The Library and Summarize buttons in the window are shown but switched off until they arrive in the UI.)
+**Summarize** hands your latest transcript (or the one you have open in the Library) to the Claude or Microsoft 365 Copilot desktop app. It is off while a session is running and until you have a transcript.
+- Only one of the apps is installed: it is used straight away.
+- Both are installed: you choose.
+- Neither is installed (always the case for Copilot on Linux): the prompt is copied and the file is shown in your file manager, so you can attach and paste it into any assistant you use.
+
+Claude opens with the file attached. Copilot has no file-attach link, so the prompt is copied, Copilot opens and the file is highlighted: attach it and paste. SprkNotes sends nothing: you review and send inside that app. An administrator can hide either app (`ShowClaudeHandoff`, `ShowCopilotHandoff`).
 
 ## On Linux
 Same app and windows, with these differences:

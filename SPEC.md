@@ -385,6 +385,9 @@ Scheduled Teams and Zoom meetings live on the user's Outlook calendar, so one lo
 
 SprkNotes itself makes no network call here: it only opens the Claude or Copilot app with a prompt and the file. Sending the transcript to the cloud service happens inside that app, when the user presses send. Admin policy can hide either button (10.2). Only enterprise-protected services are allowed (Claude under the company's agreement, Microsoft 365 Copilot with work sign-in; never consumer Copilot).
 
+### 9.0 Choosing the app
+Summarize looks for installed clients by asking the OS which app handles each link scheme (`claude:`, `ms-officeapp:`); it never starts or scans the apps. Exactly one found (and not hidden by policy): use it. Both: the user chooses. None: copy the prompt, reveal the file (the file manager's folder on Linux) and show the toast "No Claude or Copilot app found. Prompt copied and the file is highlighted. Open your assistant, attach the file and paste." Copilot has no Linux client, so on Linux only Claude can be found. An https `CopilotTarget` counts as present.
+
 ### 9.1 Claude
 - Build a Claude Desktop link: `claude://cowork/new?q=<prompt>&file=<transcript path>&folder=<transcript folder>` (all values URL-encoded).
 - The transcript is attached as a file, not pasted into `q` (prompt text is capped at about 14,000 characters).

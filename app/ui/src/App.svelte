@@ -1,12 +1,13 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { backend, type Backend } from "./lib/api";
-  import type { Caption, DownloadProgress, Line, ModelStatus, Source, Status } from "./lib/types";
+  import type { Caption, DownloadProgress, HandoffTarget, Line, ModelStatus, Source, Status, Summarized } from "./lib/types";
   import TopBar from "./lib/TopBar.svelte";
   import Controls from "./lib/Controls.svelte";
   import LivePane from "./lib/LivePane.svelte";
   import Footer from "./lib/Footer.svelte";
   import Settings from "./lib/Settings.svelte";
+  import Library from "./lib/Library.svelte";
   import ModelDownload from "./lib/ModelDownload.svelte";
   import { captionFlags } from "./lib/prefs.svelte";
 
@@ -16,7 +17,12 @@
   let mic = $state(true);
   let system = $state(true);
   let lines = $state<Line[]>([]);
-  let view = $state<"main" | "settings">("main");
+  let view = $state<"main" | "settings" | "library">("main");
+  // Summarize: the transcript it will use, a pending choice between apps, and a short notice.
+  let hasTranscript = $state(false);
+  let choose = $state<{ path: string | null; targets: HandoffTarget[] } | null>(null);
+  let notice = $state("");
+  let noticeTimer: ReturnType<typeof setTimeout> | undefined;
   // Assume a model is present until the app says otherwise, so Start never flickers disabled.
   let model = $state<ModelStatus>({ ready: true, downloadEnabled: true, updateCheckEnabled: false, customSource: false, busy: false });
   let progress = $state<DownloadProgress | null>(null);
@@ -81,6 +87,47 @@
     }
   }
 
+  async function refreshLatest() {
+    try {
+      hasTranscript = !!(await api?.latestTranscript());
+    } catch {
+      hasTranscript = false;
+    }
+  }
+  // Re-check when the app is ready and whenever a session ends or the library is left.
+  $effect(() => {
+    void api;
+    void status;
+    void view;
+    if (status === "ready") refreshLatest();
+  });
+
+  function say(text: string) {
+    notice = text;
+    clearTimeout(noticeTimer);
+    noticeTimer = setTimeout(() => (notice = ""), 9000);
+  }
+
+  async function summarize(path: string | null, target: string | null = null) {
+    choose = null;
+    try {
+      const r: Summarized | undefined = await api?.summarize(path, target);
+      if (!r) return;
+      if (r.clipboard) {
+        // No clipboard tool on this system: the window copies the prompt itself.
+        try {
+          await navigator.clipboard.writeText(r.clipboard);
+        } catch {
+          r.toasts.push("The prompt could not be copied automatically.");
+        }
+      }
+      if (r.choose.length > 0) choose = { path, targets: r.choose };
+      else if (r.toasts.length > 0) say(r.toasts.join(" "));
+    } catch (e) {
+      say(String(e));
+    }
+  }
+
   async function start() {
     lines = [];
     await api?.start(name);
@@ -89,7 +136,9 @@
 
 <main>
   <h1 class="sr-only">SprkNotes</h1>
-  {#if view === "settings"}
+  {#if view === "library"}
+    <Library {api} {notice} onback={() => (view = "main")} onsummarize={(p) => summarize(p)} />
+  {:else if view === "settings"}
     <Settings
       {model}
       {progress}
@@ -125,7 +174,15 @@
     </LivePane>
   {/if}
   <div class="dock">
-    <Footer onsettings={() => (view = view === "settings" ? "main" : "settings")} settingsOpen={view === "settings"} />
+    <Footer
+      onlibrary={() => (view = view === "library" ? "main" : "library")}
+      libraryOpen={view === "library"}
+      onsettings={() => (view = view === "settings" ? "main" : "settings")}
+      settingsOpen={view === "settings"}
+      onsummarize={() => summarize(null)}
+      canSummarize={status === "ready" && hasTranscript}
+      summarizeHint={status !== "ready" ? "Available after a session ends" : hasTranscript ? "Summarize your latest transcript" : "No transcript to summarize yet"}
+    />
     <Controls
       {status}
       canStart={model.ready}
@@ -135,9 +192,34 @@
       onend={() => api?.end()}
     />
   </div>
+  {#if choose}
+    <div class="choose" role="dialog" aria-label="Choose an app">
+      <p>Summarize with</p>
+      {#each choose.targets as t (t.id)}
+        <button onclick={() => summarize(choose?.path ?? null, t.id)}>{t.name}</button>
+      {/each}
+      <button class="quiet" onclick={() => (choose = null)}>Cancel</button>
+    </div>
+  {/if}
+  {#if notice && view !== "library"}
+    <p class="toast" role="status">{notice}</p>
+  {/if}
 </main>
 
 <style>
+  main { position: relative; }
+  .choose {
+    position: absolute; left: 1.5rem; bottom: 4.5rem; z-index: 10; display: grid; gap: 0.35rem; min-width: 14rem;
+    padding: 0.75rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow);
+  }
+  .choose p { margin: 0 0 0.15rem; color: var(--muted); font-size: 0.9rem; }
+  .choose button { padding: 0.5rem 0.8rem; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); text-align: left; }
+  .choose button:hover { background: var(--accent-soft); }
+  .choose .quiet { border-color: transparent; color: var(--muted); }
+  .toast {
+    position: absolute; left: 1.5rem; right: 1.5rem; bottom: 4.5rem; z-index: 10; margin: 0; padding: 0.7rem 1rem;
+    border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); font-size: 0.95rem;
+  }
   main {
     display: flex;
     flex-direction: column;

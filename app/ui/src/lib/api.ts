@@ -1,4 +1,4 @@
-import type { Caption, DownloadProgress, Line, ModelStatus, Source, Status, UpdateInfo } from "./types";
+import type { Caption, DownloadProgress, ExportFormat, LibraryEntry, Line, ModelStatus, Source, Status, Summarized, TranscriptView, UpdateInfo } from "./types";
 
 /** Typed surface between the UI and the Rust side. Every command has a matching Tauri command. */
 export interface Backend {
@@ -25,6 +25,20 @@ export interface Backend {
   onCaption(cb: (c: Caption) => void): Promise<() => void>;
   /** Mini controller only: bring the main window back. */
   openApp(): Promise<void>;
+  /** Library: transcripts newest first; the query matches names and full text. */
+  libraryList(query: string): Promise<LibraryEntry[]>;
+  libraryOpen(path: string): Promise<TranscriptView>;
+  /** "View in folder". */
+  libraryReveal(path: string): Promise<void>;
+  /** Saves next to the transcript and shows it; returns the new file name. */
+  libraryExport(path: string, format: ExportFormat): Promise<string>;
+  /** Newest transcript, or null when there is none yet. */
+  latestTranscript(): Promise<LibraryEntry | null>;
+  /**
+   * Hand a transcript to the Claude or Copilot desktop app. With no target: one app installed is
+   * used, none copies the prompt and shows the file, and both come back as `choose`.
+   */
+  summarize(path: string | null, target: string | null): Promise<Summarized>;
   onLine(cb: (l: Line) => void): Promise<() => void>;
   onStatus(cb: (s: Status) => void): Promise<() => void>;
 }
@@ -52,10 +66,21 @@ async function tauri(): Promise<Backend> {
     setCaptions: (on, me) => invoke("set_captions", { on, me }),
     onCaption: (cb) => listen<Caption>("caption", (e) => cb(e.payload)),
     openApp: () => invoke("open_app"),
+    libraryList: (query) => invoke("library_list", { query }),
+    libraryOpen: (path) => invoke("library_open", { path }),
+    libraryReveal: (path) => invoke("library_reveal", { path }),
+    libraryExport: (path, format) => invoke("library_export", { path, format }),
+    latestTranscript: () => invoke("latest_transcript"),
+    summarize: (path, target) => invoke("summarize", { path, target }),
     onLine: (cb) => listen<Line>("transcript-line", (e) => cb(e.payload)),
     onStatus: (cb) => listen<Status>("session-status", (e) => cb(e.payload)),
   };
 }
+
+const mockLibrary: LibraryEntry[] = [
+  { path: "/mock/2026-11-19 0900 Budget sync.md", name: "2026-11-19 0900 Budget sync", title: "Budget sync", date: "2026-11-19", start: "09:00", duration: "0:32:10", status: "complete", folder: "" },
+  { path: "/mock/2026-11-18 1400 Roadmap review.md", name: "2026-11-18 1400 Roadmap review", title: "Roadmap review", date: "2026-11-18", start: "14:00", duration: "0:48:02", status: "complete", folder: "" },
+];
 
 /** Browser-only stand-in with synthetic text, so the UI can be built and checked without Tauri. */
 export function mockBackend(): Backend {
@@ -145,6 +170,33 @@ export function mockBackend(): Backend {
     setCaptions: async () => {},
     onCaption: async (cb) => ((capCb = cb), () => {}),
     openApp: async () => {},
+    libraryList: async (q) => mockLibrary.filter((e) => (e.title + e.name).toLowerCase().includes(q.trim().toLowerCase())),
+    libraryOpen: async (path) => ({
+      title: mockLibrary.find((e) => e.path === path)?.title ?? "Transcript",
+      date: "2026-11-19",
+      start: "09:00",
+      duration: "0:32:10",
+      context: "",
+      lines: [
+        { kind: "statement", t: "00:00:04", speaker: "Me", text: "Thanks for joining, let's start with the budget." },
+        { kind: "statement", t: "00:00:11", speaker: "Others", text: "Sure. The numbers are in the shared sheet." },
+        { kind: "event", t: "00:12:30", speaker: "", text: "Transcription paused" },
+        { kind: "statement", t: "00:12:52", speaker: "Me", text: "Okay, back. Next item is the roadmap." },
+      ],
+    }),
+    libraryReveal: async () => {},
+    libraryExport: async (path, format) => `${path.split("/").pop()?.replace(/\.md$/, "")}.${format}`,
+    latestTranscript: async () => mockLibrary[0] ?? null,
+    // "?apps=both|claude|none" previews the three Summarize outcomes in the browser.
+    summarize: async (_path, target) => {
+      const apps = typeof location !== "undefined" ? (new URLSearchParams(location.search).get("apps") ?? "both") : "both";
+      const all = [{ id: "claude", name: "Claude" }, { id: "copilot", name: "Microsoft 365 Copilot" }];
+      const have = apps === "none" ? [] : apps === "claude" ? [all[0]] : apps === "copilot" ? [all[1]] : all;
+      if (target) return { choose: [], toasts: [] };
+      if (have.length === 0) return { choose: [], toasts: ["No Claude or Copilot app found. Prompt copied and the file is highlighted. Open your assistant, attach the file and paste."] };
+      if (have.length === 1) return { choose: [], toasts: have[0].id === "claude" ? [] : ["Prompt copied. Attach the highlighted file and paste."] };
+      return { choose: have, toasts: [] };
+    },
     onLine: async (cb) => ((lineCb = cb), () => {}),
     onStatus: async (cb) => ((statusCb = cb), () => {}),
   };

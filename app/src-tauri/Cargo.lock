@@ -3950,6 +3950,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "sprk-handoff"
+version = "0.0.1"
+dependencies = [
+ "windows 0.58.0",
+]
+
+[[package]]
 name = "sprk-models"
 version = "0.0.1"
 dependencies = [
@@ -3995,6 +4002,7 @@ dependencies = [
  "sprk-audio",
  "sprk-config",
  "sprk-context",
+ "sprk-handoff",
  "sprk-models",
  "sprk-pipeline",
  "sprk-transcript",
