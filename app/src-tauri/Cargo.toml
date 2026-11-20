@@ -19,6 +19,7 @@ sprk-asr = { path = "../../crates/sprk-asr" }
 sprk-audio = { path = "../../crates/sprk-audio", features = ["cpal-backend"] }
 sprk-config = { path = "../../crates/sprk-config" }
 sprk-context = { path = "../../crates/sprk-context" }
+sprk-handoff = { path = "../../crates/sprk-handoff" }
 sprk-models = { path = "../../crates/sprk-models" }
 sprk-transcript = { path = "../../crates/sprk-transcript" }
 

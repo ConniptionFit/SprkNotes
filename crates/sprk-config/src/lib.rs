@@ -55,6 +55,10 @@ pub struct AppPolicy {
     pub calendar_provider: Option<String>,
     pub show_claude_handoff: Option<bool>,
     pub show_copilot_handoff: Option<bool>,
+    /// Where the Copilot handoff opens (SPEC 9.2): an app link or an https page.
+    pub copilot_target: Option<String>,
+    /// Admin prompt template file (SPEC 9.3).
+    pub prompt_template_path: Option<String>,
     pub filler_removal: Option<bool>,
     pub commit_delay_seconds: Option<u64>,
     pub audio_source_detection: Option<bool>,
@@ -75,6 +79,23 @@ pub struct AppPolicy {
     pub model_public_keys: Vec<String>,
     pub allowed_model_hashes: Vec<String>,
     pub keep_model_versions: Option<u64>,
+}
+
+/// An app link (`scheme:...`, scheme of two or more characters so `C:` is no link) or an https
+/// page. Never a file path, a plain-http page or a `file:` link.
+fn safe_link(v: &str) -> bool {
+    let l = v.to_ascii_lowercase();
+    if l.starts_with("https://") {
+        return true;
+    }
+    let Some((scheme, _)) = l.split_once(':') else {
+        return false;
+    };
+    scheme.len() >= 2
+        && scheme
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'+' | b'.'))
+        && !matches!(scheme, "http" | "file" | "javascript" | "data")
 }
 
 fn flag(s: &dyn PolicyStore, k: &str) -> Option<bool> {
@@ -102,6 +123,8 @@ impl AppPolicy {
             calendar_provider: text("CalendarProvider").filter(|v| v == "com" || v == "off"),
             show_claude_handoff: flag(s, "ShowClaudeHandoff"),
             show_copilot_handoff: flag(s, "ShowCopilotHandoff"),
+            copilot_target: text("CopilotTarget").filter(|v| safe_link(v)),
+            prompt_template_path: text("PromptTemplatePath"),
             filler_removal: flag(s, "FillerRemoval"),
             commit_delay_seconds: num(s, "CommitDelaySeconds"),
             audio_source_detection: flag(s, "AudioSourceDetection"),
@@ -198,6 +221,35 @@ mod tests {
         );
         let p = AppPolicy::load(&fake(&[("ModelIndexUrl", "http://insecure/index.json")]));
         assert_eq!(p.model_index_url, None);
+    }
+
+    #[test]
+    fn handoff_keys_parse_and_unsafe_targets_are_ignored() {
+        let p = AppPolicy::load(&fake(&[
+            ("CopilotTarget", "https://m365.cloud.microsoft/chat"),
+            (
+                "PromptTemplatePath",
+                "C:\\ProgramData\\SprkNotes\\summary.md",
+            ),
+        ]));
+        assert_eq!(
+            p.copilot_target.as_deref(),
+            Some("https://m365.cloud.microsoft/chat")
+        );
+        assert!(p.prompt_template_path.is_some());
+        for bad in [
+            "http://x",
+            "C:\\evil.exe",
+            "C:/evil.exe",
+            "file:///x",
+            "plain",
+        ] {
+            assert_eq!(
+                AppPolicy::load(&fake(&[("CopilotTarget", bad)])).copilot_target,
+                None,
+                "{bad}"
+            );
+        }
     }
 
     #[test]

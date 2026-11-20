@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod clock;
+mod library;
 mod model_download;
 mod models;
 #[cfg(windows)]
@@ -360,7 +361,13 @@ fn main() -> anyhow::Result<()> {
             open_app,
             model_status,
             model_check_update,
-            model_download
+            model_download,
+            library::library_list,
+            library::library_open,
+            library::library_reveal,
+            library::library_export,
+            library::latest_transcript,
+            library::summarize
         ])
         .run(tauri::generate_context!())?;
     Ok(())

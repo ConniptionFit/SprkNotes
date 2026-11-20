@@ -4,6 +4,7 @@
 pub mod export;
 pub mod extras;
 pub mod format;
+pub mod library;
 pub mod naming;
 pub mod parse;
 pub mod recovery;

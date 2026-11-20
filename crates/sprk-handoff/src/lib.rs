@@ -5,8 +5,11 @@
 //! No network: a plan may name an `https://` page to open in the user's own app or browser,
 //! but SprkNotes itself makes no request.
 
+pub mod detect;
 #[cfg(windows)]
 pub mod shell;
+#[cfg(not(windows))]
+pub mod unix;
 
 /// Prompt text cap for a link (SPEC 9.1, about 14,000 characters).
 pub const MAX_PROMPT_CHARS: usize = 14_000;
@@ -163,13 +166,13 @@ impl HandoffTarget for Claude {
 
 /// Microsoft 365 Copilot: no file-attach link exists, so copy, open, reveal, toast.
 pub struct Copilot {
-    /// Configured target; defaults to the chat page.
+    /// Configured target (policy `CopilotTarget`); defaults to the Microsoft 365 Copilot app.
     pub target: String,
 }
 impl Default for Copilot {
     fn default() -> Self {
         Copilot {
-            target: "https://m365.cloud.microsoft/chat".into(),
+            target: detect::COPILOT_APP_LINK.into(),
         }
     }
 }
@@ -303,15 +306,7 @@ mod tests {
             ..Fake::default()
         };
         run(&plan, &mut f);
-        assert_eq!(
-            f.log,
-            vec![
-                "copy",
-                "open https://m365.cloud.microsoft/chat",
-                "reveal",
-                "toast"
-            ]
-        );
+        assert_eq!(f.log, vec!["copy", "open ms-officeapp:", "reveal", "toast"]);
     }
 
     #[test]

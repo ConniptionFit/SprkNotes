@@ -39,3 +39,30 @@ export type Caption = {
   /** The utterance finished: text is the committed wording. */
   final: boolean;
 };
+
+/** One transcript in the library list. */
+export type LibraryEntry = {
+  path: string;
+  name: string;
+  title: string;
+  date: string;
+  start: string;
+  duration: string;
+  status: string;
+  folder: string;
+};
+
+export type ViewLine = { kind: "statement" | "event"; t: string; speaker: string; text: string };
+export type TranscriptView = {
+  title: string;
+  date: string;
+  start: string;
+  duration: string;
+  context: string;
+  lines: ViewLine[];
+};
+
+export type HandoffTarget = { id: string; name: string };
+/** Result of Summarize: either a choice to make, or what happened. */
+export type Summarized = { choose: HandoffTarget[]; toasts: string[]; clipboard?: string | null };
+export type ExportFormat = "txt" | "json" | "docx";
