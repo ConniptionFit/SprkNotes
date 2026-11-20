@@ -92,7 +92,13 @@ Open **Settings** at the bottom of the window.
 ## Your files
 Transcripts are Markdown files in `Documents\SprkNotes\Transcripts` (Windows), named `YYYY-MM-DD HHmm <Title>.md`. Each line is `- \`HH:MM:SS\` **Speaker:** text`. Lines starting with `>` are events (pauses, call changes, audio sources).
 
-If the app or PC stops unexpectedly, the file already holds everything that was committed. On the next start SprkNotes offers to mark it as interrupted.
+If the app or PC stops unexpectedly, the file already holds everything that was committed. On the next start SprkNotes says it closed unexpectedly and offers **Open** (takes you to the Library) or **Mark finished** (closes the transcript as interrupted).
+
+![After a crash](screenshots/recovery-light.png)
+
+If something goes wrong during a session you see a notice instead of nothing: a Start that fails shows why; "A line could not be saved" means check that the transcripts folder can be written to and has free space; "The transcript could not be closed properly" means it still holds everything saved so far.
+
+Lines are written in time order even when you and others talk at the same time, and long unbroken speech is committed steadily rather than all at once at the end.
 
 Export to `.txt`, `.json` or `.docx` from the Library.
 

@@ -35,6 +35,12 @@ for (const scheme of ["light", "dark"]) {
   await shot(p, `main-paused-${scheme}.png`);
   await p.context().close();
 
+  // After a crash: the unexpected-close prompt (offered once at launch).
+  p = await page(scheme, { query: "?recover" });
+  await wait(500);
+  await shot(p, `recovery-${scheme}.png`);
+  await p.context().close();
+
   // Naming a session and turning a source off.
   p = await page(scheme);
   await p.getByLabel("Session name").fill("Budget sync");
