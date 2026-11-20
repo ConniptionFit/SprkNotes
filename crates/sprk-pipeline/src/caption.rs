@@ -4,10 +4,13 @@
 //! of the last few seconds of audio per source, re-decoded every 0.7 s or so. The committed
 //! transcript is untouched: it still comes only from finished VAD utterances (rule 13).
 //!
-//! Streaming behaviour (ADR-007): each decode is a *hypothesis*. Words that two hypotheses in a
-//! row agree on are `stable` (local agreement); the rest are tentative and may change on the
-//! next decode, so earlier words are corrected as confidence grows. When the VAD closes an
-//! utterance the committed decode is sent as a final caption.
+//! Streaming behaviour (ADR-007, ADR-008): each decode is a *hypothesis*. A word two
+//! hypotheses in a row agree on is settled; the rest are tentative. Settled words *lock*:
+//! they never change in the live view again. Locking happens at a sentence end, when a word
+//! is older than 1.5 s, or after a short quiet. Locked sentences leave the live row as
+//! `sealed` rows, so non-stop speech never builds a minutes-long grey block. Hypotheses are
+//! aligned to what is already locked, so the 10 s window sliding forward does not unsettle
+//! the line. When the VAD closes an utterance the committed decode is sent as a final caption.
 //!
 //! Cost control: the decode time is measured and the next decode waits at least twice that long,
 //! so captions never take more than about a third of the session thread. If decoding stays far
@@ -31,6 +34,12 @@ const SLOW_MS: u64 = 3_000;
 const SLOW_LIMIT: u32 = 3;
 /// Peak level below which the recent audio is treated as silence and not decoded.
 const SILENCE_PEAK: f32 = 0.005;
+/// A word that has been on screen this long locks even if its sentence goes on.
+const AGE_LOCK_MS: u64 = 1_500;
+/// A live row longer than this many locked words is sealed as its own row.
+const ROW_MAX_WORDS: usize = 40;
+/// How many locked words are remembered to line a new hypothesis up with the locked text.
+const MEMORY_WORDS: usize = 12;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Caption {
@@ -41,6 +50,10 @@ pub struct Caption {
     pub stable: usize,
     /// The utterance is finished: `text` is the committed decode and every word is settled.
     pub is_final: bool,
+    /// Rows that locked and left the live row since the last caption (ADR-008). Oldest first.
+    pub sealed: Vec<String>,
+    /// Which utterance this belongs to, so a final caption can replace its locked rows.
+    pub utt: u64,
 }
 
 impl Caption {
@@ -61,18 +74,159 @@ fn norm(text: &str) -> Vec<String> {
         .collect()
 }
 
-/// Length of the common leading run of two hypotheses.
-fn agreed(a: &[String], b: &[String]) -> usize {
-    a.iter().zip(b).take_while(|(x, y)| x == y).count()
+/// One word still on trial.
+#[derive(Debug, Clone)]
+struct Tw {
+    word: String,
+    norm: String,
+    /// Decodes in a row that produced this word at this place.
+    seen: u32,
+    first_ms: u64,
+}
+
+fn ends_sentence(w: &str) -> bool {
+    w.trim_end_matches(['"', '\'', ')', ']'])
+        .ends_with(['.', '?', '!'])
+}
+
+/// Turns a stream of whole-line hypotheses into locked words plus a short tentative tail.
+#[derive(Default)]
+struct Stab {
+    /// Locked words of the row being built.
+    row: Vec<String>,
+    /// Rows that locked since the last emit.
+    sealed: Vec<String>,
+    tail: Vec<Tw>,
+    /// Last locked words, normalised, for lining up the next hypothesis.
+    memory: Vec<String>,
+}
+
+impl Stab {
+    fn lock(&mut self, n: usize) {
+        for t in self
+            .tail
+            .drain(..n.min(self.tail.len()))
+            .collect::<Vec<_>>()
+        {
+            self.memory.push(t.norm);
+            self.row.push(t.word.clone());
+            if ends_sentence(&t.word) {
+                self.seal();
+            }
+        }
+        if self.memory.len() > MEMORY_WORDS {
+            let cut = self.memory.len() - MEMORY_WORDS;
+            self.memory.drain(..cut);
+        }
+        if self.row.len() >= ROW_MAX_WORDS {
+            self.seal();
+        }
+    }
+
+    fn seal(&mut self) {
+        if !self.row.is_empty() {
+            self.sealed.push(self.row.join(" "));
+            self.row.clear();
+        }
+    }
+
+    /// Where in `hyp` the not-yet-locked words begin.
+    fn start_in(&self, hyp: &[(String, String)]) -> usize {
+        let m = self.memory.len();
+        if m == 0 {
+            return 0;
+        }
+        for k in (m.min(8).min(2)..=m.min(8)).rev() {
+            let want = &self.memory[m - k..];
+            for j in 0..=hyp.len().saturating_sub(k) {
+                if hyp.len() >= j + k && hyp[j..j + k].iter().map(|h| &h.1).eq(want.iter()) {
+                    return j + k;
+                }
+            }
+        }
+        0
+    }
+
+    fn update(&mut self, text: &str, now_ms: u64) {
+        let hyp: Vec<(String, String)> = text
+            .split_whitespace()
+            .map(|w| (w.to_string(), norm(w).pop().unwrap_or_default()))
+            .collect();
+        let start = self.start_in(&hyp);
+        let new = &hyp[start.min(hyp.len())..];
+        let agree = self
+            .tail
+            .iter()
+            .zip(new)
+            .take_while(|(a, b)| a.norm == b.1)
+            .count();
+        let mut tail: Vec<Tw> = Vec::with_capacity(new.len());
+        for (i, (w, n)) in new.iter().enumerate() {
+            if i < agree {
+                let old = &self.tail[i];
+                tail.push(Tw {
+                    word: w.clone(),
+                    norm: n.clone(),
+                    seen: old.seen + 1,
+                    first_ms: old.first_ms,
+                });
+            } else {
+                tail.push(Tw {
+                    word: w.clone(),
+                    norm: n.clone(),
+                    seen: 1,
+                    first_ms: now_ms,
+                });
+            }
+        }
+        self.tail = tail;
+        // Lock through the last agreed sentence end that has a word after it, and through
+        // every leading word that has been on screen long enough.
+        let mut n = 0;
+        for (i, t) in self.tail.iter().enumerate() {
+            if t.seen >= 2 && ends_sentence(&t.word) && i + 1 < self.tail.len() {
+                n = i + 1;
+            }
+        }
+        let aged = self
+            .tail
+            .iter()
+            .take_while(|t| now_ms.saturating_sub(t.first_ms) >= AGE_LOCK_MS)
+            .count();
+        self.lock(n.max(aged));
+    }
+
+    /// A pause: everything that is left locks and the row is sealed. True if anything moved.
+    fn settle(&mut self) -> bool {
+        if self.tail.is_empty() && self.row.is_empty() {
+            return false;
+        }
+        let n = self.tail.len();
+        self.lock(n);
+        self.seal();
+        true
+    }
+
+    fn live_text(&self) -> String {
+        let mut words: Vec<&str> = self.row.iter().map(String::as_str).collect();
+        words.extend(self.tail.iter().map(|t| t.word.as_str()));
+        words.join(" ")
+    }
+
+    /// Locked words of the row plus the tail words that two decodes agree on.
+    fn settled(&self) -> usize {
+        self.row.len() + self.tail.iter().take_while(|t| t.seen >= 2).count()
+    }
 }
 
 #[derive(Default)]
 struct Lane {
     buf: Vec<f32>,
-    last_text: String,
-    last_stable: usize,
-    /// Normalised words of the previous hypothesis.
-    prev: Vec<String>,
+    stab: Stab,
+    /// What was last sent, so an unchanged line is not sent again.
+    last_sent: (String, usize),
+    /// Counts finished utterances.
+    utt: u64,
     /// Samples fed since the last decode.
     fresh: usize,
     next_at_ms: u64,
@@ -81,9 +235,8 @@ struct Lane {
 impl Lane {
     fn reset(&mut self) {
         self.buf.clear();
-        self.last_text.clear();
-        self.last_stable = 0;
-        self.prev.clear();
+        self.stab = Stab::default();
+        self.last_sent = (String::new(), 0);
         self.fresh = 0;
     }
 
@@ -166,14 +319,31 @@ impl Captioner {
         let lane = self.lane(source);
         if finished {
             lane.reset();
+            lane.utt += 1;
         }
         lane.push(samples);
+    }
+
+    /// The utterance that just finished on `source` (for its final caption).
+    pub fn finished_utt(&mut self, source: Source) -> u64 {
+        self.lane(source).utt.saturating_sub(1)
     }
 
     /// Drop everything buffered (pause, resume, end).
     pub fn clear(&mut self) {
         self.mic.reset();
         self.system.reset();
+    }
+
+    fn caption(lane: &mut Lane, speaker: Speaker) -> Caption {
+        Caption {
+            speaker,
+            text: lane.stab.live_text(),
+            stable: lane.stab.settled(),
+            is_final: false,
+            sealed: std::mem::take(&mut lane.stab.sealed),
+            utt: lane.utt,
+        }
     }
 
     /// Decode the in-progress speech of every wanted source that is due. `remote` is the label
@@ -189,6 +359,13 @@ impl Captioner {
                 Source::Mic => Speaker::Me,
             };
             let lane = self.lane(source);
+            // A pause locks whatever is left, even between decodes.
+            if lane.quiet() && lane.stab.settle() {
+                let c = Self::caption(lane, speaker.clone());
+                lane.last_sent = (c.text.clone(), c.stable);
+                out.push(c);
+                continue;
+            }
             if now_ms < lane.next_at_ms
                 || lane.buf.len() < MIN_SAMPLES
                 || lane.fresh < MIN_NEW_SAMPLES
@@ -219,18 +396,11 @@ impl Captioner {
             let lane = self.lane(source);
             lane.fresh = 0;
             if !text.is_empty() {
-                let words = norm(&text);
-                let stable = agreed(&lane.prev, &words);
-                lane.prev = words;
-                if text != lane.last_text || stable != lane.last_stable {
-                    lane.last_text = text.clone();
-                    lane.last_stable = stable;
-                    out.push(Caption {
-                        speaker,
-                        text,
-                        stable,
-                        is_final: false,
-                    });
+                lane.stab.update(&text, now_ms);
+                let c = Self::caption(lane, speaker);
+                if !c.sealed.is_empty() || (c.text.clone(), c.stable) != lane.last_sent {
+                    lane.last_sent = (c.text.clone(), c.stable);
+                    out.push(c);
                 }
             }
             if self.slow >= SLOW_LIMIT {
@@ -409,5 +579,93 @@ mod tests {
         let mut e = Counting(0);
         assert!(c.poll(5_000, &mut e, &Speaker::Others).is_empty());
         assert_eq!(e.0, 0);
+    }
+
+    /// Non-stop speech: each decode sees only the last six words, like a sliding window.
+    struct Sliding {
+        words: Vec<&'static str>,
+        upto: usize,
+    }
+    impl Engine for Sliding {
+        fn transcribe(&mut self, _: &[f32]) -> Result<Vec<Segment>, AsrError> {
+            let from = self.upto.saturating_sub(6);
+            Ok(vec![Segment {
+                start_ms: 0,
+                end_ms: 0,
+                text: self.words[from..self.upto].join(" "),
+            }])
+        }
+    }
+
+    #[test]
+    fn nonstop_speech_locks_sentences_in_order_without_repeats() {
+        let words = "One two three. Four five six. Seven eight nine. Ten eleven twelve. Thirteen fourteen fifteen."
+            .split(' ')
+            .collect::<Vec<_>>();
+        let n = words.len();
+        let mut c = on(false);
+        let mut e = Sliding { words, upto: 0 };
+        let mut sealed: Vec<String> = Vec::new();
+        let mut last_live = String::new();
+        for i in 1..=n {
+            e.upto = i;
+            c.push(Source::System, &loud(500), false);
+            for cap in c.poll(i as u64 * 1_000, &mut e, &Speaker::Others) {
+                sealed.extend(cap.sealed);
+                last_live = cap.text;
+            }
+        }
+        assert_eq!(
+            sealed,
+            [
+                "One two three.",
+                "Four five six.",
+                "Seven eight nine.",
+                "Ten eleven twelve."
+            ]
+        );
+        assert_eq!(last_live, "Thirteen fourteen fifteen.");
+    }
+
+    #[test]
+    fn a_long_sentence_locks_by_age_and_the_live_row_stays_short() {
+        let words = "a b c d e f g h i j k l m n o p q r s t"
+            .split(' ')
+            .collect::<Vec<_>>();
+        let mut c = on(false);
+        let mut e = Sliding { words, upto: 0 };
+        let mut live = String::new();
+        let mut stable = 0;
+        for i in 1..=20 {
+            e.upto = i;
+            c.push(Source::System, &loud(500), false);
+            for cap in c.poll(i as u64 * 1_000, &mut e, &Speaker::Others) {
+                live = cap.text;
+                stable = cap.stable;
+            }
+        }
+        // Words lock one by one as they age; none is lost and none repeats.
+        assert!(live.starts_with("a b c"));
+        assert!(live.ends_with("t"));
+        assert_eq!(live.split(' ').count(), 20);
+        assert!(
+            stable >= 18,
+            "only the newest word or two are tentative, got {stable}"
+        );
+    }
+
+    #[test]
+    fn a_pause_locks_the_tail_and_seals_the_row() {
+        let mut c = on(false);
+        let mut e = Script(["so we begin", "so we begin here"].into());
+        c.push(Source::System, &loud(1_000), false);
+        c.poll(1_000, &mut e, &Speaker::Others);
+        c.push(Source::System, &loud(500), false);
+        c.poll(2_000, &mut e, &Speaker::Others);
+        c.push(Source::System, &vec![0.0; RATE], false);
+        let caps = c.poll(3_000, &mut e, &Speaker::Others);
+        assert_eq!(caps.len(), 1);
+        assert_eq!(caps[0].sealed, ["so we begin here"]);
+        assert_eq!(caps[0].text, "");
     }
 }

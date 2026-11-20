@@ -50,6 +50,9 @@ struct CaptionPayload {
     stable: usize,
     #[serde(rename = "final")]
     is_final: bool,
+    /// Rows that locked since the last caption (ADR-008).
+    sealed: Vec<String>,
+    utt: u64,
 }
 
 struct TauriEvents(AppHandle);
@@ -95,6 +98,8 @@ impl Events for TauriEvents {
                 text: c.text.clone(),
                 stable: c.stable,
                 is_final: c.is_final,
+                sealed: c.sealed.clone(),
+                utt: c.utt,
             },
         );
     }

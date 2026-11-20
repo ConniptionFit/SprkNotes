@@ -1,0 +1,82 @@
+import { describe, expect, it } from "vitest";
+import { Rows, commonPrefix, gate, sentences, typed } from "./live";
+
+const cap = (o: Partial<Parameters<Rows["caption"]>[0]>) => ({ speaker: "Others", text: "", stable: 0, final: false, ...o });
+
+describe("locked rows", () => {
+  it("sealed sentences become rows in order", () => {
+    const r = new Rows();
+    r.caption(cap({ utt: 1, sealed: ["One two three.", "Four five six."] }), 0);
+    expect(r.rows.map((x) => x.text)).toEqual(["One two three.", "Four five six."]);
+  });
+  it("the final caption silently replaces its utterance's rows, sentence by sentence", () => {
+    const r = new Rows();
+    r.caption(cap({ utt: 1, sealed: ["they might add a photo of the roof"] }), 0);
+    r.caption(cap({ utt: 2, sealed: ["next thing"] }), 100);
+    r.caption(cap({ utt: 1, final: true, text: "They might add a photo of the roof, then more. Another one." }), 200);
+    expect(r.rows.map((x) => [x.utt, x.text])).toEqual([
+      [2, "next thing"],
+      [1, "They might add a photo of the roof, then more."],
+      [1, "Another one."],
+    ]);
+  });
+  it("a committed line removes the rows it covers and keeps unrelated ones", () => {
+    const r = new Rows();
+    r.caption(cap({ utt: 1, sealed: ["Now the insurer needs to verify.", "Something else entirely."] }), 0);
+    r.line("Others", "Now, the insurer needs to verify.");
+    expect(r.rows.map((x) => x.text)).toEqual(["Something else entirely."]);
+  });
+  it("a line from Me does not remove Others rows", () => {
+    const r = new Rows();
+    r.caption(cap({ utt: 1, sealed: ["same words here"] }), 0);
+    r.line("Me", "same words here");
+    expect(r.rows).toHaveLength(1);
+  });
+  it("old rows expire", () => {
+    const r = new Rows();
+    r.caption(cap({ utt: 1, sealed: ["old"] }), 0);
+    r.caption(cap({ utt: 2, sealed: ["new"] }), 60_000);
+    expect(r.rows.map((x) => x.text)).toEqual(["new"]);
+  });
+  it("splits sentences", () => {
+    expect(sentences("Hi there. How are you? Fine")).toEqual(["Hi there.", "How are you?", "Fine"]);
+  });
+});
+
+describe("display delay gate", () => {
+  it("settled words show at once, tentative words wait", () => {
+    let g = gate([], ["a", "b", "c"], 2, 0, 400);
+    expect(g.visible).toBe(2);
+    g = gate(g.next, ["a", "b", "c"], 2, 399, 400);
+    expect(g.visible).toBe(2);
+    g = gate(g.next, ["a", "b", "c"], 2, 400, 400);
+    expect(g.visible).toBe(3);
+  });
+  it("a word that flips never shows and restarts its wait", () => {
+    let g = gate([], ["a", "ice"], 1, 0, 400);
+    g = gate(g.next, ["a", "eyes"], 1, 300, 400);
+    g = gate(g.next, ["a", "eyes"], 1, 600, 400);
+    expect(g.visible).toBe(1); // 300 ms since it became "eyes"
+    g = gate(g.next, ["a", "eyes"], 1, 700, 400);
+    expect(g.visible).toBe(2);
+  });
+});
+
+describe("typing", () => {
+  it("types at a steady pace", () => {
+    expect(typed(0, 10, 14)).toBeCloseTo(1, 5);
+  });
+  it("catches up when far behind: most of a long backlog within half a second", () => {
+    let shown = 0;
+    for (let t = 0; t < 500; t += 16) shown = typed(shown, 300, 16);
+    expect(shown).toBeGreaterThan(200);
+    for (let t = 0; t < 1500; t += 16) shown = typed(shown, 300, 16);
+    expect(shown).toBeGreaterThan(290);
+  });
+  it("never passes the target", () => {
+    expect(typed(9.9, 10, 1000)).toBe(10);
+  });
+  it("finds where a correction starts", () => {
+    expect(commonPrefix("they might add", "they might ask")).toBe(12);
+  });
+});

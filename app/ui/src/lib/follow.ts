@@ -1,5 +1,7 @@
 /** Live pane scroll rules (SPEC 8.2). Pure so they can be tested without a browser. */
 export const FOLLOW_THRESHOLD_PX = 48;
+/** A scroll event this soon after the reader's own input counts as the reader's. */
+export const USER_INPUT_WINDOW_MS = 700;
 
 export function isNearBottom(
   scrollTop: number,
@@ -18,9 +20,14 @@ export interface FollowState {
 
 export const initialFollow: FollowState = { follow: true, unseen: 0 };
 
-/** User scrolled: near the bottom turns follow on (and clears the count), away turns it off. */
-export function onScroll(s: FollowState, nearBottom: boolean): FollowState {
-  return nearBottom ? initialFollow : { ...s, follow: false };
+/**
+ * A scroll event. Near the bottom always turns follow on. Away from the bottom turns it off only
+ * when the reader caused it: content growing under the pane, or the app's own scrolling, never
+ * does (that was the "stops following after a while" bug).
+ */
+export function onScroll(s: FollowState, nearBottom: boolean, byReader: boolean): FollowState {
+  if (nearBottom) return initialFollow;
+  return byReader ? { ...s, follow: false } : s;
 }
 
 /** New lines arrived. While following nothing is counted. */
@@ -32,3 +39,6 @@ export function onLines(s: FollowState, added: number): FollowState {
 export function returnToLive(): FollowState {
   return initialFollow;
 }
+
+/** Keys that move the view up, away from the live end. */
+export const UP_KEYS = ["ArrowUp", "PageUp", "Home"];

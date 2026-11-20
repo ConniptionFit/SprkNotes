@@ -2,7 +2,7 @@
   import type { DownloadProgress, ModelStatus } from "./types";
   import ModelDownload from "./ModelDownload.svelte";
   import Segmented from "./Segmented.svelte";
-  import { prefs, setPref, type CaptionWho, type Theme } from "./prefs.svelte";
+  import { prefs, setPref, type CaptionWho, type CaptionDelay, type Theme } from "./prefs.svelte";
 
   let {
     model,
@@ -135,6 +135,23 @@
           <span class="track" aria-hidden="true"></span>
           <span class="sr-only">Show the live line in the transcript window</span>
         </label>
+      </div>
+      <div class="row">
+        <div class="what">
+          <p class="plain">Live text delay</p>
+          <p class="help">A short wait lets words settle, so they change less. Steady is under one second.</p>
+        </div>
+        <Segmented
+          name="caption-delay"
+          label="How long live text waits before it appears"
+          value={prefs.captionDelay}
+          options={[
+            { value: "fast", text: "Fast" },
+            { value: "steady", text: "Steady" },
+            { value: "smooth", text: "Smoothest" },
+          ]}
+          onchange={(v: CaptionDelay) => setPref("captionDelay", v)}
+        />
       </div>
       <div class="row">
         <div class="what">
