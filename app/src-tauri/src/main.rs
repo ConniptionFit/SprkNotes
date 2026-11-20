@@ -293,6 +293,12 @@ fn mini_flipped(app: AppHandle) -> bool {
     shell::mini_flipped(&app)
 }
 
+/// Throwback Mode on or off: swaps the tray and window icons.
+#[tauri::command]
+fn set_brand(app: AppHandle, throwback: bool) {
+    shell::set_brand(&app, throwback);
+}
+
 /// Which live captions the overlay wants: on or off, and whether to include "Me".
 #[tauri::command]
 fn set_captions(app: AppHandle, on: bool, me: bool) {
@@ -358,6 +364,7 @@ fn main() -> anyhow::Result<()> {
             mini_resize,
             mini_flipped,
             set_captions,
+            set_brand,
             open_app,
             model_status,
             model_check_update,

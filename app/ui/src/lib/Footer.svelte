@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Brand from "./Brand.svelte";
   let {
     onlibrary,
     onsettings,
@@ -32,10 +33,13 @@
     <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3l1.6 4.4L16 9l-4.4 1.6L10 15l-1.6-4.4L4 9l4.4-1.6z" /></svg>
     Summarize
   </button>
+  <span class="spacer"></span>
+  <Brand />
 </nav>
 
 <style>
-  nav { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+  nav { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem; }
+  .spacer { flex: 1; }
   button {
     display: inline-flex;
     align-items: center;
