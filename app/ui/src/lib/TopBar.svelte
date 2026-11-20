@@ -29,7 +29,9 @@
       bind:value={name}
       onchange={() => onrename(name)}
     />
-    <Light {status} size={14} />
+    {#if status !== "ready"}
+      <Light {status} size={14} />
+    {/if}
   </div>
   <div class="sources" role="group" aria-label="Sound sources">
     <label class="chip me" class:on={mic}>
@@ -48,6 +50,11 @@
 <style>
   header { display: flex; flex-direction: column; gap: 0.75rem; }
   .row { display: flex; align-items: center; gap: 1rem; }
+  /* Wide windows: the name and the sound sources share one line instead of stacking. */
+  @media (min-width: 60rem) {
+    header { flex-direction: row; align-items: center; justify-content: space-between; gap: 1.5rem; }
+    .row { flex: 1; min-width: 0; }
+  }
   .name {
     flex: 1;
     min-width: 0;

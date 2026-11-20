@@ -106,7 +106,8 @@ With one app installed it opens that one (Claude gets the file; for Copilot the 
 ![Settings](screenshots/settings-full-light.png)
 
 - **Transcription model:** status, **Download model**, **Check for updates**.
-- **Appearance:** System, Light or Dark, and Throwback Mode.
+- **Appearance:** System, Light or Dark.
+- **Misc:** Throwback Mode.
 - **Live captions:** captions on the overlay, the live line in the main window, **Live text delay** (Fast, Steady, Smoothest) and whose words (Others only or Others and Me).
 
 Dark: ![Settings dark](screenshots/settings-full-dark.png)
@@ -123,7 +124,7 @@ Downloads come in parts, are checked against checksums, and are blocked during a
 Speech recognition uses *Parakeet TDT 0.6B v2 by NVIDIA, licensed under CC BY 4.0*.
 
 ## Look
-The current brand is a speech bubble with a waveform, the Outfit font and a purple and ink palette. **Throwback Mode** (Settings, Appearance) restores the first look: starburst icon, earlier purple and Segoe UI.
+The current brand is a speech bubble with a waveform, the Outfit font and a purple and ink palette. **Throwback Mode** (Settings, Misc) restores the first look: starburst icon, earlier purple and Segoe UI.
 
 | Throwback main window | Throwback settings |
 |---|---|

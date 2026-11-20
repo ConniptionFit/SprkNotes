@@ -268,7 +268,7 @@
 <style>
   main { position: relative; }
   .choose {
-    position: absolute; left: 1.5rem; bottom: 4.5rem; z-index: 10; display: grid; gap: 0.35rem; min-width: 14rem;
+    position: absolute; left: clamp(1.5rem, 4vw, 4rem); bottom: 4.5rem; z-index: 10; display: grid; gap: 0.35rem; min-width: 14rem;
     padding: 0.75rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow);
   }
   .recover {
@@ -285,7 +285,7 @@
   .choose button:hover { background: var(--accent-soft); }
   .choose .quiet { border-color: transparent; color: var(--muted); }
   .toast {
-    position: absolute; left: 1.5rem; right: 1.5rem; bottom: 4.5rem; z-index: 10; margin: 0; padding: 0.7rem 1rem;
+    position: absolute; left: clamp(1.5rem, 4vw, 4rem); right: clamp(1.5rem, 4vw, 4rem); bottom: 4.5rem; z-index: 10; margin: 0; padding: 0.7rem 1rem;
     border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); font-size: 0.95rem;
   }
   main {
@@ -293,9 +293,7 @@
     flex-direction: column;
     gap: 1rem;
     height: 100vh;
-    padding: 1.25rem 1.5rem 1rem;
-    max-width: 62rem;
-    margin: 0 auto;
+    padding: 1.25rem clamp(1.5rem, 4vw, 4rem) 1rem;
   }
   .dock { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
 </style>
