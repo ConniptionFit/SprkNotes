@@ -4,6 +4,11 @@
 //! of the last few seconds of audio per source, re-decoded every 0.7 s or so. The committed
 //! transcript is untouched: it still comes only from finished VAD utterances (rule 13).
 //!
+//! Streaming behaviour (ADR-007): each decode is a *hypothesis*. Words that two hypotheses in a
+//! row agree on are `stable` (local agreement); the rest are tentative and may change on the
+//! next decode, so earlier words are corrected as confidence grows. When the VAD closes an
+//! utterance the committed decode is sent as a final caption.
+//!
 //! Cost control: the decode time is measured and the next decode waits at least twice that long,
 //! so captions never take more than about a third of the session thread. If decoding stays far
 //! slower than real time, captions switch themselves off for the rest of the session.
@@ -17,7 +22,9 @@ const RATE: usize = 16_000;
 const MAX_SAMPLES: usize = 10 * RATE;
 /// Need at least 0.6 s of audio before there is anything worth showing.
 const MIN_SAMPLES: usize = RATE * 6 / 10;
-const BASE_INTERVAL_MS: u64 = 700;
+const BASE_INTERVAL_MS: u64 = 450;
+/// Wait for at least this much new audio before decoding again.
+const MIN_NEW_SAMPLES: usize = RATE / 5;
 const MAX_INTERVAL_MS: u64 = 5_000;
 /// A decode slower than this counts as "falling behind".
 const SLOW_MS: u64 = 3_000;
@@ -28,13 +35,46 @@ const SILENCE_PEAK: f32 = 0.005;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Caption {
     pub speaker: Speaker,
+    /// The whole line so far, stable words first.
     pub text: String,
+    /// How many leading words of `text` are settled. The rest are tentative.
+    pub stable: usize,
+    /// The utterance is finished: `text` is the committed decode and every word is settled.
+    pub is_final: bool,
+}
+
+impl Caption {
+    pub fn word_count(&self) -> usize {
+        self.text.split_whitespace().count()
+    }
+}
+
+/// Words compared without case or punctuation, so "Hello," and "hello" agree.
+fn norm(text: &str) -> Vec<String> {
+    text.split_whitespace()
+        .map(|w| {
+            w.chars()
+                .filter(|c| c.is_alphanumeric())
+                .flat_map(char::to_lowercase)
+                .collect()
+        })
+        .collect()
+}
+
+/// Length of the common leading run of two hypotheses.
+fn agreed(a: &[String], b: &[String]) -> usize {
+    a.iter().zip(b).take_while(|(x, y)| x == y).count()
 }
 
 #[derive(Default)]
 struct Lane {
     buf: Vec<f32>,
     last_text: String,
+    last_stable: usize,
+    /// Normalised words of the previous hypothesis.
+    prev: Vec<String>,
+    /// Samples fed since the last decode.
+    fresh: usize,
     next_at_ms: u64,
 }
 
@@ -42,10 +82,14 @@ impl Lane {
     fn reset(&mut self) {
         self.buf.clear();
         self.last_text.clear();
+        self.last_stable = 0;
+        self.prev.clear();
+        self.fresh = 0;
     }
 
     fn push(&mut self, s: &[f32]) {
         self.buf.extend_from_slice(s);
+        self.fresh += s.len();
         if self.buf.len() > MAX_SAMPLES {
             let cut = self.buf.len() - MAX_SAMPLES;
             self.buf.drain(..cut);
@@ -145,7 +189,11 @@ impl Captioner {
                 Source::Mic => Speaker::Me,
             };
             let lane = self.lane(source);
-            if now_ms < lane.next_at_ms || lane.buf.len() < MIN_SAMPLES || lane.quiet() {
+            if now_ms < lane.next_at_ms
+                || lane.buf.len() < MIN_SAMPLES
+                || lane.fresh < MIN_NEW_SAMPLES
+                || lane.quiet()
+            {
                 continue;
             }
             let began = Instant::now();
@@ -169,9 +217,21 @@ impl Captioner {
                 _ => String::new(),
             };
             let lane = self.lane(source);
-            if !text.is_empty() && text != lane.last_text {
-                lane.last_text = text.clone();
-                out.push(Caption { speaker, text });
+            lane.fresh = 0;
+            if !text.is_empty() {
+                let words = norm(&text);
+                let stable = agreed(&lane.prev, &words);
+                lane.prev = words;
+                if text != lane.last_text || stable != lane.last_stable {
+                    lane.last_text = text.clone();
+                    lane.last_stable = stable;
+                    out.push(Caption {
+                        speaker,
+                        text,
+                        stable,
+                        is_final: false,
+                    });
+                }
             }
             if self.slow >= SLOW_LIMIT {
                 self.disabled = true;
@@ -211,6 +271,55 @@ mod tests {
         let mut c = Captioner::new();
         c.set_wanted(true, me);
         c
+    }
+
+    /// Answers from a script, one per decode.
+    struct Script(std::collections::VecDeque<&'static str>);
+    impl Engine for Script {
+        fn transcribe(&mut self, _: &[f32]) -> Result<Vec<Segment>, AsrError> {
+            Ok(vec![Segment {
+                start_ms: 0,
+                end_ms: 0,
+                text: self.0.pop_front().unwrap_or("").to_string(),
+            }])
+        }
+    }
+
+    #[test]
+    fn words_settle_once_two_decodes_agree_and_earlier_words_are_corrected() {
+        let mut c = on(false);
+        let mut e = Script(["i scream for", "Ice cream for the", "ice cream for the win"].into());
+        let mut t = 1_000;
+        let mut next = |c: &mut Captioner, e: &mut Script| {
+            c.push(Source::System, &loud(500), false);
+            t += 1_000;
+            c.poll(t, e, &Speaker::Others)
+        };
+        c.push(Source::System, &loud(1_000), false);
+        let first = c.poll(1_000, &mut e, &Speaker::Others);
+        assert_eq!(
+            (first[0].text.as_str(), first[0].stable),
+            ("i scream for", 0)
+        );
+        // "scream" was heard as "Ice cream": the line is corrected, nothing agrees yet.
+        let second = next(&mut c, &mut e);
+        assert_eq!(second[0].text, "Ice cream for the");
+        assert_eq!(second[0].stable, 0);
+        // The third decode agrees on the first four words, case and punctuation aside.
+        let third = next(&mut c, &mut e);
+        assert_eq!(third[0].text, "ice cream for the win");
+        assert_eq!(third[0].stable, 4);
+        assert!(!third[0].is_final);
+    }
+
+    #[test]
+    fn nothing_is_decoded_again_without_new_audio() {
+        let mut c = on(false);
+        let mut e = Counting(0);
+        c.push(Source::System, &loud(1_000), false);
+        assert_eq!(c.poll(1_000, &mut e, &Speaker::Others).len(), 1);
+        assert!(c.poll(9_000, &mut e, &Speaker::Others).is_empty());
+        assert_eq!(e.0, 1);
     }
 
     #[test]

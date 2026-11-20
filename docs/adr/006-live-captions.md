@@ -11,6 +11,7 @@ Committed transcript lines appear after the commit delay and after a finished ut
 - Only wanted sources are buffered or decoded: Others (system audio) when captions are on, and the microphone only when "Me" is also on. Off means no buffering at all.
 - Cost control: silence and under 0.6 s of audio are not decoded. The wait before the next decode is twice the last decode time (between 0.7 s and 5 s), so captions use at most about a third of the session thread. Three decodes in a row slower than 3 s switch captions off for the rest of the session; transcription is unaffected.
 - The host polls `Events::captions_wanted()` and emits `Events::caption(speaker, text)`; the Tauri layer emits the `caption` event `{ speaker: "Others" | "Me", text, final: false }`. Named 1:1 labels are not used in captions.
+- Superseded in part by ADR-007 (stable/tentative words, final captions, 0.45 s cadence).
 - Default off in the engine; the overlay's captions toggle turns it on, and "Me" is a Settings option.
 
 ## Consequences

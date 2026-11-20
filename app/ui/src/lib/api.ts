@@ -83,10 +83,11 @@ export function mockBackend(): Backend {
       step += 1;
       // Partial text grows for a few ticks, then settles into the committed line.
       if (step < 4) {
-        capCb({ speaker: me ? "Me" : "Others", text: words.slice(0, Math.ceil((words.length * step) / 4)).join(" "), final: false });
+        capCb({ speaker: me ? "Me" : "Others", text: words.slice(0, Math.ceil((words.length * step) / 4)).join(" "), stable: Math.max(0, Math.ceil((words.length * step) / 4) - 2), final: false });
         return;
       }
       step = 0;
+      capCb({ speaker: me ? "Me" : "Others", text: full, stable: words.length, final: true });
       lineCb({ kind: "statement", id: id++, t: stamp(), speaker: me ? "Me" : "Others", text: full });
     }, 450);
   };

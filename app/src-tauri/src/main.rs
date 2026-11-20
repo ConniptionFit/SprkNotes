@@ -45,6 +45,8 @@ enum LinePayload {
 struct CaptionPayload {
     speaker: String,
     text: String,
+    /// Leading words that are settled; the rest are tentative and may change.
+    stable: usize,
     #[serde(rename = "final")]
     is_final: bool,
 }
@@ -84,14 +86,14 @@ impl Events for TauriEvents {
     fn captions_wanted(&self) -> (bool, bool) {
         shell::captions_wanted(&self.0)
     }
-    fn caption(&self, speaker: &str, text: &str) {
-        // In-progress text only; a committed line arrives as `transcript-line` and is the final.
+    fn caption(&self, c: &sprk_pipeline::host::UiCaption) {
         let _ = self.0.emit(
             "caption",
             CaptionPayload {
-                speaker: speaker.to_string(),
-                text: text.to_string(),
-                is_final: false,
+                speaker: c.speaker.to_string(),
+                text: c.text.clone(),
+                stable: c.stable,
+                is_final: c.is_final,
             },
         );
     }

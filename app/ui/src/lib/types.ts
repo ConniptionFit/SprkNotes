@@ -30,4 +30,12 @@ export type DownloadProgress = {
 };
 
 /** A live caption: a partial (final=false) that later settles into a committed transcript line. */
-export type Caption = { speaker: string; text: string; final: boolean };
+export type Caption = {
+  speaker: string;
+  /** The whole line so far. Earlier words can change between updates (corrections). */
+  text: string;
+  /** How many leading words are settled; the rest are tentative. */
+  stable: number;
+  /** The utterance finished: text is the committed wording. */
+  final: boolean;
+};
