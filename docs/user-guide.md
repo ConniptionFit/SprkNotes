@@ -1,5 +1,10 @@
 # SprkNotes user guide
 
+## Look and feel
+The bottom bar shows the SprkNotes mark. **Settings, Appearance, Throwback Mode** switches to the first look: the starburst icon (window and tray), the earlier purple and Segoe UI. Everything works the same either way. (The throwback screenshots below were taken on Linux, where Segoe UI is not installed, so the font differs from Windows.)
+
+![Throwback Mode](screenshots/throwback-transcribing-light.png)
+
 ## Start a session
 1. Open SprkNotes. The light in the corner is **green** (ready).
 2. Optionally type a session name. If you leave it blank, SprkNotes names the file from your calendar, the call, or the audio playing, and falls back to `Transcript`.
@@ -61,7 +66,7 @@ Captions are never saved, never logged and do not change the transcript. If the 
 ## The tray icon
 The tray (notification area) icon mirrors the state: ready, transcribing or paused. Click it to bring the window back. Its menu has **Start**, **Pause**, **Resume**, **End**, **Open SprkNotes** and **Quit**, whichever apply.
 
-![Tray icons](screenshots/tray-icons.png)
+![Tray icons: current brand on top, Throwback Mode below, on light and dark backgrounds](screenshots/tray-icons.png)
 
 Closing the window with the X closes the window; hiding to the tray instead is planned, so for now minimize it to keep a session running with the overlay.
 
@@ -75,7 +80,9 @@ Open **Settings** at the bottom of the window.
   ![Downloading](screenshots/settings-model-downloading-light.png)
   ![Update available](screenshots/settings-model-update-light.png)
   ![Managed by your organization](screenshots/settings-model-managed-light.png)
-- **Appearance.** System, Light or Dark.
+- **Appearance.** System, Light or Dark, and **Throwback Mode** (the first icon, purple and font).
+
+  ![Throwback Mode setting](screenshots/settings-throwback-light.png)
 - **Live captions.** Turn captions on the overlay on or off, turn the live line in the main window on or off, and choose **Others only** (default, quickest) or **Others and Me**.
 
 ![All settings](screenshots/settings-full-light.png)
@@ -85,21 +92,28 @@ Transcripts are Markdown files in `Documents\SprkNotes\Transcripts` (Windows), n
 
 If the app or PC stops unexpectedly, the file already holds everything that was committed. On the next start SprkNotes offers to mark it as interrupted.
 
-Export to `.txt`, `.json` or `.docx`.
+Export to `.txt`, `.json` or `.docx` from the Library.
 
 ## Who is "Others"?
 Everyone you hear through the speakers. On a confirmed 1:1 Teams call the other person is named. On group calls, or when nobody can be identified, it stays `Others`. Speech from a video or other app playing sound is shown as an audio source event; it may not be a person in the meeting. Live captions and the live line always say `Others`.
 
 ## Library
-**Library** lists your transcripts, newest first. Search finds names and words inside transcripts. Open one to read it, **View in folder**, **Export** (Word, plain text or JSON, saved next to the transcript) or **Summarize**. No setup is needed; it reads the same folder transcripts are saved to. (Folders, rename and delete are not in the Library yet.)
+**Library** (bottom bar) lists your transcripts, newest first. Type in the search box to match names and the words inside transcripts. Open one to read it, then use **View in folder**, **Export** (Word document, plain text or JSON, saved next to the transcript) or **Summarize**. It reads the same folder transcripts are saved to; no setup needed.
+
+![Library](screenshots/library-light.png)
+![Reading a transcript](screenshots/library-open-dark.png)
+
+Not yet in the Library: folders, rename and delete.
 
 ## Summarize with Claude or Copilot
-**Summarize** hands your latest transcript (or the one you have open in the Library) to the Claude or Microsoft 365 Copilot desktop app. It is off while a session is running and until you have a transcript.
-- Only one of the apps is installed: it is used straight away.
-- Both are installed: you choose.
-- Neither is installed (always the case for Copilot on Linux): the prompt is copied and the file is shown in your file manager, so you can attach and paste it into any assistant you use.
+**Summarize** (bottom bar, after a session ends, or inside an open transcript) hands the transcript to an assistant. SprkNotes sends nothing itself: you review and send inside that app.
+- If only one of the Claude or Microsoft 365 Copilot desktop apps is installed, it opens that one (Claude gets the file; for Copilot the prompt is copied and the file highlighted).
+- If both are installed, it asks which.
 
-Claude opens with the file attached. Copilot has no file-attach link, so the prompt is copied, Copilot opens and the file is highlighted: attach it and paste. SprkNotes sends nothing: you review and send inside that app. An administrator can hide either app (`ShowClaudeHandoff`, `ShowCopilotHandoff`).
+![Choose an app](screenshots/summarize-choose-light.png)
+- If neither is found, it copies the prompt and shows the file, so you can attach it wherever you like.
+
+![No app found](screenshots/summarize-no-app-light.png)
 
 ## On Linux
 Same app and windows, with these differences:
