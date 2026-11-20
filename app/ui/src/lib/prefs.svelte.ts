@@ -6,7 +6,7 @@ export type Theme = "system" | "light" | "dark";
 export type CaptionWho = "others" | "both";
 /** How long a new word waits before it is shown, to let the engine settle it (ADR-008). */
 export type CaptionDelay = "fast" | "steady" | "smooth";
-export const DELAY_MS: Record<CaptionDelay, number> = { fast: 200, steady: 400, smooth: 600 };
+export const DELAY_MS: { [k in CaptionDelay]: number } = { fast: 200, steady: 400, smooth: 600 };
 type Prefs = {
   theme: Theme;
   /** Throwback Mode: the first look (old icon, Segoe UI, earlier purple) instead of the current brand. */
