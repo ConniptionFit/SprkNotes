@@ -68,7 +68,15 @@ struct Stream {
     enabled: bool,
     /// Elapsed ms at which this run of the stream began (shifts after each resume).
     base_ms: u64,
+    /// 16 kHz samples fed since this run began.
+    fed: u64,
 }
+
+/// A stream that falls this far behind the clock (device stalled, or decoding badly behind)
+/// stops holding back the other stream's lines.
+const STALL_MS: u64 = 7_000;
+/// Slack for the detector noticing speech a moment after it begins.
+const ONSET_SLACK_MS: u64 = 1_000;
 
 pub struct Session {
     engine: Box<dyn Engine>,
@@ -96,11 +104,13 @@ impl Session {
             vad: make_vad(),
             enabled: true,
             base_ms: 0,
+            fed: 0,
         };
         let system = Stream {
             vad: make_vad(),
             enabled: true,
             base_ms: 0,
+            fed: 0,
         };
         Session {
             engine,
@@ -151,6 +161,7 @@ impl Session {
         if !stream.enabled {
             return;
         }
+        stream.fed += samples.len() as u64;
         let utterances = stream.vad.accept(samples);
         let base = stream.base_ms;
         self.captions.push(source, samples, !utterances.is_empty());
@@ -226,9 +237,27 @@ impl Session {
 
     /// Commit whatever has aged past the delay. Call about once a second.
     pub fn tick(&mut self, now_ms: u64) -> Result<Vec<Segment>, SessionError> {
-        let ready = self.commit.drain_ready(now_ms);
+        let settled = self.settled_ms(now_ms);
+        let ready = self.commit.drain_ready_before(now_ms, settled);
         self.write(&ready)?;
         Ok(ready)
+    }
+
+    /// Everything before this time has been decoded on every live stream, so lines ending
+    /// before it can be written without a later line from the other stream landing in front.
+    fn settled_ms(&self, now_ms: u64) -> u64 {
+        [&self.mic, &self.system]
+            .into_iter()
+            .filter(|s| s.enabled)
+            .map(|s| {
+                let at = |samples: u64| s.base_ms + samples * 1_000 / 16_000;
+                match s.vad.pending_since() {
+                    Some(p) => at(p).saturating_sub(ONSET_SLACK_MS),
+                    None => at(s.fed).max(now_ms.saturating_sub(STALL_MS)),
+                }
+            })
+            .min()
+            .unwrap_or(u64::MAX)
     }
 
     fn write(&mut self, segs: &[Segment]) -> Result<(), SessionError> {
@@ -272,6 +301,8 @@ impl Session {
         }
         self.mic.vad = (self.make_vad)();
         self.system.vad = (self.make_vad)();
+        self.mic.fed = 0;
+        self.system.fed = 0;
         self.mic.base_ms = now_ms;
         self.system.base_ms = now_ms;
         self.sink.event(now_ms, "Transcription resumed")?;

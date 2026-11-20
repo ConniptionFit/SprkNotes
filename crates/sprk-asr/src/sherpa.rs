@@ -195,6 +195,9 @@ impl Vad for SileroVad {
         }
         out
     }
+    fn pending_since(&self) -> Option<u64> {
+        self.speech_since
+    }
     fn flush(&mut self) -> Vec<Utterance> {
         self.vad.flush();
         let out = self.drain();
