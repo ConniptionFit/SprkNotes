@@ -47,6 +47,39 @@ for (const scheme of ["light", "dark"]) {
   await shot(p, `main-return-to-live-${scheme}.png`);
   await p.context().close();
 
+  // Library list, an open transcript, and the Summarize outcomes.
+  p = await page(scheme);
+  await p.getByRole("button", { name: "Library" }).click();
+  await wait(500);
+  await shot(p, `library-${scheme}.png`);
+  await p.locator("button.item").first().click();
+  await wait(500);
+  await shot(p, `library-open-${scheme}.png`);
+  await p.context().close();
+  for (const apps of ["both", "none"]) {
+    p = await page(scheme, { query: `?apps=${apps}` });
+    await wait(400);
+    await p.getByRole("button", { name: "Summarize" }).click();
+    await wait(500);
+    await shot(p, `summarize-${apps === "both" ? "choose" : "no-app"}-${scheme}.png`);
+    await p.context().close();
+  }
+
+  // Throwback Mode (Settings, Appearance): the first look.
+  const tb = { throwback: true };
+  p = await page(scheme, { prefs: tb });
+  await shot(p, `throwback-ready-${scheme}.png`);
+  await p.getByRole("button", { name: /start/i }).click();
+  await wait(4200);
+  await p.waitForSelector(".line.live .w");
+  await shot(p, `throwback-transcribing-${scheme}.png`);
+  await p.context().close();
+  p = await page(scheme, { h: 900, prefs: tb });
+  await p.getByRole("button", { name: "Settings" }).click();
+  await wait(300);
+  await shot(p, `settings-throwback-${scheme}.png`);
+  await p.context().close();
+
   // Settings: model ready, missing, downloading, update available, managed by policy, captions.
   for (const [model, tag] of [["", "ready"], ["missing", "model-missing"], ["update", "model-update"], ["managed", "model-managed"]]) {
     p = await page(scheme, { query: model ? `?model=${model}` : "" });
