@@ -277,10 +277,17 @@ fn end_session(state: State<AppState>) -> Result<(), String> {
     }
 }
 
-/// The overlay sizes its window to its content (logical pixels).
+/// The overlay sizes its window to its content (logical pixels). `flipped` says the caption
+/// drawer is above the pill, so the window grows upward and the pill stays put.
 #[tauri::command]
-fn mini_resize(app: AppHandle, width: f64, height: f64) {
-    shell::resize_mini(&app, width, height);
+fn mini_resize(app: AppHandle, width: f64, height: f64, flipped: bool) {
+    shell::resize_mini(&app, width, height, flipped);
+}
+
+/// Whether the caption drawer currently sits above the pill.
+#[tauri::command]
+fn mini_flipped(app: AppHandle) -> bool {
+    shell::mini_flipped(&app)
 }
 
 /// Which live captions the overlay wants: on or off, and whether to include "Me".
@@ -346,6 +353,7 @@ fn main() -> anyhow::Result<()> {
             rename_session,
             set_source,
             mini_resize,
+            mini_flipped,
             set_captions,
             open_app,
             model_status,

@@ -5,6 +5,7 @@
     onclick,
     pressed,
     primary = false,
+    disabled = false,
     children,
   }: {
     /** Short, plain tooltip and screen-reader name, e.g. "Pause". */
@@ -12,11 +13,12 @@
     onclick: () => void;
     pressed?: boolean;
     primary?: boolean;
+    disabled?: boolean;
     children: Snippet;
   } = $props();
 </script>
 
-<button class="icon" class:primary class:on={pressed} title={label} aria-label={label} aria-pressed={pressed} {onclick}>
+<button class="icon" class:primary class:on={pressed} title={label} aria-label={label} aria-pressed={pressed} {disabled} {onclick}>
   {@render children()}
 </button>
 
@@ -34,6 +36,7 @@
     transition: background 120ms, color 120ms;
   }
   .icon:hover { background: var(--surface-2); color: var(--text); }
+  .icon:disabled { opacity: 0.35; pointer-events: none; }
   .icon.on { background: var(--accent-soft); color: var(--accent); }
   .icon.primary { background: var(--accent); color: var(--on-accent); }
   .icon.primary:hover { background: var(--accent-hover); color: var(--on-accent); }

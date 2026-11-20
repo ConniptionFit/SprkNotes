@@ -2,15 +2,35 @@
 // Nothing here is sensitive: a theme choice and two caption switches.
 export type Theme = "system" | "light" | "dark";
 export type CaptionWho = "others" | "both";
-type Prefs = { theme: Theme; captionsOn: boolean; captionsWho: CaptionWho };
+type Prefs = {
+  theme: Theme;
+  captionsOn: boolean;
+  captionsWho: CaptionWho;
+  /** Caption drawer size in logical pixels, and the text size as a step in CAPTION_TEXT. */
+  captionW: number;
+  captionH: number;
+  captionText: number;
+};
+
+/** Caption text sizes in px for the magnifier buttons, and the step used by default. */
+export const CAPTION_TEXT = [13, 15, 17, 19, 22, 26, 30, 36];
+export const CAPTION_LIMITS = { minW: 260, maxW: 900, minH: 64, maxH: 480 };
 
 const KEY = "sprknotes.prefs";
-const defaults: Prefs = { theme: "system", captionsOn: false, captionsWho: "others" };
+const defaults: Prefs = { theme: "system", captionsOn: false, captionsWho: "others", captionW: 420, captionH: 118, captionText: 2 };
+
+const clamp = (n: unknown, lo: number, hi: number, fallback: number) =>
+  typeof n === "number" && Number.isFinite(n) ? Math.min(hi, Math.max(lo, Math.round(n))) : fallback;
 
 function load(): Prefs {
   try {
     const raw = typeof localStorage === "undefined" ? null : localStorage.getItem(KEY);
-    return { ...defaults, ...(raw ? JSON.parse(raw) : {}) };
+    const p: Prefs = { ...defaults, ...(raw ? JSON.parse(raw) : {}) };
+    // A hand-edited or older value must never break the overlay.
+    p.captionW = clamp(p.captionW, CAPTION_LIMITS.minW, CAPTION_LIMITS.maxW, defaults.captionW);
+    p.captionH = clamp(p.captionH, CAPTION_LIMITS.minH, CAPTION_LIMITS.maxH, defaults.captionH);
+    p.captionText = clamp(p.captionText, 0, CAPTION_TEXT.length - 1, defaults.captionText);
+    return p;
   } catch {
     return { ...defaults };
   }
