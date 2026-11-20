@@ -46,7 +46,7 @@ Dark mode is the same app:
 The last row, marked **live**, shows the words being spoken right now. Text types out at an even pace, only the last word or two are lighter and may still change, and sentences **lock in** as they finish (or after about 1.5 seconds, or a pause) so they stay put in normal color; the finished line quietly replaces them later. The transcript fills from the bottom: new rows push older ones up. The live line is a preview: never saved, never logged, and the saved transcript comes only from finished sentences. Turn it on or off, choose whose words it shows, and set the **Live text delay** (Fast, Steady or Smoothest: a short wait, under a second on Steady, that lets words settle so fewer change on screen) in [Settings](#settings). The magnifier buttons change the text size.
 
 ### Scrolling
-The pane follows new lines while you are at the bottom. Scroll up (wheel, touch, PageUp, Home or the scrollbar) to read earlier text: it stops moving, and it only stops when you scroll, never because new text arrived and a **Return to live** pill counts the new lines. Click it or press **End** to jump back.
+The pane follows new lines while you are at the bottom. Scroll up (wheel, touch, PageUp, Home or the scrollbar) to read earlier text: it stops moving, and it only stops when you scroll, never because new text arrived, and a **Return to live** pill counts the new lines. Click it or press **End** to jump back.
 
 ![Return to live](screenshots/main-return-to-live-light.png)
 
@@ -133,7 +133,18 @@ The current brand is a speech bubble with a waveform, the Outfit font and a purp
 
 ## Files and privacy
 - Transcripts are Markdown in `Documents\SprkNotes\Transcripts`: `YYYY-MM-DD HHmm <Title>.md`, with a `.jsonl` sidecar. Each line is `` - `HH:MM:SS` **Speaker:** text ``; lines starting with `>` are events (pauses, call changes, audio sources).
-- After a crash the file already holds everything committed; on the next start SprkNotes offers to mark it interrupted.
+- Lines are written in time order even when both sides talk at once, and speech that never pauses (a lecture, a video) is cut and committed steadily instead of stalling for a minute. SprkNotes keeps half a second of audio from before speech is detected, so the first word of a sentence is not lost.
+
+### After a crash
+Every committed line is already on disk, so a crash or power loss loses at most the words not yet committed. On the next start SprkNotes tells you it closed unexpectedly and offers **Open** (goes to the Library) or **Mark finished** (closes the transcript as interrupted).
+
+![Unexpected-close prompt](screenshots/recovery-light.png)
+
+### When something goes wrong
+Problems that used to be silent now show a notice:
+- **A Start that fails** shows the reason.
+- **A line that could not be saved:** "Check that the folder can be written to and has free space."
+- **A transcript that could not be closed:** it still holds everything saved so far.
 - **No audio is ever written to disk.** No telemetry, crash upload or app update checks. Logs never contain transcript text, subjects or names.
 - Optional meeting names come from classic Outlook (local only). Teams call context uses the local API on `localhost`.
 

@@ -63,7 +63,8 @@ Captions and the live line are shown from in-memory text only: never written to 
 - **No model available:** the bundled default is read-only in the app folder; check `sprkctl model list`.
 - **Calendar names missing:** classic Outlook with a profile is required. New Outlook is reported unavailable silently.
 - **Teams names missing:** the Teams local API may be off; the title falls back to the call window title or `Others`.
-- **Interrupted transcript:** the file is complete up to the last committed line.
+- **Interrupted transcript:** the file is complete up to the last committed line. At the next launch the user is offered Open and Mark finished (closes it as interrupted).
+- **"A line could not be saved" notice:** the transcripts folder is not writable or the disk is full; check `TranscriptsRoot` and free space.
 
 ## Publishing a model update (maintainers)
 The app's default index is `models-index.json` on the repository's `models` release. To publish a new model:
