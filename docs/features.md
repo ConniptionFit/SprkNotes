@@ -133,7 +133,7 @@ The current brand is a speech bubble with a waveform, the Outfit font and a purp
 
 ## Files and privacy
 - Transcripts are Markdown in `Documents\SprkNotes\Transcripts`: `YYYY-MM-DD HHmm <Title>.md`, with a `.jsonl` sidecar. Each line is `` - `HH:MM:SS` **Speaker:** text ``; lines starting with `>` are events (pauses, call changes, audio sources).
-- Lines are written in time order even when both sides talk at once, and speech that never pauses (a lecture, a video) is cut and committed steadily instead of stalling for a minute. SprkNotes keeps half a second of audio from before speech is detected, so the first word of a sentence is not lost.
+- Lines are written in time order even when both sides talk at once, and speech that never pauses (a lecture, a video) is cut and committed steadily instead of stalling for a minute. SprkNotes keeps one second of audio from before speech is detected (the detector reports speech about 0.65 s late), without reaching into the previous line, so the first words of a sentence are not lost.
 
 ### After a crash
 Every committed line is already on disk, so a crash or power loss loses at most the words not yet committed. On the next start SprkNotes tells you it closed unexpectedly and offers **Open** (goes to the Library) or **Mark finished** (closes the transcript as interrupted).
