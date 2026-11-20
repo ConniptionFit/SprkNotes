@@ -87,10 +87,9 @@
     --warn-soft: #3a2f12;
     --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 16px rgb(0 0 0 / 0.3);
   }
-/* Throwback Mode: the first look (Segoe UI, the earlier purple). Set from Settings, Appearance. */
+/* Throwback Mode: the first look (Segoe UI, the earlier purple). Set from Settings, Misc. Text colors are shared with the current look. */
 :root[data-brand="throwback"] {
   --font: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
-  --text: #1c1a24;
   --accent: #5b3394;
   --accent-hover: #4d2a80;
   --accent-soft: #ece6f7;

@@ -3,7 +3,7 @@
 This is the how-to. For a tour of every feature with more screenshots see [Features and usage](features.md).
 
 ## Look and feel
-The bottom bar shows the SprkNotes mark. **Settings, Appearance, Throwback Mode** switches to the first look: the starburst icon (window and tray), the earlier purple and Segoe UI. Everything works the same either way. (The throwback screenshots below were taken on Linux, where Segoe UI is not installed, so the font differs from Windows.)
+The bottom bar has icon buttons (hover for what each does): Library, Settings (the gear) and Summarize. **Settings, Misc, Throwback Mode** ("Get a blast from the past") switches to the first look: the starburst icon (window and tray), the earlier purple and Segoe UI. Everything works the same either way. (The throwback screenshots below were taken on Linux, where Segoe UI is not installed, so the font differs from Windows.)
 
 ![Throwback Mode](screenshots/throwback-transcribing-light.png)
 
@@ -82,7 +82,8 @@ Open **Settings** at the bottom of the window.
   ![Downloading](screenshots/settings-model-downloading-light.png)
   ![Update available](screenshots/settings-model-update-light.png)
   ![Managed by your organization](screenshots/settings-model-managed-light.png)
-- **Appearance.** System, Light or Dark, and **Throwback Mode** (the first icon, purple and font).
+- **Appearance.** System, Light or Dark.
+- **Misc.** **Throwback Mode** (the first icon, purple and font). Text colors stay the same as the current look.
 
   ![Throwback Mode setting](screenshots/settings-throwback-light.png)
 - **Live captions.** Turn captions on the overlay on or off, turn the live line in the main window on or off, set the **Live text delay** (Fast, Steady or Smoothest; a short wait so words settle and fewer change on screen, under a second on Steady), and choose **Others only** (default, quickest) or **Others and Me**.

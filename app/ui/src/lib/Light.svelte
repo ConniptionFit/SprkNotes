@@ -2,7 +2,7 @@
   import type { Status } from "./types";
   let { status, size = 14 }: { status: Status; size?: number } = $props();
 
-  // Text-free on purpose: green = ready, red = live (transcribing), yellow = paused.
+  // Text-free on purpose: red = live (transcribing), yellow = paused. Callers hide it when idle.
   const label: { [K in Status]: string } = {
     ready: "SprkNotes is ready",
     transcribing: "SprkNotes is transcribing",

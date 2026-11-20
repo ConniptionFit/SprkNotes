@@ -61,7 +61,7 @@ cd app/ui && npm ci && npm run check && npm test
 Cross-compile for Windows with `cargo xwin` (see the dev environment doc). Windows integration tests run in the VM with `scripts/winvm.sh`. To refresh the screenshots, start the UI (`cd app/ui && npx vite --port 1420`) and run `node scripts/screenshots.mjs` (needs Playwright with Chromium).
 
 ## Look and feel
-The current brand is a speech-bubble-and-waveform icon, the Outfit font and a purple and ink palette. **Settings, Appearance, Throwback Mode** brings back the first look (starburst icon, earlier purple, Segoe UI).
+The current brand is a speech-bubble-and-waveform icon, the Outfit font and a purple and ink palette. **Settings, Misc, Throwback Mode** brings back the first look (starburst icon, earlier purple, Segoe UI).
 
 ## Models and attribution
 Transcription uses *Parakeet TDT 0.6B v2 by NVIDIA, licensed under CC BY 4.0*. The interface font is Outfit (SIL OFL 1.1). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

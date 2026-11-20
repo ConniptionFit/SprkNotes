@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Brand from "./Brand.svelte";
+  import IconButton from "./IconButton.svelte";
   let {
     onlibrary,
     onsettings,
@@ -21,37 +21,17 @@
 </script>
 
 <nav aria-label="More">
-  <button onclick={onlibrary} aria-pressed={libraryOpen} class:active={libraryOpen} title="Your transcripts">
+  <IconButton label="Library" onclick={onlibrary} pressed={libraryOpen}>
     <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 4.5h12M4 10h12M4 15.5h8" /></svg>
-    Library
-  </button>
-  <button onclick={onsettings} aria-pressed={settingsOpen} class:active={settingsOpen}>
-    <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="2.5" /><path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M4.7 15.3l1.4-1.4M13.9 6.1l1.4-1.4" /></svg>
-    Settings
-  </button>
-  <button onclick={onsummarize} disabled={!canSummarize} title={summarizeHint}>
+  </IconButton>
+  <IconButton label="Settings" onclick={onsettings} pressed={settingsOpen}>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
+  </IconButton>
+  <IconButton label={canSummarize ? "Summarize" : summarizeHint || "Summarize"} onclick={onsummarize} disabled={!canSummarize}>
     <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3l1.6 4.4L16 9l-4.4 1.6L10 15l-1.6-4.4L4 9l4.4-1.6z" /></svg>
-    Summarize
-  </button>
-  <span class="spacer"></span>
-  <Brand />
+  </IconButton>
 </nav>
 
 <style>
-  nav { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem; }
-  .spacer { flex: 1; }
-  button {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.45rem;
-    padding: 0.5rem 0.75rem;
-    border: 0;
-    border-radius: 8px;
-    background: transparent;
-    color: var(--muted);
-  }
-  button:disabled { opacity: 0.6; }
-  button:not(:disabled):hover { background: var(--surface-2); color: var(--text); }
-  button.active { background: var(--accent-soft); color: var(--accent); }
-  svg { width: 1.1rem; height: 1.1rem; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  nav { display: flex; align-items: center; gap: 0.25rem; }
 </style>
