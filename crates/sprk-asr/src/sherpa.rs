@@ -108,8 +108,8 @@ pub struct SileroVad {
     force_cut: u64,
 }
 
-/// Samples kept ahead of a detected utterance (0.2 s at 16 kHz).
-const PRE_ROLL: u64 = 3_200;
+/// Samples kept ahead of a detected utterance (0.5 s at 16 kHz).
+const PRE_ROLL: u64 = 8_000;
 /// History cap: longer than the VAD's 60 s internal buffer.
 const HISTORY_MAX: usize = 70 * 16_000;
 /// The detector only honors its maximum speech length at a pause. Speech with no pause for this
