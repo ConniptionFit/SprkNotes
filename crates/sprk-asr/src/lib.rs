@@ -40,6 +40,11 @@ pub trait Vad: Send {
     fn accept(&mut self, samples_16k_mono: &[f32]) -> Vec<Utterance>;
     /// End of stream: release any speech still buffered.
     fn flush(&mut self) -> Vec<Utterance>;
+    /// Sample index (in this stream) where speech not yet released began, if any. Lets the
+    /// pipeline hold other lines back until this one arrives, so the file stays in time order.
+    fn pending_since(&self) -> Option<u64> {
+        None
+    }
 }
 
 const SAMPLE_RATE: u64 = 16_000;
