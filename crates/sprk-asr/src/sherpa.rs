@@ -106,10 +106,14 @@ pub struct SileroVad {
     speech_since: Option<u64>,
     /// Longest unbroken run (samples) before the speech is cut even without a pause.
     force_cut: u64,
+    /// Absolute sample index where the last released utterance ended.
+    prev_end: u64,
 }
 
-/// Samples kept ahead of a detected utterance (0.5 s at 16 kHz).
-const PRE_ROLL: u64 = 8_000;
+/// Samples kept ahead of a detected utterance (1 s at 16 kHz). The detector reports speech
+/// about 0.65 s after it begins, so less than this clipped a sentence's first words. Never
+/// reaches back into the previous utterance, so no word is decoded twice.
+const PRE_ROLL: u64 = 16_000;
 /// History cap: longer than the VAD's 60 s internal buffer.
 const HISTORY_MAX: usize = 70 * 16_000;
 /// The detector only honors its maximum speech length at a pause. Speech with no pause for this
@@ -142,6 +146,7 @@ impl SileroVad {
             offset: 0,
             speech_since: None,
             force_cut: ((max_speech_s + FORCE_CUT_EXTRA_S) * 16_000.0) as u64,
+            prev_end: 0,
         })
     }
 
@@ -150,7 +155,10 @@ impl SileroVad {
         while let Some(seg) = self.vad.front() {
             let start = self.offset + seg.start().max(0) as u64;
             // Prepend pre-roll from history when it still holds those samples.
-            let want_from = start.saturating_sub(PRE_ROLL).max(self.hist_base);
+            let want_from = start
+                .saturating_sub(PRE_ROLL)
+                .max(self.hist_base)
+                .max(self.prev_end.min(start));
             let pre: Vec<f32> = if want_from < start {
                 let from = (want_from - self.hist_base) as usize;
                 let n = (start - want_from) as usize;
@@ -164,6 +172,7 @@ impl SileroVad {
                 start_sample: start - (start - want_from).min(start),
                 samples,
             });
+            self.prev_end = start + seg.samples().len() as u64;
             self.vad.pop();
         }
         out
@@ -207,6 +216,7 @@ impl Vad for SileroVad {
         self.history.clear();
         self.hist_base = 0;
         self.offset = 0;
+        self.prev_end = 0;
         self.speech_since = None;
         out
     }
