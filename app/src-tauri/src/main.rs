@@ -387,6 +387,8 @@ fn main() -> anyhow::Result<()> {
             library::library_list,
             library::library_open,
             library::library_reveal,
+            library::recovery_scan,
+            library::recovery_mark,
             library::library_export,
             library::latest_transcript,
             library::summarize

@@ -147,6 +147,46 @@ fn reveal(path: &Path) {
     l.reveal(&path.to_string_lossy());
 }
 
+/// Transcripts a crash left `in-progress` (SPEC 6.4). The window asks once at launch. Nothing
+/// is reported while a session runs, and a file touched in the last seconds may belong to
+/// another running copy, so it is left alone.
+#[tauri::command]
+pub fn recovery_scan(
+    app: AppHandle,
+    state: tauri::State<crate::AppState>,
+) -> Result<Vec<Entry>, String> {
+    if state.host.lock().map(|h| h.is_some()).unwrap_or(true) {
+        return Ok(Vec::new());
+    }
+    let idle = |p: &Path| {
+        std::fs::metadata(p)
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.elapsed().ok())
+            .is_some_and(|d| d >= std::time::Duration::from_secs(15))
+    };
+    Ok(library::scan(&root(&app)?)
+        .into_iter()
+        .filter(|e| e.status == "in-progress" && idle(&e.path))
+        .map(entry)
+        .collect())
+}
+
+/// "Mark finished": the transcript keeps every saved line and is closed as interrupted.
+#[tauri::command]
+pub fn recovery_mark(
+    app: AppHandle,
+    state: tauri::State<crate::AppState>,
+    path: String,
+) -> Result<(), String> {
+    if state.host.lock().map(|h| h.is_some()).unwrap_or(true) {
+        return Err("End the current session first.".into());
+    }
+    let p = checked(&app, &path)?;
+    sprk_transcript::recovery::mark_interrupted(&p)
+        .map_err(|_| "Could not mark that transcript finished.".to_string())
+}
+
 /// "View in folder".
 #[tauri::command]
 pub fn library_reveal(app: AppHandle, path: String) -> Result<(), String> {
