@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { backend, type Backend } from "./api";
   import type { Caption, Status } from "./types";
-  import { prefs, setPref, CAPTION_TEXT, CAPTION_LIMITS } from "./prefs.svelte";
+  import { prefs, setPref, captionFlags, CAPTION_TEXT, CAPTION_LIMITS } from "./prefs.svelte";
   import Light from "./Light.svelte";
   import IconButton from "./IconButton.svelte";
 
@@ -108,7 +108,7 @@
 
   // Tell the engine which caption sources are wanted, so a source nobody reads costs nothing.
   $effect(() => {
-    api?.setCaptions(prefs.captionsOn, prefs.captionsWho === "both").catch(() => {});
+    api?.setCaptions(...captionFlags()).catch(() => {});
   });
 
   // Hover or keyboard focus reveals the buttons; they hide again shortly after both are gone.
