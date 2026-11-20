@@ -75,7 +75,7 @@ There is no packaged Linux release yet; build it from the repository. You need R
 Build with the speech engine (fetch the native libraries first, see [dev-environment.md](dev-environment.md)):
 ```bash
 scripts/fetch-sherpa.sh
-(cd app/ui && npm ci)
+(cd app/ui && npm ci && npm run build)   # the app embeds app/ui/dist; rebuild it after any UI change, or the binary ships an old window
 (cd app/src-tauri && SHERPA_ONNX_LIB_DIR=$(../../scripts/fetch-sherpa.sh --print linux-x64) cargo build --release --features engine,tauri/custom-protocol)
 ```
 Then install it for your user (binary to `~/.local/bin`, an app-menu entry and an icon):
