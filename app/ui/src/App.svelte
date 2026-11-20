@@ -1,15 +1,16 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { backend, type Backend } from "./lib/api";
-  import type { DownloadProgress, Line, ModelStatus, Source, Status } from "./lib/types";
+  import type { Caption, DownloadProgress, Line, ModelStatus, Source, Status } from "./lib/types";
   import TopBar from "./lib/TopBar.svelte";
   import Controls from "./lib/Controls.svelte";
   import LivePane from "./lib/LivePane.svelte";
   import Footer from "./lib/Footer.svelte";
   import Settings from "./lib/Settings.svelte";
   import ModelDownload from "./lib/ModelDownload.svelte";
+  import { captionFlags } from "./lib/prefs.svelte";
 
-  let api: Backend | undefined;
+  let api = $state.raw<Backend | undefined>();
   let name = $state("");
   let status = $state<Status>("ready");
   let mic = $state(true);
@@ -21,12 +22,28 @@
   let progress = $state<DownloadProgress | null>(null);
   let updateAvailable = $state(false);
   let checkMessage = $state("");
+  let partial = $state<Caption | null>(null);
+
+  // Ask the engine for partial captions whenever either window wants them.
+  $effect(() => {
+    api?.setCaptions(...captionFlags()).catch(() => {});
+  });
+  $effect(() => {
+    if (status === "ready") partial = null;
+  });
 
   onMount(() => {
     const offs: Array<() => void> = [];
     backend.then(async (b) => {
       api = b;
       offs.push(await b.onLine((l) => (lines = [...lines, l])));
+      offs.push(
+        await b.onCaption((c) => {
+          if (c.final) {
+            if (partial?.speaker === c.speaker) partial = null;
+          } else partial = c;
+        }),
+      );
       offs.push(await b.onStatus((s) => (status = s)));
       offs.push(
         await b.onModelDownload(async (p) => {
@@ -92,7 +109,7 @@
       onrename={(n) => api?.rename(n)}
       onsource={(s: Source, on: boolean) => api?.setSource(s, on)}
     />
-    <LivePane {lines} {status} needsModel={!model.ready && status === "ready"}>
+    <LivePane {lines} {status} {partial} needsModel={!model.ready && status === "ready"}>
       {#snippet empty()}
         <ModelDownload
           compact

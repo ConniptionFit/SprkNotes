@@ -344,6 +344,7 @@ Scheduled Teams and Zoom meetings live on the user's Outlook calendar, so one lo
 - **Top bar:** editable session name, source toggles (Me mic, Others system) with device picker on click, status pill ("Transcribing", "Paused", "Ready").
 - **Controls:** Start · Pause/Resume · End. Context-aware (only valid actions enabled).
 - **Live pane:** transcript lines styled per 5.1 (timestamp muted, speaker bold, Me and Others visually distinct).
+- **Live line:** while transcribing, the newest words appear as the last line of the live pane (marked "live"), growing word by word. Words the engine is unsure of (after `stable`) are muted with a dotted underline; words that change are briefly tinted; when the committed line arrives it replaces the live line. Others only by default, Me too when Settings says so. The live line is display only: the saved transcript contains committed lines only, and partial text is never written to disk or logged. A toolbar above the pane has smaller/larger text (remembered) and a show/hide toggle (also in Settings, on by default).
 - **Footer:** Library, Settings, AI handoff (after End or from Library).
 
 ### 8.2 Live pane scrolling (must feel calm)

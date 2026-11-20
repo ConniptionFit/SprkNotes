@@ -106,6 +106,22 @@
       </div>
       <div class="row">
         <div class="what">
+          <p class="plain">Live line in the transcript window</p>
+          <p class="help">The newest words grow at the end of the transcript before they settle into a line.</p>
+        </div>
+        <label class="switch">
+          <input
+            type="checkbox"
+            role="switch"
+            checked={prefs.liveLine}
+            onchange={(e) => setPref("liveLine", e.currentTarget.checked)}
+          />
+          <span class="track" aria-hidden="true"></span>
+          <span class="sr-only">Show the live line in the transcript window</span>
+        </label>
+      </div>
+      <div class="row">
+        <div class="what">
           <p class="plain">Whose words</p>
           <p class="help">Others only is the default, and the quickest.</p>
         </div>
