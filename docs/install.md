@@ -76,14 +76,18 @@ Build with the speech engine (fetch the native libraries first, see [dev-environ
 ```bash
 scripts/fetch-sherpa.sh
 (cd app/ui && npm ci)
-SHERPA_ONNX_LIB_DIR=$(scripts/fetch-sherpa.sh --print linux-x64) cargo tauri build --features engine   # in app/src-tauri
+(cd app/src-tauri && SHERPA_ONNX_LIB_DIR=$(../../scripts/fetch-sherpa.sh --print linux-x64) cargo build --release --features engine,tauri/custom-protocol)
 ```
-Open Settings and press **Download model**, or place a pack under `${XDG_DATA_HOME:-~/.local/share}/SprkNotes/models`. Transcripts go to `~/Documents/SprkNotes/Transcripts`.
+Then install it for your user (binary to `~/.local/bin`, an app-menu entry and an icon):
+```bash
+packaging/linux/install.sh                      # uses app/src-tauri/target/release/sprknotes, or pass a path
+```
+The launcher sets `WEBKIT_DISABLE_DMABUF_RENDERER=1`, which avoids a blank window on some GPUs. Open Settings and press **Download model**, or place a pack under `${XDG_DATA_HOME:-~/.local/share}/SprkNotes/models`. Transcripts go to `~/Documents/SprkNotes/Transcripts`.
 
 ## Models
 SprkNotes loads a transcription model from a `.sprkmodel` pack. Packs are separate from the app and have their own version.
 
-**Easiest: the Download model button.** In the light portable zip, MSI or Linux build, open Settings and press **Download model**. The app fetches the current Parakeet model and the voice activity model (large packs arrive in parts of about 80 MB that are joined and checked against the pack's checksum), imports them as usual, and uses them from the next session. It works the same on Linux. At launch it quietly checks whether a newer model exists and tells you. Downloads need https access to the model host (or your organization's mirror) and are blocked while a session is running. Admins can turn this off (`ModelDownload=0`); then use a bundled build or a pack file as below.
+**Easiest: the Download model button.** (A first run with no model looks like this: ![First run](screenshots/first-run-model-light.png)) In the light portable zip, MSI or Linux build, open Settings and press **Download model**. The app fetches the current Parakeet model and the voice activity model (large packs arrive in parts of about 80 MB that are joined and checked against the pack's checksum), imports them as usual, and uses them from the next session. It works the same on Linux. At launch it quietly checks whether a newer model exists and tells you. Downloads need https access to the model host (or your organization's mirror) and are blocked while a session is running. Admins can turn this off (`ModelDownload=0`); then use a bundled build or a pack file as below.
 
 **Offline: bundled build or pack file.** The `with-model` downloads already contain the model. Otherwise install a pack by hand:
 ```powershell

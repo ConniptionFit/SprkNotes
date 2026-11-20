@@ -16,7 +16,7 @@ On-device app for Windows (x64 and ARM64), with a native Linux build, that **tra
 
 ![Overlay with live captions](docs/screenshots/overlay-captions-dark.png)
 
-More in the [user guide](docs/user-guide.md).
+More in [Features and usage](docs/features.md) and the [user guide](docs/user-guide.md).
 
 ## What it does
 - **Me and Others.** Your mic is labeled `Me`. Everyone you hear through the speakers is `Others`, or a name on a confirmed 1:1 call. When unsure, it says `Others` and never guesses.
@@ -33,11 +33,12 @@ More in the [user guide](docs/user-guide.md).
 No audio on disk. No network except downloading transcription model packs, which admins can turn off (the only local interfaces are Outlook COM, the Teams local API on `localhost`, and launching Claude/Copilot). No telemetry, app update checks or crash upload. Logs never contain transcript text, subjects or names. Details: [SPEC.md](SPEC.md) section 12 and [CLAUDE.md](CLAUDE.md) hard rules.
 
 ## Status
-Pre-release (0.0.1, pilot builds are on the Releases page). Built so far: transcript format, writer and recovery, exports, commit buffer and dedupe, session orchestration, model packs, signing and download, calendar selection, handoff plans, call context, admin policy, live captions (ADR-006, ADR-007), the redesigned main window, Settings, overlay and tray, and installers (portable zip, MSI, MSIX). Windows capture (WASAPI) and the desktop shell run on x64; the Snapdragon laptop checks are pending ([manual checks](docs/manual-checks.md)). Linux runs natively (PipeWire or PulseAudio system audio, model download, tray, overlay) but has no packaged release yet. The Library window (list, search, read, export) and Summarize work. Not finished: hide-to-tray on Close, Library folders, rename and delete, Teams local API. See [CHANGELOG.md](CHANGELOG.md) and the milestone table in SPEC.md section 14.
+Pre-release (0.0.1, pilot builds are on the Releases page). Built so far: transcript format, writer and recovery, exports, commit buffer and dedupe, session orchestration, model packs, signing and download, calendar selection, handoff plans, call context, admin policy, live captions (ADR-006, ADR-007), the redesigned main window, Settings, overlay and tray, and installers (portable zip, MSI, MSIX). Windows capture (WASAPI) and the desktop shell run on x64; the Snapdragon laptop checks are pending ([manual checks](docs/manual-checks.md)). Linux runs natively (PipeWire or PulseAudio system audio, model download, tray, overlay) with a per-user install script, but no packaged release yet. The Library window (list, search, read, export) and Summarize work. Close hides to the tray. Not finished: Library folders, rename and delete, Teams local API. See [CHANGELOG.md](CHANGELOG.md) and the milestone table in SPEC.md section 14.
 
 ## Docs
 | Doc | For |
 |---|---|
+| [Features and usage](docs/features.md) | Everything the app does, with screenshots |
 | [Install](docs/install.md) | Installing on one PC: portable zip, MSI, MSIX, Linux, models, uninstall |
 | [Deployment](docs/deployment.md) | Intune, GPO, SCCM, RMM as SYSTEM, registry policy |
 | [User guide](docs/user-guide.md) | Using the app |
