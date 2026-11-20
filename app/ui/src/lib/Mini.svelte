@@ -22,9 +22,9 @@
 
   let nextId = 0;
   // Words already on screen per speaker, so only new words fade in, one after another.
-  let seen: Record<string, number> = {};
+  let shownCount: { [k: string]: number } = {};
   const wordsOf = (c: Caption) => c.text.split(/\s+/).filter(Boolean);
-  const delay = (c: Caption, i: number) => Math.max(0, i - (seen[c.speaker] ?? 0)) * 70;
+  const delay = (c: Caption, i: number) => Math.max(0, i - (shownCount[c.speaker] ?? 0)) * 70;
 
   const wanted = (speaker: string) => prefs.captionsWho === "both" || speaker !== "Me";
   const shown = $derived(finals.filter((l) => wanted(l.speaker)).slice(-MAX_LINES));
@@ -57,12 +57,12 @@
           if (c.final) {
             finals = [...finals.slice(-(MAX_LINES * 3)), { id: nextId++, speaker: c.speaker, text: c.text }];
             if (partial?.speaker === c.speaker) partial = null;
-            seen[c.speaker] = 0;
+            shownCount[c.speaker] = 0;
             return;
           }
           partial = c;
           // Remember how much was already shown, after this render has used the old count.
-          queueMicrotask(() => (seen[c.speaker] = wordsOf(c).length));
+          queueMicrotask(() => (shownCount[c.speaker] = wordsOf(c).length));
         }),
       );
     });
