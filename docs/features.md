@@ -43,10 +43,10 @@ Dark mode is the same app:
 ![Dark](screenshots/main-transcribing-dark.png)
 
 ## Live text
-The last row, marked **live**, shows the words being spoken right now. Confident words look solid; the newest are lighter and may change. When the speaker finishes, the live line settles into a normal line. The live line is a preview: never saved, never logged, and the saved transcript comes only from finished sentences. Turn it on or off, and choose whose words it shows, in [Settings](#settings). The magnifier buttons change the text size.
+The last row, marked **live**, shows the words being spoken right now. Text types out at an even pace, only the last word or two are lighter and may still change, and sentences **lock in** as they finish (or after about 1.5 seconds, or a pause) so they stay put in normal color; the finished line quietly replaces them later. The transcript fills from the bottom: new rows push older ones up. The live line is a preview: never saved, never logged, and the saved transcript comes only from finished sentences. Turn it on or off, choose whose words it shows, and set the **Live text delay** (Fast, Steady or Smoothest: a short wait, under a second on Steady, that lets words settle so fewer change on screen) in [Settings](#settings). The magnifier buttons change the text size.
 
 ### Scrolling
-The pane follows new lines while you are at the bottom. Scroll up to read earlier text: it stops moving and a **Return to live** pill counts the new lines. Click it or press **End** to jump back.
+The pane follows new lines while you are at the bottom. Scroll up (wheel, touch, PageUp, Home or the scrollbar) to read earlier text: it stops moving, and it only stops when you scroll, never because new text arrived and a **Return to live** pill counts the new lines. Click it or press **End** to jump back.
 
 ![Return to live](screenshots/main-return-to-live-light.png)
 
@@ -107,7 +107,7 @@ With one app installed it opens that one (Claude gets the file; for Copilot the 
 
 - **Transcription model:** status, **Download model**, **Check for updates**.
 - **Appearance:** System, Light or Dark, and Throwback Mode.
-- **Live captions:** captions on the overlay, the live line in the main window, and whose words (Others only or Others and Me).
+- **Live captions:** captions on the overlay, the live line in the main window, **Live text delay** (Fast, Steady, Smoothest) and whose words (Others only or Others and Me).
 
 Dark: ![Settings dark](screenshots/settings-full-dark.png)
 

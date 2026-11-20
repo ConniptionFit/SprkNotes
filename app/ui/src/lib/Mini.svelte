@@ -25,7 +25,7 @@
   const textStep = $derived(prefs.captionText);
 
   // Captions: the last few committed lines plus the line still being spoken.
-  let finals = $state<{ id: number; speaker: string; text: string }[]>([]);
+  let finals = $state<{ id: number; speaker: string; text: string; utt?: number }[]>([]);
   let partial = $state<Caption | null>(null);
 
   let nextId = 0;
@@ -62,11 +62,17 @@
       // Finished lines arrive as final captions (the committed wording, shown right away).
       offs.push(
         await b.onCaption((c) => {
+          // Sentences that locked while speech went on (ADR-008) join the lines; the final caption
+          // for the same utterance replaces them.
           if (c.final) {
-            finals = [...finals.slice(-(MAX_LINES * 3)), { id: nextId++, speaker: c.speaker, text: c.text }];
+            finals = finals.filter((l) => !(l.utt !== undefined && l.utt === c.utt && l.speaker === c.speaker));
+            finals = [...finals.slice(-(MAX_LINES * 3)), { id: nextId++, speaker: c.speaker, text: c.text, utt: c.utt }];
             if (partial?.speaker === c.speaker) partial = null;
             shownCount[c.speaker] = 0;
             return;
+          }
+          if (c.sealed?.length) {
+            finals = [...finals, ...c.sealed.map((text) => ({ id: nextId++, speaker: c.speaker, text, utt: c.utt }))].slice(-(MAX_LINES * 3));
           }
           partial = c;
           // Remember how much was already shown, after this render has used the old count.

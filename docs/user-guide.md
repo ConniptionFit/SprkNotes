@@ -31,7 +31,7 @@ SprkNotes needs a transcription model before it can start. If none is installed,
 ![Paused](screenshots/main-paused-light.png)
 
 ### The live line
-The last row of the transcript, marked **live**, shows what is being said right now, word by word. Words the engine is sure of look solid; newer words are lighter and can change as more speech arrives. When the speaker finishes, the live line settles into a normal transcript line. The live line is a preview: it is never saved or logged, and the saved transcript comes only from finished sentences. By default it shows Others only (see [Settings](#settings)).
+The last row of the transcript, marked **live**, shows what is being said right now. Text types out at an even pace; only the last word or two are lighter and can still change. Sentences lock in as they finish (or after about 1.5 seconds, or a pause), stay in normal color, and are quietly replaced by the finished line later. The transcript fills from the bottom, so new rows push older ones up. The live line is a preview: it is never saved or logged, and the saved transcript comes only from finished sentences. By default it shows Others only (see [Settings](#settings)).
 
 ### Dark mode
 Dark mode follows Windows or your desktop, or the choice in Settings.
@@ -39,7 +39,7 @@ Dark mode follows Windows or your desktop, or the choice in Settings.
 ![Dark](screenshots/main-transcribing-dark.png)
 
 ### Scrolling
-The live pane follows new lines while you are near the bottom. Scroll up to read earlier text: it stops moving, and a **Return to live** pill counts new lines. Click it or press **End** to jump back.
+The live pane follows new lines while you are near the bottom. Scroll up to read earlier text: it stops moving (it stops only when you scroll, never because text arrived), and a **Return to live** pill counts new lines. Click it or press **End** to jump back.
 
 ![Return to live](screenshots/main-return-to-live-light.png)
 
@@ -85,7 +85,7 @@ Open **Settings** at the bottom of the window.
 - **Appearance.** System, Light or Dark, and **Throwback Mode** (the first icon, purple and font).
 
   ![Throwback Mode setting](screenshots/settings-throwback-light.png)
-- **Live captions.** Turn captions on the overlay on or off, turn the live line in the main window on or off, and choose **Others only** (default, quickest) or **Others and Me**.
+- **Live captions.** Turn captions on the overlay on or off, turn the live line in the main window on or off, set the **Live text delay** (Fast, Steady or Smoothest; a short wait so words settle and fewer change on screen, under a second on Steady), and choose **Others only** (default, quickest) or **Others and Me**.
 
 ![All settings](screenshots/settings-full-light.png)
 

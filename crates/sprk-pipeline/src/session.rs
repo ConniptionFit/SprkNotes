@@ -183,6 +183,8 @@ impl Session {
                                 text,
                                 stable: 0,
                                 is_final: true,
+                                sealed: Vec::new(),
+                                utt: self.captions.finished_utt(source),
                             };
                             c.stable = c.word_count();
                             self.final_captions.push(c);

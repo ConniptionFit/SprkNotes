@@ -38,6 +38,10 @@ export type Caption = {
   stable: number;
   /** The utterance finished: text is the committed wording. */
   final: boolean;
+  /** Rows that locked and left the live row since the last caption (ADR-008). Oldest first. */
+  sealed?: string[];
+  /** Which utterance this belongs to, so the final one replaces its locked rows. */
+  utt?: number;
 };
 
 /** One transcript in the library list. */

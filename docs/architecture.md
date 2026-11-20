@@ -17,7 +17,7 @@ On Linux the same pipeline runs with `parec` (PipeWire or PulseAudio monitor) fo
 | Crate | Role | Status |
 |---|---|---|
 | `sprk-transcript` | Format, writer, recovery, parser, exporters | Done (portable) |
-| `sprk-pipeline` | Commit buffer, dedupe, rules, `Session` orchestrator, session host, `Captioner` (ADR-006, ADR-007) | Done (portable) |
+| `sprk-pipeline` | Commit buffer, dedupe, rules, `Session` orchestrator, session host, `Captioner` (ADR-006, ADR-007, ADR-008) | Done (portable) |
 | `sprk-asr` | `Engine` and `Vad` traits, sherpa-onnx adapters | Done |
 | `sprk-models` | Packs, manifest, resolver, stores, import, signing | Done (portable) |
 | `sprk-context` | Audio source timing, call title rules, labeling modes | Windows sources and call context wired; UI Automation tabs, Teams local API pending |
@@ -44,4 +44,4 @@ New engines, VADs, exporters, calendar providers, handoff targets and filters ar
 See [CLAUDE.md](../CLAUDE.md): no audio on disk, no network, terminology ("transcribing"), no PHI in logs, crash safety, models are data, never guess a speaker.
 
 ## Decisions
-See [docs/adr](adr/): stack (001), dev environment (002), default model (003), echo canceller (004), model download (005), live captions (006) and streaming caption hypotheses (007).
+See [docs/adr](adr/): stack (001), dev environment (002), default model (003), echo canceller (004), model download (005), live captions (006) and streaming caption hypotheses (007) and caption lock-in (008).

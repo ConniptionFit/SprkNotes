@@ -57,7 +57,7 @@ Packs are signed with Ed25519 (OpenSSH SSHSIG, namespace `sprknotes-model`) thro
 SprkNotes makes no outbound connections except model downloads (ADR-005): at launch it fetches a small model index to see whether a newer model exists, and downloads a pack only when the user presses "Download model". Nothing about the user or any transcript is sent. Set `ModelDownload=0` to turn all of it off, `ModelUpdateCheck=0` to stop only the launch check, or `ModelIndexUrl` to point at an internal mirror. Otherwise expect only `localhost` traffic (Teams local API, if enabled). `sprkctl model sync` (admin-run) reads an internal file share. No telemetry or crash upload, and no app update checks. Logs hold IDs and counts only; context data (titles, names) goes only into transcript files.
 
 ## Live captions
-Captions and the live line are shown from in-memory text only: never written to disk, never logged, never part of the transcript (ADR-006, ADR-007). They are a per-user setting in the app; there is no policy key. Others-only is the default and the cheapest on CPU. If decoding cannot keep up, the engine switches captions off for the session.
+Captions and the live line are shown from in-memory text only: never written to disk, never logged, never part of the transcript (ADR-006, ADR-007, ADR-008). They are a per-user setting in the app; there is no policy key. Others-only is the default and the cheapest on CPU. If decoding cannot keep up, the engine switches captions off for the session.
 
 ## Troubleshooting
 - **No model available:** the bundled default is read-only in the app folder; check `sprkctl model list`.

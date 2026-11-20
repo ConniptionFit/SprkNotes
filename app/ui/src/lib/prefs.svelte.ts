@@ -4,12 +4,16 @@ import { backend } from "./api";
 // Nothing here is sensitive: a theme choice and two caption switches.
 export type Theme = "system" | "light" | "dark";
 export type CaptionWho = "others" | "both";
+/** How long a new word waits before it is shown, to let the engine settle it (ADR-008). */
+export type CaptionDelay = "fast" | "steady" | "smooth";
+export const DELAY_MS: { [k in CaptionDelay]: number } = { fast: 200, steady: 400, smooth: 600 };
 type Prefs = {
   theme: Theme;
   /** Throwback Mode: the first look (old icon, Segoe UI, earlier purple) instead of the current brand. */
   throwback: boolean;
   captionsOn: boolean;
   captionsWho: CaptionWho;
+  captionDelay: CaptionDelay;
   /** Caption drawer size in logical pixels, and the text size as a step in CAPTION_TEXT. */
   captionW: number;
   captionH: number;
@@ -26,7 +30,7 @@ export const LINE_TEXT = [12, 13, 14, 15, 17, 19, 22, 26];
 export const CAPTION_LIMITS = { minW: 260, maxW: 900, minH: 64, maxH: 480 };
 
 const KEY = "sprknotes.prefs";
-const defaults: Prefs = { theme: "system", throwback: false, captionsOn: false, captionsWho: "others", captionW: 420, captionH: 118, captionText: 2, liveLine: true, lineText: 3 };
+const defaults: Prefs = { theme: "system", throwback: false, captionsOn: false, captionsWho: "others", captionDelay: "steady", captionW: 420, captionH: 118, captionText: 2, liveLine: true, lineText: 3 };
 
 const clamp = (n: unknown, lo: number, hi: number, fallback: number) =>
   typeof n === "number" && Number.isFinite(n) ? Math.min(hi, Math.max(lo, Math.round(n))) : fallback;
@@ -39,6 +43,7 @@ function load(): Prefs {
     p.captionW = clamp(p.captionW, CAPTION_LIMITS.minW, CAPTION_LIMITS.maxW, defaults.captionW);
     p.captionH = clamp(p.captionH, CAPTION_LIMITS.minH, CAPTION_LIMITS.maxH, defaults.captionH);
     p.captionText = clamp(p.captionText, 0, CAPTION_TEXT.length - 1, defaults.captionText);
+    if (!(p.captionDelay in DELAY_MS)) p.captionDelay = defaults.captionDelay;
     p.lineText = clamp(p.lineText, 0, LINE_TEXT.length - 1, defaults.lineText);
     return p;
   } catch {
