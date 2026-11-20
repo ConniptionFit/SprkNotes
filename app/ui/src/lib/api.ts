@@ -41,6 +41,11 @@ export interface Backend {
    * used, none copies the prompt and shows the file, and both come back as `choose`.
    */
   summarize(path: string | null, target: string | null): Promise<Summarized>;
+  /** Transcripts a crash left unfinished (asked once at launch), and closing one as interrupted. */
+  recoveryScan(): Promise<LibraryEntry[]>;
+  recoveryMark(path: string): Promise<void>;
+  /** A session problem such as a line that could not be saved: `write_failed`, `finalize_failed`. */
+  onProblem(cb: (kind: string) => void): Promise<() => void>;
   onLine(cb: (l: Line) => void): Promise<() => void>;
   onStatus(cb: (s: Status) => void): Promise<() => void>;
 }
@@ -75,6 +80,9 @@ async function tauri(): Promise<Backend> {
     libraryExport: (path, format) => invoke("library_export", { path, format }),
     latestTranscript: () => invoke("latest_transcript"),
     summarize: (path, target) => invoke("summarize", { path, target }),
+    recoveryScan: () => invoke("recovery_scan"),
+    recoveryMark: (path) => invoke("recovery_mark", { path }),
+    onProblem: (cb) => listen<string>("session-problem", (e) => cb(e.payload)),
     onLine: (cb) => listen<Line>("transcript-line", (e) => cb(e.payload)),
     onStatus: (cb) => listen<Status>("session-status", (e) => cb(e.payload)),
   };
@@ -201,6 +209,13 @@ export function mockBackend(): Backend {
       if (have.length === 1) return { choose: [], toasts: have[0].id === "claude" ? [] : ["Prompt copied. Attach the highlighted file and paste."] };
       return { choose: have, toasts: [] };
     },
+    // "?recover" shows the unexpected-close prompt in the browser preview.
+    recoveryScan: async () =>
+      typeof location !== "undefined" && location.search.includes("recover")
+        ? [{ ...mockLibrary[0], name: "2026-11-19 1100 Team sync", title: "Team sync", status: "in-progress", duration: "" }]
+        : [],
+    recoveryMark: async () => {},
+    onProblem: async () => () => {},
     onLine: async (cb) => ((lineCb = cb), () => {}),
     onStatus: async (cb) => ((statusCb = cb), () => {}),
   };

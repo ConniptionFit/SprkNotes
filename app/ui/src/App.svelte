@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { backend, type Backend } from "./lib/api";
-  import type { Caption, DownloadProgress, HandoffTarget, Line, ModelStatus, Source, Status, Summarized } from "./lib/types";
+  import type { Caption, DownloadProgress, HandoffTarget, LibraryEntry, Line, ModelStatus, Source, Status, Summarized } from "./lib/types";
   import TopBar from "./lib/TopBar.svelte";
   import Controls from "./lib/Controls.svelte";
   import LivePane from "./lib/LivePane.svelte";
@@ -23,6 +23,8 @@
   let hasTranscript = $state(false);
   let choose = $state<{ path: string | null; targets: HandoffTarget[] } | null>(null);
   let notice = $state("");
+  // Transcripts a crash left unfinished, offered once at launch (SPEC 6.4).
+  let recovered = $state<LibraryEntry[]>([]);
   let noticeTimer: ReturnType<typeof setTimeout> | undefined;
   // Assume a model is present until the app says otherwise, so Start never flickers disabled.
   let model = $state<ModelStatus>({ ready: true, downloadEnabled: true, updateCheckEnabled: false, customSource: false, busy: false });
@@ -69,6 +71,10 @@
         }),
       );
       offs.push(await b.onStatus((s) => (status = s)));
+      offs.push(await b.onProblem((kind) => say(problemText(kind))));
+      b.recoveryScan()
+        .then((r) => (recovered = r))
+        .catch(() => {});
       offs.push(
         await b.onModelDownload(async (p) => {
           progress = p;
@@ -146,14 +152,49 @@
     }
   }
 
+  function problemText(kind: string): string {
+    if (kind === "write_failed") return "A line could not be saved to your transcript. Check that the folder can be written to and has free space.";
+    if (kind === "finalize_failed") return "The transcript could not be closed properly. It still holds everything saved so far.";
+    return "Something went wrong with the session.";
+  }
+
   async function start() {
     lines = [];
-    await api?.start(name);
+    try {
+      await api?.start(name);
+    } catch (e) {
+      say(String(e));
+    }
+  }
+
+  async function markFinished() {
+    const all = recovered;
+    recovered = [];
+    try {
+      for (const r of all) await api?.recoveryMark(r.path);
+    } catch (e) {
+      say(String(e));
+    }
   }
 </script>
 
 <main>
   <h1 class="sr-only">SprkNotes</h1>
+  {#if recovered.length > 0 && view === "main" && status === "ready"}
+    <div class="recover" role="alert">
+      <p>
+        SprkNotes closed unexpectedly. {recovered.length === 1 ? "The transcript up to that point was saved." : `${recovered.length} transcripts up to that point were saved.`}
+      </p>
+      <div class="actions">
+        <button
+          onclick={() => {
+            recovered = [];
+            view = "library";
+          }}>Open</button>
+        <button class="quiet" onclick={markFinished}>Mark finished</button>
+      </div>
+    </div>
+  {/if}
   {#if view === "library"}
     <Library {api} {notice} onback={() => (view = "main")} onsummarize={(p) => summarize(p)} />
   {:else if view === "settings"}
@@ -230,6 +271,15 @@
     position: absolute; left: 1.5rem; bottom: 4.5rem; z-index: 10; display: grid; gap: 0.35rem; min-width: 14rem;
     padding: 0.75rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow);
   }
+  .recover {
+    display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+    padding: 0.7rem 1rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow);
+  }
+  .recover p { margin: 0; font-size: 0.95rem; }
+  .recover .actions { display: flex; gap: 0.5rem; }
+  .recover button { padding: 0.45rem 0.8rem; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); }
+  .recover button:hover { background: var(--accent-soft); }
+  .recover .quiet { border-color: transparent; color: var(--muted); }
   .choose p { margin: 0 0 0.15rem; color: var(--muted); font-size: 0.9rem; }
   .choose button { padding: 0.5rem 0.8rem; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); text-align: left; }
   .choose button:hover { background: var(--accent-soft); }
