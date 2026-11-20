@@ -28,7 +28,7 @@ for (const scheme of ["light", "dark"]) {
   await shot(p, `main-ready-${scheme}.png`);
   await p.getByRole("button", { name: /start/i }).click();
   await wait(4200);
-  await p.waitForSelector(".line.live .w"); // a line still being spoken, shown word by word
+  await p.waitForSelector(".line.live .text"); // a line still being spoken, shown word by word
   await shot(p, `main-transcribing-${scheme}.png`);
   await p.getByRole("button", { name: /pause/i }).click();
   await wait(500);
@@ -79,7 +79,7 @@ for (const scheme of ["light", "dark"]) {
   await shot(p, `throwback-ready-${scheme}.png`);
   await p.getByRole("button", { name: /start/i }).click();
   await wait(4200);
-  await p.waitForSelector(".line.live .w");
+  await p.waitForSelector(".line.live .text");
   await shot(p, `throwback-transcribing-${scheme}.png`);
   await p.context().close();
   p = await page(scheme, { h: 900, prefs: tb });
