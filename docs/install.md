@@ -8,13 +8,14 @@ Pick the shortest path that fits. All paths install the same build and never tou
 | [MSI per-user](#b-full-install-msi) | No | No | One person's PC |
 | [MSI per-machine](#b-full-install-msi) | Yes | No | Shared PCs, IT-managed installs |
 | [MSIX](#c-full-install-msix) | No (after trust is set up) | Yes, trusted by the PC | Intune and managed fleets |
+| [Linux](#d-linux-native-build) | No | No | CachyOS, Arch and other desktops; built from source |
 
 For fleets see [deployment.md](deployment.md).
 
 ## Before you start
 - Windows 10 or 11, x64 or ARM64. The portable zip and the installers pick the right build automatically.
 - The Microsoft Edge WebView2 runtime. It ships with Windows 11 and current Windows 10.
-- A transcription model pack (see [Models](#models)). Until one is available the app cannot transcribe.
+- A transcription model pack (see [Models](#models)), or the **Download model** button in Settings. Until one is available the app cannot transcribe.
 - Unsigned builds: Windows shows a SmartScreen warning the first time. See [Unsigned builds](#unsigned-builds).
 
 ## A. Standalone (portable zip)
@@ -65,10 +66,24 @@ Import-Certificate -FilePath .\SprkNotes-signing.cer -CertStoreLocation Cert:\Lo
 ```
 Then double-click the `.msixbundle`, or `Add-AppxPackage .\SprkNotes_<version>.msixbundle`. Remove with `Get-AppxPackage *SprkNotes* | Remove-AppxPackage`. Builds signed with a certificate your PCs already trust need no import. Remove a test certificate afterwards if it was only for testing.
 
+## D. Linux (native build)
+There is no packaged Linux release yet; build it from the repository. You need Rust, Node and the Tauri Linux prerequisites (WebKitGTK), plus these at run time:
+- `parec` (from `pipewire-pulse` or `pulseaudio-utils`): it reads the default output's monitor, which is how **Others** is captured. Without it only your microphone is transcribed.
+- A tray host for the tray icon (`libayatana-appindicator`, or KDE's built-in tray). The app works without one, just with no tray icon.
+- On Wayland the app starts through XWayland so the overlay can be moved and stay on top. Set `SPRKNOTES_WAYLAND=1` to opt out (the overlay may then not hold its position).
+
+Build with the speech engine (fetch the native libraries first, see [dev-environment.md](dev-environment.md)):
+```bash
+scripts/fetch-sherpa.sh
+(cd app/ui && npm ci)
+SHERPA_ONNX_LIB_DIR=$(scripts/fetch-sherpa.sh --print linux-x64) cargo tauri build --features engine   # in app/src-tauri
+```
+Open Settings and press **Download model**, or place a pack under `${XDG_DATA_HOME:-~/.local/share}/SprkNotes/models`. Transcripts go to `~/Documents/SprkNotes/Transcripts`.
+
 ## Models
 SprkNotes loads a transcription model from a `.sprkmodel` pack. Packs are separate from the app and have their own version.
 
-**Easiest: the Download model button.** In the light portable zip or MSI, open Settings and press **Download model**. The app fetches the current Parakeet model and the voice activity model, checks them, and uses them from the next session. At launch it quietly checks whether a newer model exists and tells you. Downloads need https access to the model host (or your organization's mirror) and are blocked while a session is running. Admins can turn this off (`ModelDownload=0`); then use a bundled build or a pack file as below.
+**Easiest: the Download model button.** In the light portable zip, MSI or Linux build, open Settings and press **Download model**. The app fetches the current Parakeet model and the voice activity model (large packs arrive in parts of about 80 MB that are joined and checked against the pack's checksum), imports them as usual, and uses them from the next session. It works the same on Linux. At launch it quietly checks whether a newer model exists and tells you. Downloads need https access to the model host (or your organization's mirror) and are blocked while a session is running. Admins can turn this off (`ModelDownload=0`); then use a bundled build or a pack file as below.
 
 **Offline: bundled build or pack file.** The `with-model` downloads already contain the model. Otherwise install a pack by hand:
 ```powershell
