@@ -356,6 +356,11 @@ fn main() -> anyhow::Result<()> {
         }
     }));
     tauri::Builder::default()
+        // Must be the first plugin. A second launch (shortcut, Start menu, .desktop entry) exits
+        // here and the running copy restores its window, the same path as the tray click.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            shell::open_main(app);
+        }))
         .manage(AppState::default())
         .manage(shell::Shell::default())
         .setup(|app| {
