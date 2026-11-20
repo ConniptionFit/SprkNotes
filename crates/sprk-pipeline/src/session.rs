@@ -81,6 +81,8 @@ pub struct Session {
     state: State,
     stats: Stats,
     captions: Captioner,
+    /// Final captions waiting for the host to send them.
+    final_captions: Vec<Caption>,
 }
 
 impl Session {
@@ -111,6 +113,7 @@ impl Session {
             state: State::Running,
             stats: Stats::default(),
             captions: Captioner::new(),
+            final_captions: Vec::new(),
         }
     }
 
@@ -151,14 +154,40 @@ impl Session {
         let utterances = stream.vad.accept(samples);
         let base = stream.base_ms;
         self.captions.push(source, samples, !utterances.is_empty());
-        self.decode(utterances, base, &speaker);
+        self.decode(utterances, base, &speaker, source);
     }
 
-    fn decode(&mut self, utterances: Vec<sprk_asr::Utterance>, base_ms: u64, speaker: &Speaker) {
+    fn decode(
+        &mut self,
+        utterances: Vec<sprk_asr::Utterance>,
+        base_ms: u64,
+        speaker: &Speaker,
+        source: Source,
+    ) {
         for u in utterances {
             self.stats.utterances += 1;
             match transcribe_utterance(self.engine.as_mut(), &u) {
                 Ok(segs) => {
+                    // The committed decode is also the final caption (ADR-007): same text,
+                    // shown now instead of after the commit delay. Never stored by the captions.
+                    if self.captions.wants(source) {
+                        let text = segs
+                            .iter()
+                            .map(|s| s.text.trim())
+                            .filter(|t| !t.is_empty())
+                            .collect::<Vec<_>>()
+                            .join(" ");
+                        if !text.is_empty() {
+                            let mut c = Caption {
+                                speaker: speaker.clone(),
+                                text,
+                                stable: 0,
+                                is_final: true,
+                            };
+                            c.stable = c.word_count();
+                            self.final_captions.push(c);
+                        }
+                    }
                     for s in segs {
                         if s.text.trim().is_empty() {
                             continue;
@@ -182,13 +211,15 @@ impl Session {
         self.captions.set_wanted(on, me);
     }
 
-    /// In-progress captions that are due. Empty unless running and wanted.
+    /// Captions to show now: finished utterances first (even just after a pause), then the
+    /// in-progress hypotheses that are due. In-progress ones only while running and wanted.
     pub fn captions(&mut self, now_ms: u64) -> Vec<Caption> {
-        if self.state != State::Running {
-            return Vec::new();
+        let mut out = std::mem::take(&mut self.final_captions);
+        if self.state == State::Running {
+            let remote = self.remote.clone();
+            out.extend(self.captions.poll(now_ms, self.engine.as_mut(), &remote));
         }
-        let remote = self.remote.clone();
-        self.captions.poll(now_ms, self.engine.as_mut(), &remote)
+        out
     }
 
     /// Commit whatever has aged past the delay. Call about once a second.
@@ -210,11 +241,11 @@ impl Session {
     fn drain_all(&mut self, now_ms: u64) -> Result<Vec<Segment>, SessionError> {
         let u = self.mic.vad.flush();
         let b = self.mic.base_ms;
-        self.decode(u, b, &Speaker::Me);
+        self.decode(u, b, &Speaker::Me, Source::Mic);
         let u = self.system.vad.flush();
         let b = self.system.base_ms;
         let remote = self.remote.clone();
-        self.decode(u, b, &remote);
+        self.decode(u, b, &remote, Source::System);
         let all = self.commit.flush(now_ms);
         self.write(&all)?;
         Ok(all)
@@ -476,9 +507,14 @@ mod tests {
         s.feed(Source::System, &ONE_SEC);
         s.feed(Source::System, &ONE_SEC);
         let caps = s.captions(1_000);
-        assert_eq!(caps.len(), 1);
-        assert_eq!(caps[0].text, "in progress words");
-        assert_eq!(caps[0].speaker, Speaker::Others);
+        // The two finished utterances come back as final captions, then the live one.
+        assert_eq!(caps.len(), 3);
+        assert!(caps[0].is_final && caps[1].is_final);
+        assert_eq!(caps[0].text, "first line");
+        assert_eq!(caps[0].stable, 2);
+        assert_eq!(caps[2].text, "in progress words");
+        assert!(!caps[2].is_final);
+        assert_eq!(caps[2].speaker, Speaker::Others);
         assert!(log.0.lock().unwrap().is_empty(), "nothing written yet");
         s.pause(2_000).unwrap();
         assert!(s.captions(10_000).is_empty(), "none while paused");

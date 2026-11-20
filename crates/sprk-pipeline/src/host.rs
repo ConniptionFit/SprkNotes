@@ -67,12 +67,40 @@ pub trait Events: Send + Sync {
     fn status(&self, s: UiStatus);
     /// A short, text-free reason (`write_failed`). Never transcript text or names.
     fn problem(&self, kind: &str);
-    /// Live caption text for speech in progress (ADR-006). `speaker` is `Me` or `Others`.
-    /// Never stored or logged by the host. Default: ignore.
-    fn caption(&self, _speaker: &str, _text: &str) {}
+    /// Live caption for speech in progress or just finished (ADR-006, ADR-007). `speaker` is
+    /// `Me` or `Others`. Never stored or logged by the host. Default: ignore.
+    fn caption(&self, _c: &UiCaption) {}
     /// What the UI wants now: `(captions on, include Me)`. Polled by the session thread.
     fn captions_wanted(&self) -> (bool, bool) {
         (false, false)
+    }
+}
+
+/// A live caption for the UI. Each one replaces the previous caption of the same speaker.
+#[derive(Debug, Clone, PartialEq)]
+pub struct UiCaption {
+    /// `Me` or `Others`.
+    pub speaker: &'static str,
+    /// The whole line so far.
+    pub text: String,
+    /// Leading words that are settled; the rest may still change.
+    pub stable: usize,
+    /// Utterance finished: `text` is the committed wording.
+    pub is_final: bool,
+}
+
+fn emit_captions(events: &dyn Events, session: &mut Session, now_ms: u64) {
+    for c in session.captions(now_ms) {
+        events.caption(&UiCaption {
+            speaker: if c.speaker == Speaker::Me {
+                "Me"
+            } else {
+                "Others"
+            },
+            stable: c.stable,
+            is_final: c.is_final,
+            text: c.text,
+        });
     }
 }
 
@@ -354,6 +382,7 @@ fn run(
                 if let Err(e) = session.pause(now_ms(&start)) {
                     problem(e);
                 }
+                emit_captions(events.as_ref(), &mut session, now_ms(&start));
                 events.status(UiStatus::Paused);
             }
             Ok(Cmd::Resume) => {
@@ -389,14 +418,7 @@ fn run(
         drain(&mut capture, &mut session);
         let (cap_on, cap_me) = events.captions_wanted();
         session.set_captions(cap_on, cap_me);
-        for c in session.captions(t) {
-            let who = if c.speaker == Speaker::Me {
-                "Me"
-            } else {
-                "Others"
-            };
-            events.caption(who, &c.text);
-        }
+        emit_captions(events.as_ref(), &mut session, t);
         if let Some(c) = ctx.as_mut() {
             if session.state() == crate::session::State::Running {
                 c.poll(t, &mut session);
@@ -422,6 +444,7 @@ fn run(
     if let Err(e) = session.end(t) {
         problem(e);
     }
+    emit_captions(events.as_ref(), &mut session, t);
     drop(session); // releases the sink's handle on the writer
     if let Some(mut w) = lock(&shared).take() {
         if let Some((name, src)) = title.take() {
