@@ -1,5 +1,7 @@
 # SprkNotes user guide
 
+This is the how-to. For a tour of every feature with more screenshots see [Features and usage](features.md).
+
 ## Look and feel
 The bottom bar shows the SprkNotes mark. **Settings, Appearance, Throwback Mode** switches to the first look: the starburst icon (window and tray), the earlier purple and Segoe UI. Everything works the same either way. (The throwback screenshots below were taken on Linux, where Segoe UI is not installed, so the font differs from Windows.)
 
@@ -29,7 +31,7 @@ SprkNotes needs a transcription model before it can start. If none is installed,
 ![Paused](screenshots/main-paused-light.png)
 
 ### The live line
-The last row of the transcript, marked **live**, shows what is being said right now, word by word. Words the engine is sure of look solid; newer words are lighter and can change as more speech arrives. When the speaker finishes, the live line settles into a normal transcript line. The live line is a preview: it is never saved or logged, and the saved transcript comes only from finished sentences. By default it shows Others only (see [Settings](#settings)).
+The last row of the transcript, marked **live**, shows what is being said right now. Text types out at an even pace; only the last word or two are lighter and can still change. Sentences lock in as they finish (or after about 1.5 seconds, or a pause), stay in normal color, and are quietly replaced by the finished line later. The transcript fills from the bottom, so new rows push older ones up. The live line is a preview: it is never saved or logged, and the saved transcript comes only from finished sentences. By default it shows Others only (see [Settings](#settings)).
 
 ### Dark mode
 Dark mode follows Windows or your desktop, or the choice in Settings.
@@ -37,7 +39,7 @@ Dark mode follows Windows or your desktop, or the choice in Settings.
 ![Dark](screenshots/main-transcribing-dark.png)
 
 ### Scrolling
-The live pane follows new lines while you are near the bottom. Scroll up to read earlier text: it stops moving, and a **Return to live** pill counts new lines. Click it or press **End** to jump back.
+The live pane follows new lines while you are near the bottom. Scroll up to read earlier text: it stops moving (it stops only when you scroll, never because text arrived), and a **Return to live** pill counts new lines. Click it or press **End** to jump back.
 
 ![Return to live](screenshots/main-return-to-live-light.png)
 
@@ -64,11 +66,11 @@ Press the captions button to open a caption bar. It shows the newest lines with 
 Captions are never saved, never logged and do not change the transcript. If the PC cannot keep up, captions switch themselves off for the session and transcribing carries on.
 
 ## The tray icon
-The tray (notification area) icon mirrors the state: ready, transcribing or paused. Click it to bring the window back. Its menu has **Start**, **Pause**, **Resume**, **End**, **Open SprkNotes** and **Quit**, whichever apply.
+The tray (notification area) icon mirrors the state: ready, transcribing or paused. Click it (or double-click on Windows) to bring the window back. Its menu has **Start**, **Pause**, **Resume**, **End**, **Open SprkNotes** and **Quit**, whichever apply.
 
 ![Tray icons: current brand on top, Throwback Mode below, on light and dark backgrounds](screenshots/tray-icons.png)
 
-Closing the window with the X closes the window; hiding to the tray instead is planned, so for now minimize it to keep a session running with the overlay.
+Closing the window with the X hides it to the tray and a running session carries on (if your desktop has no tray, Close minimizes instead). Use **Quit** in the tray menu to exit; it ends a running session first. Minimizing also shows the overlay while a session is running.
 
 ## Settings
 Open **Settings** at the bottom of the window.
@@ -83,7 +85,7 @@ Open **Settings** at the bottom of the window.
 - **Appearance.** System, Light or Dark, and **Throwback Mode** (the first icon, purple and font).
 
   ![Throwback Mode setting](screenshots/settings-throwback-light.png)
-- **Live captions.** Turn captions on the overlay on or off, turn the live line in the main window on or off, and choose **Others only** (default, quickest) or **Others and Me**.
+- **Live captions.** Turn captions on the overlay on or off, turn the live line in the main window on or off, set the **Live text delay** (Fast, Steady or Smoothest; a short wait so words settle and fewer change on screen, under a second on Steady), and choose **Others only** (default, quickest) or **Others and Me**.
 
 ![All settings](screenshots/settings-full-light.png)
 
@@ -119,7 +121,8 @@ Not yet in the Library: folders, rename and delete.
 Same app and windows, with these differences:
 - **Others** is the default output's monitor source, read through PipeWire or PulseAudio (`parec` must be installed).
 - The overlay runs through XWayland on Wayland desktops so it can be moved and stay on top. Set `SPRKNOTES_WAYLAND=1` to opt out.
-- The tray icon needs a tray host (libayatana-appindicator, or KDE's own). Without one the app still works; there is just no tray icon.
+- The tray icon needs a tray host (libayatana-appindicator, or KDE's own). Without one the app still works; there is just no tray icon. Tray hosts built on libayatana-appindicator send no click events, so use the tray menu's **Open SprkNotes**.
+- `packaging/linux/install.sh` adds SprkNotes to your app menu (see [install.md](install.md#d-linux-native-build)).
 - Transcripts go under your Documents folder and models under `$XDG_DATA_HOME/SprkNotes` (or `~/.local/share`).
 
 ## Privacy

@@ -28,11 +28,19 @@ for (const scheme of ["light", "dark"]) {
   await shot(p, `main-ready-${scheme}.png`);
   await p.getByRole("button", { name: /start/i }).click();
   await wait(4200);
-  await p.waitForSelector(".line.live .w"); // a line still being spoken, shown word by word
+  await p.waitForSelector(".line.live .text"); // a line still being spoken, shown word by word
   await shot(p, `main-transcribing-${scheme}.png`);
   await p.getByRole("button", { name: /pause/i }).click();
   await wait(500);
   await shot(p, `main-paused-${scheme}.png`);
+  await p.context().close();
+
+  // Naming a session and turning a source off.
+  p = await page(scheme);
+  await p.getByLabel("Session name").fill("Budget sync");
+  await p.locator(".chip.me input").uncheck({ force: true });
+  await wait(300);
+  await shot(p, `main-named-${scheme}.png`);
   await p.context().close();
 
   // Scrolled up while lines keep arriving: the "Return to live" pill.
@@ -71,7 +79,7 @@ for (const scheme of ["light", "dark"]) {
   await shot(p, `throwback-ready-${scheme}.png`);
   await p.getByRole("button", { name: /start/i }).click();
   await wait(4200);
-  await p.waitForSelector(".line.live .w");
+  await p.waitForSelector(".line.live .text");
   await shot(p, `throwback-transcribing-${scheme}.png`);
   await p.context().close();
   p = await page(scheme, { h: 900, prefs: tb });
@@ -121,6 +129,18 @@ for (const scheme of ["light", "dark"]) {
   await p.getByRole("button", { name: "Start" }).click();
   await wait(5200);
   await shot(p, `overlay-captions-${scheme}.png`, p.locator(".frame"));
+  await p.context().close();
+
+  p = await page(scheme, { w: 420, h: 120, hash: "#mini", prefs: { captionsOn: false } });
+  await p.hover(".orb");
+  await p.getByRole("button", { name: "Start" }).click();
+  await wait(2500);
+  await p.hover(".orb");
+  await p.getByRole("button", { name: "Pause" }).click();
+  await wait(500);
+  await p.hover(".orb");
+  await wait(300);
+  await shot(p, `overlay-paused-${scheme}.png`, p.locator(".frame"));
   await p.context().close();
 
   p = await ov({ captionsWho: "both" });
