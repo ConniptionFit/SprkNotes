@@ -101,7 +101,9 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
 
 /// Switch the tray and window icons between the current brand and Throwback Mode.
 pub fn set_brand(app: &AppHandle, throwback: bool) {
-    app.state::<Shell>().throwback.store(throwback, Ordering::Relaxed);
+    app.state::<Shell>()
+        .throwback
+        .store(throwback, Ordering::Relaxed);
     update_tray(app, &status_of(app));
     if let Some(w) = app.get_webview_window("main") {
         if let Ok(img) = Image::from_bytes(if throwback { OLD_APP } else { ICON_APP }) {
