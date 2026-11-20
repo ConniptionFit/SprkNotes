@@ -161,7 +161,7 @@ fn act(app: &AppHandle, id: &str) {
             let app = app.clone();
             std::thread::spawn(move || {
                 // End first so the transcript is finalized; committed lines are already on disk.
-                let _ = crate::end_session(app.state());
+                let _ = crate::end_session_blocking(&app.state::<crate::AppState>());
                 app.exit(0);
             });
         }
@@ -173,7 +173,7 @@ fn act(app: &AppHandle, id: &str) {
                     "start" => crate::start_session(app.clone(), app.state(), String::new()),
                     "pause" => crate::pause_session(app.state()),
                     "resume" => crate::resume_session(app.state()),
-                    _ => crate::end_session(app.state()),
+                    _ => crate::end_session_blocking(&app.state::<crate::AppState>()),
                 };
                 if r.is_err() {
                     let _ = app.emit("session-problem", "action_failed");

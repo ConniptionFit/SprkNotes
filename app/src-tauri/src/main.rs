@@ -268,13 +268,23 @@ fn set_source(state: State<AppState>, source: String, on: bool) -> Result<(), St
     with_host(&state, |h| h.set_source(s, on))
 }
 
-#[tauri::command]
-fn end_session(state: State<AppState>) -> Result<(), String> {
+/// End the session and wait for the file to be finalized. Blocks: never call it on the main
+/// thread. The session thread's last status update is marshalled to the main thread (tray, mini),
+/// so a main-thread join deadlocks (the Linux "Not Responding" hang).
+fn end_session_blocking(state: &AppState) -> Result<(), String> {
     let host = state.host.lock().map_err(|_| "busy".to_string())?.take();
     match host {
         Some(h) => h.end().map_err(|e| e.to_string()),
         None => Ok(()),
     }
+}
+
+/// Async so Tauri runs it off the main thread; the join happens on a blocking-pool thread.
+#[tauri::command]
+async fn end_session(app: AppHandle) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || end_session_blocking(&app.state::<AppState>()))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 /// The overlay sizes its window to its content (logical pixels).
