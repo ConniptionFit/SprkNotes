@@ -87,6 +87,10 @@ pub struct UiCaption {
     pub stable: usize,
     /// Utterance finished: `text` is the committed wording.
     pub is_final: bool,
+    /// Rows that locked and left the live row since the last caption (ADR-008).
+    pub sealed: Vec<String>,
+    /// Which utterance this belongs to.
+    pub utt: u64,
 }
 
 fn emit_captions(events: &dyn Events, session: &mut Session, now_ms: u64) {
@@ -99,6 +103,8 @@ fn emit_captions(events: &dyn Events, session: &mut Session, now_ms: u64) {
             },
             stable: c.stable,
             is_final: c.is_final,
+            sealed: c.sealed,
+            utt: c.utt,
             text: c.text,
         });
     }

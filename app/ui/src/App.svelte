@@ -10,6 +10,7 @@
   import Library from "./lib/Library.svelte";
   import ModelDownload from "./lib/ModelDownload.svelte";
   import { captionFlags } from "./lib/prefs.svelte";
+  import { Rows, type Row } from "./lib/live";
 
   let api = $state.raw<Backend | undefined>();
   let name = $state("");
@@ -29,22 +30,39 @@
   let updateAvailable = $state(false);
   let checkMessage = $state("");
   let partial = $state<Caption | null>(null);
+  // Sentences that locked in the live view until their committed line arrives (ADR-008).
+  const locked = new Rows();
+  let liveRows = $state<Row[]>([]);
 
   // Ask the engine for partial captions whenever either window wants them.
   $effect(() => {
     api?.setCaptions(...captionFlags()).catch(() => {});
   });
   $effect(() => {
-    if (status === "ready") partial = null;
+    if (status === "ready") {
+      partial = null;
+      locked.clear();
+      liveRows = [];
+    }
   });
 
   onMount(() => {
     const offs: Array<() => void> = [];
     backend.then(async (b) => {
       api = b;
-      offs.push(await b.onLine((l) => (lines = [...lines, l])));
+      offs.push(
+        await b.onLine((l) => {
+          lines = [...lines, l];
+          if (l.kind === "statement") {
+            locked.line(l.speaker, l.text);
+            liveRows = [...locked.rows];
+          }
+        }),
+      );
       offs.push(
         await b.onCaption((c) => {
+          locked.caption(c, Date.now());
+          liveRows = [...locked.rows];
           if (c.final) {
             if (partial?.speaker === c.speaker) partial = null;
           } else partial = c;
@@ -158,7 +176,7 @@
       onrename={(n) => api?.rename(n)}
       onsource={(s: Source, on: boolean) => api?.setSource(s, on)}
     />
-    <LivePane {lines} {status} {partial} needsModel={!model.ready && status === "ready"}>
+    <LivePane {lines} {status} {partial} rows={liveRows} needsModel={!model.ready && status === "ready"}>
       {#snippet empty()}
         <ModelDownload
           compact

@@ -1,6 +1,6 @@
 # ADR-007: Streaming caption hypotheses
 
-Status: accepted (2026-11-20, John's request). Builds on ADR-006.
+Status: accepted (2026-11-20, John's request). Builds on ADR-006. Settling and locking superseded in part by ADR-008.
 
 ## Context
 ADR-006 sent whole replacement lines every ~0.7 s with no hint of which words were reliable, and the finished line only appeared after the commit delay. John wants captions that show words immediately, correct earlier words as confidence grows, and never affect the accuracy of the saved transcript.

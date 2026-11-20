@@ -1,8 +1,9 @@
 <script lang="ts">
-  import { tick, type Snippet } from "svelte";
+  import { onMount, type Snippet } from "svelte";
   import type { Caption, Line, Status } from "./types";
-  import { prefs, setPref, LINE_TEXT } from "./prefs.svelte";
-  import { isNearBottom, initialFollow, onScroll, onLines, returnToLive } from "./follow";
+  import { prefs, setPref, LINE_TEXT, DELAY_MS } from "./prefs.svelte";
+  import { isNearBottom, initialFollow, onScroll, onLines, returnToLive, UP_KEYS, USER_INPUT_WINDOW_MS } from "./follow";
+  import { gate, typed, commonPrefix, type GateWord, type Row } from "./live";
 
   let {
     lines,
@@ -10,66 +11,115 @@
     needsModel = false,
     empty,
     partial = null,
-  }: { lines: Line[]; status?: Status; needsModel?: boolean; empty?: Snippet; partial?: Caption | null } = $props();
+    rows = [],
+  }: { lines: Line[]; status?: Status; needsModel?: boolean; empty?: Snippet; partial?: Caption | null; rows?: Row[] } = $props();
 
-  // The live line: the sentence being spoken, growing word by word at the end of the transcript.
+  // The live row: the sentence being spoken, typed out at the bottom of the transcript.
+  // Locked sentences (`rows`) sit above it; only the last word or two are soft (ADR-008).
   const wanted = (speaker: string) => prefs.captionsWho === "both" || speaker !== "Me";
   const liveOn = $derived(prefs.liveLine && status !== "ready" && partial !== null && wanted(partial.speaker));
-  const liveWords = $derived(partial ? partial.text.split(/\s+/).filter(Boolean) : []);
-  // Words that just changed under the reader get a soft tint for a moment.
-  let fixed = $state<Set<number>>(new Set());
-  let prevWords: string[] = [];
-  $effect(() => {
-    const now = liveWords;
-    const changed: number[] = [];
-    now.forEach((w, i) => {
-      if (i < prevWords.length && prevWords[i] !== w) changed.push(i);
-    });
-    prevWords = now;
-    if (changed.length === 0) return;
-    fixed = new Set([...fixed, ...changed]);
-    setTimeout(() => (fixed = new Set([...fixed].filter((i) => !changed.includes(i)))), 1400);
-  });
+  const shownRows = $derived(rows.filter((r) => wanted(r.speaker)));
   const size = $derived(LINE_TEXT[prefs.lineText]);
   const bump = (d: number) => setPref("lineText", Math.min(LINE_TEXT.length - 1, Math.max(0, prefs.lineText + d)));
 
-  // Keep the live line in view while following.
-  $effect(() => {
-    void liveWords.length;
-    if (liveOn && fs.follow) toBottom(false);
+  // What is visible of the live row right now: gated words, typed a few characters at a time.
+  let shownWords = $state<{ w: string; soft: boolean }[]>([]);
+  let gateState: GateWord[] = [];
+  let typedChars = 0;
+  let lastText = "";
+  let lastFrame = 0;
+  let lastKey = "";
+  const reduce = typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function frame(now: number) {
+    const dt = lastFrame ? Math.min(100, now - lastFrame) : 16;
+    lastFrame = now;
+    const c = liveOn ? partial : null;
+    const words = c ? c.text.split(/\s+/).filter(Boolean) : [];
+    const g = gate(gateState, words, c?.stable ?? 0, now, DELAY_MS[prefs.captionDelay]);
+    gateState = g.next;
+    const text = words.slice(0, g.visible).join(" ");
+    // A correction deletes only what changed; the rest stays typed.
+    typedChars = Math.min(typedChars, commonPrefix(lastText, text));
+    lastText = text;
+    typedChars = reduce ? text.length : typed(typedChars, text.length, dt);
+    const part = text.slice(0, Math.floor(typedChars));
+    const stable = c?.stable ?? 0;
+    const key = part + "|" + stable;
+    if (key !== lastKey) {
+      lastKey = key;
+      shownWords = part ? part.split(" ").map((w, i) => ({ w, soft: i >= stable })) : [];
+    }
+  }
+
+  onMount(() => {
+    let raf = 0;
+    const loop = (t: number) => {
+      frame(t);
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    // Whatever changes the height of the transcript keeps the end in view while following.
+    const ro = new ResizeObserver(() => {
+      if (fs.follow) pin();
+      else lastHeight = box.scrollHeight;
+    });
+    ro.observe(stack);
+    ro.observe(box);
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+    };
   });
 
   let box: HTMLDivElement;
+  let stack: HTMLDivElement;
   let fs = $state(initialFollow);
   let seen = 0;
+  // The reader's own input, so a scroll the app caused is never mistaken for it.
+  let lastInput = 0;
+  let pressed = false;
+  let lastTop = 0;
+  let lastHeight = 0;
 
-  async function toBottom(smooth: boolean) {
-    await tick();
-    box?.scrollTo({ top: box.scrollHeight, behavior: smooth ? "smooth" : "auto" });
+  /** Jump to the end. Instant: an animation would race against text that keeps growing. */
+  function pin() {
+    if (!box) return;
+    box.scrollTop = box.scrollHeight;
+    lastTop = box.scrollTop;
+    lastHeight = box.scrollHeight;
   }
 
   $effect(() => {
     const added = lines.length - seen;
     seen = lines.length;
     if (added <= 0) return;
-    if (fs.follow) toBottom(true);
+    if (fs.follow) pin();
     else fs = onLines(fs, added);
   });
 
+  const touch = () => (lastInput = performance.now());
+
   function handleScroll() {
-    fs = onScroll(fs, isNearBottom(box.scrollTop, box.clientHeight, box.scrollHeight));
+    const byReader = pressed || performance.now() - lastInput < USER_INPUT_WINDOW_MS;
+    // Content getting shorter makes the browser move the view up by itself; that is not the reader.
+    const up = box.scrollTop < lastTop - 1 && box.scrollHeight >= lastHeight - 1;
+    lastTop = box.scrollTop;
+    lastHeight = box.scrollHeight;
+    if (byReader && up) fs = { ...fs, follow: false };
+    else fs = onScroll(fs, isNearBottom(box.scrollTop, box.clientHeight, box.scrollHeight), byReader);
   }
 
   function live() {
     fs = returnToLive();
-    toBottom(true);
+    pin();
   }
 
   function key(e: KeyboardEvent) {
     if (e.key === "End") {
       e.preventDefault();
       live();
-    }
+    } else if (UP_KEYS.includes(e.key)) touch();
   }
 </script>
 
@@ -92,6 +142,11 @@
     bind:this={box}
     onscroll={handleScroll}
     onkeydown={key}
+    onwheel={(e) => e.deltaY < 0 && touch()}
+    ontouchmove={touch}
+    onpointerdown={() => (pressed = true)}
+    onpointerup={() => (pressed = false)}
+    onpointercancel={() => (pressed = false)}
     role="log"
     aria-live="off"
     aria-label="Live transcript"
@@ -99,6 +154,7 @@
     tabindex="0"
     style:--line-size="{size}px"
   >
+    <div class="stack" bind:this={stack}>
     {#each lines as l (l.id)}
       {#if l.kind === "statement"}
         <p class="line" class:me={l.speaker === "Me"} class:others={l.speaker !== "Me"}>
@@ -108,7 +164,7 @@
         <p class="line event"><time>{l.t}</time><span class="text">{l.text}</span></p>
       {/if}
     {:else}
-      {#if !liveOn}
+      {#if !liveOn && shownRows.length === 0}
       <div class="empty">
         <svg viewBox="0 0 48 32" aria-hidden="true"><rect x="4" y="12" width="5" height="8" rx="2.5" /><rect x="13" y="6" width="5" height="20" rx="2.5" /><rect x="22" y="1" width="5" height="30" rx="2.5" /><rect x="31" y="8" width="5" height="16" rx="2.5" /><rect x="40" y="12" width="5" height="8" rx="2.5" /></svg>
         {#if needsModel}
@@ -125,12 +181,18 @@
       </div>
       {/if}
     {/each}
-    {#if liveOn && partial}
+    {#each shownRows as r (r.uid)}
+      <p class="line row" class:me={r.speaker === "Me"} class:others={r.speaker !== "Me"}>
+        <time></time><strong>{r.speaker}</strong><span class="text">{r.text}</span>
+      </p>
+    {/each}
+    {#if liveOn && partial && shownWords.length > 0}
       <p class="line live" class:me={partial.speaker === "Me"} class:others={partial.speaker !== "Me"}>
         <time>live</time><strong>{partial.speaker}</strong>
-        <span class="text">{#each liveWords as w, i (i)}<span class="w" class:tent={i >= partial.stable} class:fixed={fixed.has(i)}>{w + " "}</span>{/each}<i class="caret"></i></span>
+        <span class="text">{#each shownWords as w, i (i)}<span class:soft={w.soft}>{w.w}{" "}</span>{/each}<i class="caret"></i></span>
       </p>
     {/if}
+    </div>
   </div>
   {#if !fs.follow}
     <button class="pill" onclick={live}>
@@ -176,9 +238,18 @@
   .pane {
     flex: 1;
     overflow-y: auto;
-    overflow-anchor: auto;
+    /* The browser's own anchoring fights the app's pinning; the app keeps the end in view. */
+    overflow-anchor: none;
     padding: 0.25rem 0.5rem 0.75rem;
   }
+  /* Bottom anchored: short transcripts sit at the bottom edge, new rows push older ones up. */
+  .stack {
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+  }
+  .stack > .line { flex: none; }
   .line {
     display: grid;
     grid-template-columns: 4.6rem 4.8rem 1fr;
@@ -207,22 +278,20 @@
   .event .text { grid-column: 2 / -1; }
   .live { content-visibility: visible; background: color-mix(in srgb, var(--accent) 7%, transparent); }
   .live time { color: var(--error-text); font-weight: 600; }
-  .w { animation: wordin 0.25s ease-out; }
-  .w.tent { color: var(--muted); text-decoration: underline dotted; text-decoration-color: var(--muted); text-underline-offset: 0.2em; }
-  .w.fixed { background: color-mix(in srgb, var(--accent) 22%, transparent); border-radius: 4px; transition: background 1.2s; }
+  .soft { opacity: 0.6; }
   .caret { display: inline-block; width: 2px; height: 1.05em; margin-left: 1px; vertical-align: text-bottom; background: var(--live); animation: blink 1s steps(2, start) infinite; }
-  @keyframes wordin { from { opacity: 0; } }
+  .row { animation: rowin 0.15s ease-out; }
+  @keyframes rowin { from { opacity: 0.4; } }
   @keyframes blink { to { visibility: hidden; } }
   @media (prefers-reduced-motion: reduce) {
-    .w, .caret { animation: none; }
+    .row, .caret { animation: none; }
   }
   @media (forced-colors: active) {
-    .w.tent { text-decoration: underline dotted; }
-    .w.fixed { outline: 1px solid Highlight; }
+    .soft { opacity: 1; text-decoration: underline dotted; }
     .caret { background: CanvasText; }
   }
   .empty {
-    height: 100%;
+    flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
