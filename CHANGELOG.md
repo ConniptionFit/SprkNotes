@@ -1,6 +1,7 @@
 # Changelog
 
 ## 0.0.1 (unreleased)
+- Overlay caption drawer polish: slightly translucent (86%) so it stays readable over any window; resizable with a hover-only corner handle (drag or arrow keys); magnifier minus and plus buttons for text size; drawer size and text size are remembered across runs (and the pill position as before). When the pill rests in the lower half of the screen the drawer flips above it, the pill stays put, and the handle moves to the upper-right corner. The hover-only buttons now hide about 0.9 s after the pointer leaves or the overlay loses focus (a mouse click used to leave a button focused and pin them open).
 - Live captions, engine side (ADR-006): the session re-decodes the speech in progress (last 10 s, about every 0.7 s, Others by default, Me optional) and the app emits a transient `caption` event. Nothing is written or logged. Backs off when decoding is slow and switches itself off if it cannot keep up. The overlay's `set_captions` flags feed `Events::captions_wanted`.
 - Fix: Download model no longer makes the voice activity pack the active model (it displaced Parakeet to `previous`); only transcription packs are activated.
 - Fix: engine builds (the app and `sprkctl --features engine`) rejected the voice activity pack with `unknown engine 'sherpa-onnx/vad-silero'`, so Download model could not install it. Found by the real download test on the VM; the VAD engine is now in the supported list.

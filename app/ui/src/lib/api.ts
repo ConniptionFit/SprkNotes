@@ -14,7 +14,11 @@ export interface Backend {
   onModelDownload(cb: (p: DownloadProgress) => void): Promise<() => void>;
   onModelUpdate(cb: (u: UpdateInfo) => void): Promise<() => void>;
   /** Overlay only: size the floating window to its content (logical pixels). */
-  miniResize(width: number, height: number): Promise<void>;
+  miniResize(width: number, height: number, flipped: boolean): Promise<void>;
+  /** Overlay only: true when the caption drawer should sit above the pill (pill low on screen). */
+  miniFlipped(): Promise<boolean>;
+  /** Overlay only: the host moved the pill to the other half of the screen. */
+  onMiniFlip(cb: (flipped: boolean) => void): Promise<() => void>;
   /** Tell the engine which caption sources are wanted, so unused ones cost nothing. */
   setCaptions(on: boolean, me: boolean): Promise<void>;
   /** Partial caption text while someone is still speaking (never saved). */
@@ -42,7 +46,9 @@ async function tauri(): Promise<Backend> {
     modelDownload: () => invoke("model_download"),
     onModelDownload: (cb) => listen<DownloadProgress>("model-download", (e) => cb(e.payload)),
     onModelUpdate: (cb) => listen<UpdateInfo>("model-update", (e) => cb(e.payload)),
-    miniResize: (width, height) => invoke("mini_resize", { width, height }),
+    miniResize: (width, height, flipped) => invoke("mini_resize", { width, height, flipped }),
+    miniFlipped: () => invoke<boolean>("mini_flipped"),
+    onMiniFlip: (cb) => listen<boolean>("mini-flip", (e) => cb(e.payload)),
     setCaptions: (on, me) => invoke("set_captions", { on, me }),
     onCaption: (cb) => listen<Caption>("caption", (e) => cb(e.payload)),
     openApp: () => invoke("open_app"),
@@ -77,10 +83,11 @@ export function mockBackend(): Backend {
       step += 1;
       // Partial text grows for a few ticks, then settles into the committed line.
       if (step < 4) {
-        capCb({ speaker: me ? "Me" : "Others", text: words.slice(0, Math.ceil((words.length * step) / 4)).join(" "), final: false });
+        capCb({ speaker: me ? "Me" : "Others", text: words.slice(0, Math.ceil((words.length * step) / 4)).join(" "), stable: Math.max(0, Math.ceil((words.length * step) / 4) - 2), final: false });
         return;
       }
       step = 0;
+      capCb({ speaker: me ? "Me" : "Others", text: full, stable: words.length, final: true });
       lineCb({ kind: "statement", id: id++, t: stamp(), speaker: me ? "Me" : "Others", text: full });
     }, 450);
   };
@@ -132,6 +139,9 @@ export function mockBackend(): Backend {
     onModelDownload: async (cb) => ((dlCb = cb), () => {}),
     onModelUpdate: async () => () => {},
     miniResize: async () => {},
+    // "?flip" lets the browser preview show the drawer above the pill.
+    miniFlipped: async () => typeof location !== "undefined" && location.search.includes("flip"),
+    onMiniFlip: async () => () => {},
     setCaptions: async () => {},
     onCaption: async (cb) => ((capCb = cb), () => {}),
     openApp: async () => {},

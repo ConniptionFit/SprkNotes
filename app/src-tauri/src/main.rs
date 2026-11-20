@@ -45,6 +45,8 @@ enum LinePayload {
 struct CaptionPayload {
     speaker: String,
     text: String,
+    /// Leading words that are settled; the rest are tentative and may change.
+    stable: usize,
     #[serde(rename = "final")]
     is_final: bool,
 }
@@ -84,14 +86,14 @@ impl Events for TauriEvents {
     fn captions_wanted(&self) -> (bool, bool) {
         shell::captions_wanted(&self.0)
     }
-    fn caption(&self, speaker: &str, text: &str) {
-        // In-progress text only; a committed line arrives as `transcript-line` and is the final.
+    fn caption(&self, c: &sprk_pipeline::host::UiCaption) {
         let _ = self.0.emit(
             "caption",
             CaptionPayload {
-                speaker: speaker.to_string(),
-                text: text.to_string(),
-                is_final: false,
+                speaker: c.speaker.to_string(),
+                text: c.text.clone(),
+                stable: c.stable,
+                is_final: c.is_final,
             },
         );
     }
@@ -287,10 +289,17 @@ async fn end_session(app: AppHandle) -> Result<(), String> {
         .map_err(|e| e.to_string())?
 }
 
-/// The overlay sizes its window to its content (logical pixels).
+/// The overlay sizes its window to its content (logical pixels). `flipped` says the caption
+/// drawer is above the pill, so the window grows upward and the pill stays put.
 #[tauri::command]
-fn mini_resize(app: AppHandle, width: f64, height: f64) {
-    shell::resize_mini(&app, width, height);
+fn mini_resize(app: AppHandle, width: f64, height: f64, flipped: bool) {
+    shell::resize_mini(&app, width, height, flipped);
+}
+
+/// Whether the caption drawer currently sits above the pill.
+#[tauri::command]
+fn mini_flipped(app: AppHandle) -> bool {
+    shell::mini_flipped(&app)
 }
 
 /// Which live captions the overlay wants: on or off, and whether to include "Me".
@@ -356,6 +365,7 @@ fn main() -> anyhow::Result<()> {
             rename_session,
             set_source,
             mini_resize,
+            mini_flipped,
             set_captions,
             open_app,
             model_status,
