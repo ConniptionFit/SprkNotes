@@ -100,12 +100,22 @@ pub struct SileroVad {
     /// where the detector noticed speech (its onset lags the real start by a few words' worth
     /// of milliseconds). Capped well above the longest utterance plus the VAD buffer.
     history: std::collections::VecDeque<f32>,
+    /// Added to the detector's own sample positions so they stay absolute across forced cuts.
+    offset: u64,
+    /// Absolute sample index at which the current unbroken run of speech began.
+    speech_since: Option<u64>,
+    /// Longest unbroken run (samples) before the speech is cut even without a pause.
+    force_cut: u64,
 }
 
 /// Samples kept ahead of a detected utterance (0.2 s at 16 kHz).
 const PRE_ROLL: u64 = 3_200;
 /// History cap: longer than the VAD's 60 s internal buffer.
 const HISTORY_MAX: usize = 70 * 16_000;
+/// The detector only honors its maximum speech length at a pause. Speech with no pause for this
+/// many seconds past that maximum is cut anyway, so non-stop talking still commits steadily
+/// instead of waiting for the detector's 60 s buffer (or for End).
+const FORCE_CUT_EXTRA_S: f32 = 5.0;
 
 impl SileroVad {
     pub fn load(m: &Manifest, dir: &Path, max_speech_s: f32) -> Result<Self, AsrError> {
@@ -129,13 +139,16 @@ impl SileroVad {
             vad,
             hist_base: 0,
             history: std::collections::VecDeque::new(),
+            offset: 0,
+            speech_since: None,
+            force_cut: ((max_speech_s + FORCE_CUT_EXTRA_S) * 16_000.0) as u64,
         })
     }
 
     fn drain(&mut self) -> Vec<Utterance> {
         let mut out = Vec::new();
         while let Some(seg) = self.vad.front() {
-            let start = seg.start().max(0) as u64;
+            let start = self.offset + seg.start().max(0) as u64;
             // Prepend pre-roll from history when it still holds those samples.
             let want_from = start.saturating_sub(PRE_ROLL).max(self.hist_base);
             let pre: Vec<f32> = if want_from < start {
@@ -165,7 +178,22 @@ impl Vad for SileroVad {
             self.hist_base += 1;
         }
         self.vad.accept_waveform(samples_16k_mono);
-        self.drain()
+        let mut out = self.drain();
+        let now = self.hist_base + self.history.len() as u64;
+        if self.vad.detected() {
+            let since = *self.speech_since.get_or_insert(now);
+            if now.saturating_sub(since) > self.force_cut {
+                // Release the unbroken speech, then start the detector clean at this point.
+                self.vad.flush();
+                out.extend(self.drain());
+                self.vad.reset();
+                self.offset = now;
+                self.speech_since = None;
+            }
+        } else {
+            self.speech_since = None;
+        }
+        out
     }
     fn flush(&mut self) -> Vec<Utterance> {
         self.vad.flush();
@@ -175,6 +203,8 @@ impl Vad for SileroVad {
         self.vad.reset();
         self.history.clear();
         self.hist_base = 0;
+        self.offset = 0;
+        self.speech_since = None;
         out
     }
 }
