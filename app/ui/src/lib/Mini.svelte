@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { backend, type Backend } from "./api";
-  import type { Caption, Line, Status } from "./types";
+  import type { Caption, Status } from "./types";
   import { prefs, setPref } from "./prefs.svelte";
   import Light from "./Light.svelte";
   import IconButton from "./IconButton.svelte";
@@ -19,6 +19,12 @@
   // Captions: the last few committed lines plus the line still being spoken.
   let finals = $state<{ id: number; speaker: string; text: string }[]>([]);
   let partial = $state<Caption | null>(null);
+
+  let nextId = 0;
+  // Words already on screen per speaker, so only new words fade in, one after another.
+  let seen: Record<string, number> = {};
+  const wordsOf = (c: Caption) => c.text.split(/\s+/).filter(Boolean);
+  const delay = (c: Caption, i: number) => Math.max(0, i - (seen[c.speaker] ?? 0)) * 70;
 
   const wanted = (speaker: string) => prefs.captionsWho === "both" || speaker !== "Me";
   const shown = $derived(finals.filter((l) => wanted(l.speaker)).slice(-MAX_LINES));
@@ -45,14 +51,20 @@
           if (s === "ready") partial = null;
         }),
       );
+      // Finished lines arrive as final captions (the committed wording, shown right away).
       offs.push(
-        await b.onLine((l: Line) => {
-          if (l.kind !== "statement") return;
-          finals = [...finals.slice(-(MAX_LINES * 3)), { id: l.id, speaker: l.speaker, text: l.text }];
-          if (partial?.speaker === l.speaker) partial = null;
+        await b.onCaption((c) => {
+          if (c.final) {
+            finals = [...finals.slice(-(MAX_LINES * 3)), { id: nextId++, speaker: c.speaker, text: c.text }];
+            if (partial?.speaker === c.speaker) partial = null;
+            seen[c.speaker] = 0;
+            return;
+          }
+          partial = c;
+          // Remember how much was already shown, after this render has used the old count.
+          queueMicrotask(() => (seen[c.speaker] = wordsOf(c).length));
         }),
       );
-      offs.push(await b.onCaption((c) => (c.final ? (partial = null) : (partial = c))));
     });
 
     // Elapsed time counts only while transcribing.
@@ -156,7 +168,7 @@
           <p class="cl old">{#if prefs.captionsWho === "both"}<b class="chip" class:me={l.speaker === "Me"}>{l.speaker}</b>{/if}{l.text}</p>
         {/each}
         {#if livePartial}
-          <p class="cl live">{#if prefs.captionsWho === "both"}<b class="chip" class:me={livePartial.speaker === "Me"}>{livePartial.speaker}</b>{/if}{livePartial.text}<i class="caret"></i></p>
+          <p class="cl live">{#if prefs.captionsWho === "both"}<b class="chip" class:me={livePartial.speaker === "Me"}>{livePartial.speaker}</b>{/if}{#each wordsOf(livePartial) as w, i (i)}<span class="w" class:tent={i >= livePartial.stable} style="--d: {delay(livePartial, i)}ms">{w} </span>{/each}<i class="caret"></i></p>
         {:else if shown.length === 0}
           <p class="cl hint">Captions appear here as people speak.</p>
         {/if}
@@ -204,6 +216,10 @@
   .cl { margin: 0; line-height: 1.4; }
   .cl.old { color: var(--muted); }
   .cl.live { color: var(--text); }
+  .w { animation: wordin 160ms ease-out both; animation-delay: var(--d, 0ms); }
+  .w.tent { opacity: 0.72; }
+  @keyframes wordin { from { opacity: 0; transform: translateY(2px); } }
+  @media (prefers-reduced-motion: reduce) { .w { animation: none; } }
   .cl.hint { color: var(--muted); font-size: 0.9rem; }
   .chip { display: inline-block; margin-right: 0.5rem; padding: 0 0.5rem; border-radius: 999px; font-size: 0.7rem; font-weight: 700; background: var(--others-soft); color: var(--others); }
   .chip.me { background: var(--me-soft); color: var(--me); }
