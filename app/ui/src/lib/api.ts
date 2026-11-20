@@ -21,6 +21,8 @@ export interface Backend {
   onMiniFlip(cb: (flipped: boolean) => void): Promise<() => void>;
   /** Tell the engine which caption sources are wanted, so unused ones cost nothing. */
   setCaptions(on: boolean, me: boolean): Promise<void>;
+  /** Swap the tray and window icons between the current brand and Throwback Mode. */
+  setBrand(throwback: boolean): Promise<void>;
   /** Partial caption text while someone is still speaking (never saved). */
   onCaption(cb: (c: Caption) => void): Promise<() => void>;
   /** Mini controller only: bring the main window back. */
@@ -64,6 +66,7 @@ async function tauri(): Promise<Backend> {
     miniFlipped: () => invoke<boolean>("mini_flipped"),
     onMiniFlip: (cb) => listen<boolean>("mini-flip", (e) => cb(e.payload)),
     setCaptions: (on, me) => invoke("set_captions", { on, me }),
+    setBrand: (throwback) => invoke("set_brand", { throwback }),
     onCaption: (cb) => listen<Caption>("caption", (e) => cb(e.payload)),
     openApp: () => invoke("open_app"),
     libraryList: (query) => invoke("library_list", { query }),
@@ -168,6 +171,7 @@ export function mockBackend(): Backend {
     miniFlipped: async () => typeof location !== "undefined" && location.search.includes("flip"),
     onMiniFlip: async () => () => {},
     setCaptions: async () => {},
+    setBrand: async () => {},
     onCaption: async (cb) => ((capCb = cb), () => {}),
     openApp: async () => {},
     libraryList: async (q) => mockLibrary.filter((e) => (e.title + e.name).toLowerCase().includes(q.trim().toLowerCase())),

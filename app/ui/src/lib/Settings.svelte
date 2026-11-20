@@ -63,7 +63,7 @@
     </div>
   </div>
 
-  <div class="panel">
+  <div class="panel stack">
     <div class="row">
       <div class="what">
         <h3>Appearance</h3>
@@ -80,6 +80,22 @@
         ]}
         onchange={(v: Theme) => setPref("theme", v)}
       />
+    </div>
+    <div class="row">
+      <div class="what">
+        <p class="plain">Throwback Mode</p>
+        <p class="help">Bring back the first SprkNotes look: the starburst icon, the earlier purple and Segoe UI.</p>
+      </div>
+      <label class="switch">
+        <input
+          type="checkbox"
+          role="switch"
+          checked={prefs.throwback}
+          onchange={(e) => setPref("throwback", e.currentTarget.checked)}
+        />
+        <span class="track" aria-hidden="true"></span>
+        <span class="sr-only">Use the throwback look</span>
+      </label>
     </div>
   </div>
 

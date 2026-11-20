@@ -1,5 +1,10 @@
+@font-face { font-family: "Outfit"; font-weight: 400; font-display: swap; src: url("./assets/fonts/outfit-400.ttf") format("truetype"); }
+@font-face { font-family: "Outfit"; font-weight: 500; font-display: swap; src: url("./assets/fonts/outfit-500.ttf") format("truetype"); }
+@font-face { font-family: "Outfit"; font-weight: 600 700; font-display: swap; src: url("./assets/fonts/outfit-600.ttf") format("truetype"); }
+
 :root {
-  font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font: "Outfit", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  font-family: var(--font);
   color-scheme: light dark;
   font-size: 15px;
 
@@ -7,11 +12,11 @@
   --surface: #ffffff;
   --surface-2: #efedf4;
   --border: #e2dfea;
-  --text: #1c1a24;
+  --text: #3a373d;
   --muted: #6c687a;
-  --accent: #5b3394;
-  --accent-hover: #4d2a80;
-  --accent-soft: #ece6f7;
+  --accent: #573e8a;
+  --accent-hover: #4a3376;
+  --accent-soft: #ece8f4;
   --on-accent: #ffffff;
   --me: #1f5fa8;
   --me-soft: #e6f0fb;
@@ -38,9 +43,9 @@
     --border: #322e40;
     --text: #efedf5;
     --muted: #9a96ab;
-    --accent: #a98bdc;
-    --accent-hover: #bda3e8;
-    --accent-soft: #2f2745;
+    --accent: #b9a2e6;
+    --accent-hover: #cdbbf0;
+    --accent-soft: #2b2540;
     --on-accent: #1a1228;
     --me: #7db4f0;
     --me-soft: #1d2a3d;
@@ -64,9 +69,9 @@
     --border: #322e40;
     --text: #efedf5;
     --muted: #9a96ab;
-    --accent: #a98bdc;
-    --accent-hover: #bda3e8;
-    --accent-soft: #2f2745;
+    --accent: #b9a2e6;
+    --accent-hover: #cdbbf0;
+    --accent-soft: #2b2540;
     --on-accent: #1a1228;
     --me: #7db4f0;
     --me-soft: #1d2a3d;
@@ -82,6 +87,26 @@
     --warn-soft: #3a2f12;
     --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 16px rgb(0 0 0 / 0.3);
   }
+/* Throwback Mode: the first look (Segoe UI, the earlier purple). Set from Settings, Appearance. */
+:root[data-brand="throwback"] {
+  --font: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --text: #1c1a24;
+  --accent: #5b3394;
+  --accent-hover: #4d2a80;
+  --accent-soft: #ece6f7;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-brand="throwback"]:not([data-theme="light"]) {
+    --accent: #a98bdc;
+    --accent-hover: #bda3e8;
+    --accent-soft: #2f2745;
+  }
+}
+:root[data-brand="throwback"][data-theme="dark"] {
+  --accent: #a98bdc;
+  --accent-hover: #bda3e8;
+  --accent-soft: #2f2745;
+}
 :root[data-theme="light"] { color-scheme: light; }
 
 * { box-sizing: border-box; }

@@ -32,6 +32,12 @@ const FLIP_SETTLE: Duration = Duration::from_millis(220);
 const ICON_READY: &[u8] = include_bytes!("../icons/tray-ready.png");
 const ICON_LIVE: &[u8] = include_bytes!("../icons/tray-transcribing.png");
 const ICON_PAUSED: &[u8] = include_bytes!("../icons/tray-paused.png");
+const ICON_APP: &[u8] = include_bytes!("../icons/icon.png");
+// Throwback Mode: the first icon set.
+const OLD_READY: &[u8] = include_bytes!("../icons/throwback/tray-ready.png");
+const OLD_LIVE: &[u8] = include_bytes!("../icons/throwback/tray-transcribing.png");
+const OLD_PAUSED: &[u8] = include_bytes!("../icons/throwback/tray-paused.png");
+const OLD_APP: &[u8] = include_bytes!("../icons/throwback/icon.png");
 
 /// Session state as the UI sees it: "ready", "transcribing" or "paused".
 #[derive(Default)]
@@ -42,6 +48,8 @@ pub struct Shell {
     /// Live captions wanted by the overlay: (on, include "Me"). Read by the caption path.
     captions_on: AtomicBool,
     captions_me: AtomicBool,
+    /// Throwback Mode: show the first icon set in the tray and on the window.
+    throwback: AtomicBool,
     /// False when the desktop has no system tray (some Linux setups).
     no_tray: AtomicBool,
     /// True when the caption drawer sits above the pill (pill in the lower half of the screen).
@@ -89,6 +97,19 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
         app.state::<Shell>().no_tray.store(true, Ordering::Relaxed);
     }
     Ok(())
+}
+
+/// Switch the tray and window icons between the current brand and Throwback Mode.
+pub fn set_brand(app: &AppHandle, throwback: bool) {
+    app.state::<Shell>()
+        .throwback
+        .store(throwback, Ordering::Relaxed);
+    update_tray(app, &status_of(app));
+    if let Some(w) = app.get_webview_window("main") {
+        if let Ok(img) = Image::from_bytes(if throwback { OLD_APP } else { ICON_APP }) {
+            let _ = w.set_icon(img);
+        }
+    }
 }
 
 /// Called whenever the session status changes (from the session host's events).
@@ -212,10 +233,14 @@ fn update_tray(app: &AppHandle, status: &str) {
     let Some(tray) = app.tray_by_id("main") else {
         return;
     };
-    let (bytes, tip) = match status {
-        "transcribing" => (ICON_LIVE, "SprkNotes is transcribing"),
-        "paused" => (ICON_PAUSED, "Transcription is paused"),
-        _ => (ICON_READY, "SprkNotes is ready"),
+    let old = app.state::<Shell>().throwback.load(Ordering::Relaxed);
+    let (bytes, tip) = match (status, old) {
+        ("transcribing", false) => (ICON_LIVE, "SprkNotes is transcribing"),
+        ("transcribing", true) => (OLD_LIVE, "SprkNotes is transcribing"),
+        ("paused", false) => (ICON_PAUSED, "Transcription is paused"),
+        ("paused", true) => (OLD_PAUSED, "Transcription is paused"),
+        (_, false) => (ICON_READY, "SprkNotes is ready"),
+        (_, true) => (OLD_READY, "SprkNotes is ready"),
     };
     if let Ok(img) = Image::from_bytes(bytes) {
         let _ = tray.set_icon(Some(img));
