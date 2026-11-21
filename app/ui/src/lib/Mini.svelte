@@ -12,6 +12,10 @@
   let api: Backend | undefined;
   let status = $state<Status>("ready");
   let seconds = $state(0);
+  // Real elapsed time while transcribing. Counting timer ticks drifts: a hidden or throttled
+  // webview fires them late, and the clock ran at half speed.
+  let elapsedMs = 0;
+  let lastTick = Date.now();
   let expanded = $state(false);
   let frame: HTMLDivElement;
   let collapseTimer: ReturnType<typeof setTimeout> | undefined;
@@ -53,6 +57,8 @@
         await b.onStatus((s) => {
           if (s === "transcribing" && status === "ready") {
             seconds = 0; // a new session
+            elapsedMs = 0;
+            lastTick = Date.now();
             finals = [];
           }
           status = s;
@@ -85,7 +91,12 @@
 
     // Elapsed time counts only while transcribing.
     const tick = setInterval(() => {
-      if (status === "transcribing") seconds += 1;
+      const now = Date.now();
+      if (status === "transcribing") {
+        elapsedMs += Math.max(0, now - lastTick);
+        seconds = Math.floor(elapsedMs / 1000);
+      }
+      lastTick = now;
     }, 1000);
 
     // The window is sized to its content, so the orb stays put and the window grows around it.
