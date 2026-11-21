@@ -399,7 +399,7 @@ fn run(
             }
             Ok(Cmd::SetSource(s, on)) => {
                 capture.set_enabled(s, on);
-                session.set_source_enabled(s, on);
+                session.set_source_enabled(s, on, now_ms(&start));
             }
             Ok(Cmd::Rename(n)) => {
                 if !n.trim().is_empty() {

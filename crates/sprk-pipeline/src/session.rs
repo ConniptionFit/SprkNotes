@@ -135,11 +135,26 @@ impl Session {
         self.stats
     }
 
-    /// Source toggles (SPEC 4.1). A disabled source's frames are ignored.
-    pub fn set_source_enabled(&mut self, source: Source, on: bool) {
-        match source {
-            Source::Mic => self.mic.enabled = on,
-            Source::System => self.system.enabled = on,
+    /// Source toggles (SPEC 4.1). A disabled source's frames are ignored. Turning one off
+    /// finishes what it was hearing; turning it back on starts its timeline at `now_ms`, so
+    /// lines after the gap carry the right time (they ran early by the length of the gap).
+    pub fn set_source_enabled(&mut self, source: Source, on: bool, now_ms: u64) {
+        let (stream, speaker) = match source {
+            Source::Mic => (&mut self.mic, Speaker::Me),
+            Source::System => (&mut self.system, self.remote.clone()),
+        };
+        if stream.enabled == on {
+            return;
+        }
+        stream.enabled = on;
+        if on {
+            stream.vad = (self.make_vad)();
+            stream.fed = 0;
+            stream.base_ms = now_ms;
+        } else if self.state == State::Running {
+            let u = stream.vad.flush();
+            let base = stream.base_ms;
+            self.decode(u, base, &speaker, source);
         }
     }
 
@@ -445,11 +460,24 @@ mod tests {
     #[test]
     fn disabled_source_is_ignored() {
         let (mut s, log) = make(&["only the mic speaks"]);
-        s.set_source_enabled(Source::System, false);
+        s.set_source_enabled(Source::System, false, 0);
         s.feed(Source::System, &ONE_SEC);
         s.feed(Source::Mic, &ONE_SEC);
         s.end(3_000).unwrap();
         assert_eq!(log.0.lock().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn re_enabled_source_restarts_its_timeline_at_the_toggle() {
+        let (mut s, log) = make(&["before", "after the gap"]);
+        s.feed(Source::Mic, &ONE_SEC);
+        s.set_source_enabled(Source::Mic, false, 2_000);
+        s.feed(Source::Mic, &ONE_SEC); // ignored while off
+        s.set_source_enabled(Source::Mic, true, 32_000);
+        s.feed(Source::Mic, &ONE_SEC);
+        s.end(40_000).unwrap();
+        let l = log.0.lock().unwrap().clone();
+        assert_eq!(l, vec!["0 Me: before", "32000 Me: after the gap"]);
     }
 
     #[test]
