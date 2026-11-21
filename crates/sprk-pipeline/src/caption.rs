@@ -74,6 +74,52 @@ fn norm(text: &str) -> Vec<String> {
         .collect()
 }
 
+/// A word like "Night": first letter upper case, every other letter lower case. Acronyms
+/// ("NASA") and "I" do not count.
+fn is_capitalized(w: &str) -> bool {
+    let mut letters = w.chars().filter(|c| c.is_alphabetic());
+    match letters.next() {
+        Some(f) if f.is_uppercase() => {
+            let rest: Vec<char> = letters.collect();
+            !rest.is_empty() && rest.iter().all(|c| c.is_lowercase())
+        }
+        _ => false,
+    }
+}
+
+/// A short rolling window has little context, so the engine sometimes title-cases a phrase
+/// ("The Night Shift Crew") that the full utterance decode writes in sentence case. Lower a run
+/// of three or more capitalized words inside a sentence so the live line matches the saved one.
+/// The first word of a sentence keeps its capital, and one or two capitalized words in a row
+/// (names, places) are left alone.
+fn tame_title_case(text: &str) -> String {
+    let words: Vec<&str> = text.split_whitespace().collect();
+    let mut out: Vec<String> = words.iter().map(|w| (*w).to_string()).collect();
+    let mut i = 0;
+    while i < words.len() {
+        if !is_capitalized(words[i]) {
+            i += 1;
+            continue;
+        }
+        let mut j = i;
+        while j < words.len() && is_capitalized(words[j]) {
+            j += 1;
+            if ends_sentence(words[j - 1]) {
+                break;
+            }
+        }
+        let starts_sentence = i == 0 || ends_sentence(words[i - 1]);
+        let lead = usize::from(starts_sentence);
+        if j - i - lead >= 3 {
+            for k in (i + lead)..j {
+                out[k] = words[k].to_lowercase();
+            }
+        }
+        i = j;
+    }
+    out.join(" ")
+}
+
 /// One word still on trial.
 #[derive(Debug, Clone)]
 struct Tw {
@@ -390,7 +436,7 @@ impl Captioner {
                 self.slow = 0;
             }
             let text = match text {
-                Ok(t) if !t.is_empty() => t,
+                Ok(t) if !t.is_empty() => tame_title_case(&t),
                 _ => String::new(),
             };
             let lane = self.lane(source);
@@ -412,6 +458,36 @@ impl Captioner {
             }
         }
         out
+    }
+}
+
+#[cfg(test)]
+mod case_tests {
+    use super::*;
+
+    #[test]
+    fn title_cased_phrase_becomes_sentence_case() {
+        assert_eq!(
+            tame_title_case("The Night Shift Crew"),
+            "The night shift crew"
+        );
+        assert_eq!(
+            tame_title_case("we met The Night Shift Crew today"),
+            "we met the night shift crew today"
+        );
+    }
+
+    #[test]
+    fn names_and_acronyms_are_kept() {
+        assert_eq!(tame_title_case("I flew to New York"), "I flew to New York");
+        assert_eq!(
+            tame_title_case("Call NASA about Tuesday"),
+            "Call NASA about Tuesday"
+        );
+        assert_eq!(
+            tame_title_case("Hello. Good Morning Everyone Here"),
+            "Hello. Good morning everyone here"
+        );
     }
 }
 

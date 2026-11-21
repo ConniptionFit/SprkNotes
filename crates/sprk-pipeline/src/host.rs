@@ -392,6 +392,8 @@ fn run(
                 events.status(UiStatus::Paused);
             }
             Ok(Cmd::Resume) => {
+                // Fresh streams: audio buffered through the pause must not be fed as new.
+                capture.restart();
                 if let Err(e) = session.resume(now_ms(&start)) {
                     problem(e);
                 }

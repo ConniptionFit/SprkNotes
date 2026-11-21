@@ -41,13 +41,24 @@ impl Backend for CpalBackend {
     fn default_device(&self, source: Source) -> Option<String> {
         #[cfg(not(windows))]
         if source == Source::System {
-            return monitor::available().then(|| monitor::DEFAULT_MONITOR.to_string());
+            return monitor::default_monitor();
         }
         let d = match source {
             Source::Mic => self.host.default_input_device(),
             Source::System => self.host.default_output_device(),
         };
-        d.and_then(|d| d.name().ok())
+        let name = d.and_then(|d| d.name().ok())?;
+        // ALSA's "default" device keeps its name when the user switches the default input, so
+        // append the sound server's current default source. A switch then looks like a new
+        // device and the stream is reopened (and a "Source changed" line is written).
+        #[cfg(not(windows))]
+        if source == Source::Mic {
+            return Some(monitor::tag_device(
+                &name,
+                monitor::pactl_default("get-default-source"),
+            ));
+        }
+        Some(name)
     }
 
     fn open(&mut self, source: Source, name: &str) -> Result<Box<dyn PcmStream>, AudioError> {
@@ -55,6 +66,7 @@ impl Backend for CpalBackend {
         if source == Source::System {
             return monitor::open(name);
         }
+        let name = monitor_strip(name);
         let device = match source {
             Source::Mic => self
                 .host
@@ -112,6 +124,13 @@ impl Backend for CpalBackend {
     }
 }
 
+/// The device name without the Linux default-source tag (see `monitor::tag_device`).
+fn monitor_strip(name: &str) -> &str {
+    name.split(TAG_SEP).next().unwrap_or(name)
+}
+
+const TAG_SEP: char = '\u{1f}';
+
 /// Linux system audio: the default output's monitor source, read through `parec` (PipeWire and
 /// PulseAudio both serve it). cpal cannot open a render device as an input off Windows.
 #[cfg(not(windows))]
@@ -130,6 +149,41 @@ mod monitor {
             .stderr(Stdio::null())
             .status()
             .is_ok_and(|s| s.success())
+    }
+
+    /// Ask the sound server (`pactl`, served by PipeWire and PulseAudio) for the current default
+    /// sink or source name. None when pactl is missing or answers nothing useful.
+    pub fn pactl_default(which: &str) -> Option<String> {
+        let out = Command::new("pactl")
+            .arg(which)
+            .stderr(Stdio::null())
+            .output()
+            .ok()?;
+        if !out.status.success() {
+            return None;
+        }
+        let name = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        (!name.is_empty()).then_some(name)
+    }
+
+    /// The system source: the default sink's monitor, named explicitly so that switching the
+    /// default output changes the name. Falls back to parec's own `@DEFAULT_MONITOR@`.
+    pub fn default_monitor() -> Option<String> {
+        if !available() {
+            return None;
+        }
+        Some(pactl_default("get-default-sink").map_or_else(
+            || DEFAULT_MONITOR.to_string(),
+            |sink| format!("{sink}.monitor"),
+        ))
+    }
+
+    /// `name` plus the default source, joined so a change in either shows up.
+    pub fn tag_device(name: &str, source: Option<String>) -> String {
+        match source {
+            Some(s) => format!("{name}{TAG_SEP}{s}"),
+            None => name.to_string(),
+        }
     }
 
     struct ParecStream {
@@ -189,5 +243,19 @@ mod monitor {
             }
         });
         Ok(Box::new(ParecStream { child, buf }))
+    }
+}
+
+#[cfg(all(test, not(windows)))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tag_changes_with_the_default_source_and_strips_back() {
+        let a = monitor::tag_device("default", Some("src-a".into()));
+        let b = monitor::tag_device("default", Some("src-b".into()));
+        assert_ne!(a, b);
+        assert_eq!(monitor_strip(&a), "default");
+        assert_eq!(monitor::tag_device("default", None), "default");
     }
 }

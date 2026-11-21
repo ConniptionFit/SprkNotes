@@ -80,6 +80,19 @@ impl LiveCapture {
         }
     }
 
+    /// Close every open stream and drop frames not yet taken; the next [`poll`](Self::poll)
+    /// reopens the default devices without writing a device-change event. Used on resume:
+    /// a stream that ran through a pause still holds audio captured before the resume
+    /// (the sound server's buffer, about 2 s on Linux), and fed as new audio it would stamp
+    /// every later line late.
+    pub fn restart(&mut self) {
+        for s in &mut self.slots {
+            s.open = None;
+        }
+        self.frames.clear();
+        self.last_check_ms = None;
+    }
+
     pub fn take_events(&mut self) -> Vec<CaptureEvent> {
         std::mem::take(&mut self.events)
     }
@@ -247,6 +260,22 @@ mod tests {
         w.lock().unwrap().pending = vec![("headset".into(), vec![0.3])];
         c.poll(1_100);
         assert_eq!(c.next_frame().unwrap().samples, vec![0.3]);
+    }
+
+    #[test]
+    fn restart_drops_stale_audio_and_reopens_quietly() {
+        let (mut c, w) = setup();
+        c.poll(0);
+        // Audio buffered by the old streams while paused.
+        w.lock().unwrap().pending = vec![("mic-a".into(), vec![0.5]), ("spk-a".into(), vec![0.6])];
+        c.restart();
+        assert!(c.next_frame().is_none());
+        c.poll(10);
+        assert_eq!(
+            w.lock().unwrap().opened,
+            vec!["mic-a", "spk-a", "mic-a", "spk-a"]
+        );
+        assert!(c.take_events().is_empty());
     }
 
     #[test]

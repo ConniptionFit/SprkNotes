@@ -127,11 +127,37 @@ fn transcripts_root(app: &AppHandle, policy: &sprk_config::AppPolicy) -> Result<
     if let Some(root) = &policy.transcripts_root {
         return Ok(PathBuf::from(root));
     }
-    let docs = app
-        .path()
-        .document_dir()
-        .map_err(|_| "no Documents folder".to_string())?;
-    Ok(docs.join("SprkNotes").join("Transcripts"))
+    default_transcripts_dir(app.path().document_dir().ok(), app.path().home_dir().ok())
+        .ok_or_else(|| "no Documents folder".to_string())
+}
+
+/// Default transcripts folder: the Documents folder, or `~/Documents` when none is configured
+/// (a fresh home on Linux has no user-dirs entry).
+fn default_transcripts_dir(documents: Option<PathBuf>, home: Option<PathBuf>) -> Option<PathBuf> {
+    let docs = documents.or_else(|| home.map(|h| h.join("Documents")))?;
+    Some(docs.join("SprkNotes").join("Transcripts"))
+}
+
+#[cfg(test)]
+mod default_dir_tests {
+    use super::*;
+
+    #[test]
+    fn uses_documents_when_set() {
+        let got = default_transcripts_dir(Some("/d".into()), Some("/h".into()));
+        assert_eq!(got, Some(PathBuf::from("/d/SprkNotes/Transcripts")));
+    }
+
+    #[test]
+    fn falls_back_to_home_documents() {
+        let got = default_transcripts_dir(None, Some("/h".into()));
+        assert_eq!(got, Some(PathBuf::from("/h/Documents/SprkNotes/Transcripts")));
+    }
+
+    #[test]
+    fn none_when_nothing_known() {
+        assert_eq!(default_transcripts_dir(None, None), None);
+    }
 }
 
 /// Audio source and call context detection (SPEC 18, 19). Windows only; the inputs are built on
