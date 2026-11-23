@@ -32,6 +32,55 @@
     <Property Id="LOCK_UPDATES" Secure="yes" />
     <Property Id="UPDATE_TASK" Secure="yes" />
 
+    <!-- Upgrades keep what an earlier install wrote. The registry values below exist only while their
+         install property is set, and an upgrade usually runs without them (the updater runs
+         "msiexec /i new.msi /qn"), so Windows Installer would drop the admin policy, the lock and the
+         channel with the old version. These searches read the old values back into the properties
+         before costing, unless the caller passed new ones. PM/PU = policy (machine/user),
+         DM/DU = starting default. -->
+    <Property Id="OLD_PM_CHANNEL"><RegistrySearch Id="RsPMCHANNEL" Root="HKLM" Key="Software\Policies\SprkNotes" Name="UpdateChannel" Type="raw" Bitness="always64" /></Property>
+    <Property Id="OLD_PM_REPOURL"><RegistrySearch Id="RsPMREPOURL" Root="HKLM" Key="Software\Policies\SprkNotes" Name="UpdateRepoUrl" Type="raw" Bitness="always64" /></Property>
+    <Property Id="OLD_PM_PROVIDER"><RegistrySearch Id="RsPMPROVIDER" Root="HKLM" Key="Software\Policies\SprkNotes" Name="UpdateProvider" Type="raw" Bitness="always64" /></Property>
+    <Property Id="OLD_PM_MODE"><RegistrySearch Id="RsPMMODE" Root="HKLM" Key="Software\Policies\SprkNotes" Name="UpdateMode" Type="raw" Bitness="always64" /></Property>
+    <Property Id="OLD_PM_KEYS"><RegistrySearch Id="RsPMKEYS" Root="HKLM" Key="Software\Policies\SprkNotes" Name="UpdatePublicKeys" Type="raw" Bitness="always64" /></Property>
+    <Property Id="OLD_DM_CHANNEL"><RegistrySearch Id="RsDMCHANNEL" Root="HKLM" Key="Software\SprkNotes\Defaults" Name="UpdateChannel" Type="raw" Bitness="always64" /></Property>
+    <Property Id="OLD_DM_REPOURL"><RegistrySearch Id="RsDMREPOURL" Root="HKLM" Key="Software\SprkNotes\Defaults" Name="UpdateRepoUrl" Type="raw" Bitness="always64" /></Property>
+    <Property Id="OLD_DM_PROVIDER"><RegistrySearch Id="RsDMPROVIDER" Root="HKLM" Key="Software\SprkNotes\Defaults" Name="UpdateProvider" Type="raw" Bitness="always64" /></Property>
+    <Property Id="OLD_DM_MODE"><RegistrySearch Id="RsDMMODE" Root="HKLM" Key="Software\SprkNotes\Defaults" Name="UpdateMode" Type="raw" Bitness="always64" /></Property>
+    <Property Id="OLD_DM_KEYS"><RegistrySearch Id="RsDMKEYS" Root="HKLM" Key="Software\SprkNotes\Defaults" Name="UpdatePublicKeys" Type="raw" Bitness="always64" /></Property>
+    <Property Id="OLD_PU_CHANNEL"><RegistrySearch Id="RsPUCHANNEL" Root="HKCU" Key="Software\Policies\SprkNotes" Name="UpdateChannel" Type="raw" /></Property>
+    <Property Id="OLD_PU_REPOURL"><RegistrySearch Id="RsPUREPOURL" Root="HKCU" Key="Software\Policies\SprkNotes" Name="UpdateRepoUrl" Type="raw" /></Property>
+    <Property Id="OLD_PU_PROVIDER"><RegistrySearch Id="RsPUPROVIDER" Root="HKCU" Key="Software\Policies\SprkNotes" Name="UpdateProvider" Type="raw" /></Property>
+    <Property Id="OLD_PU_MODE"><RegistrySearch Id="RsPUMODE" Root="HKCU" Key="Software\Policies\SprkNotes" Name="UpdateMode" Type="raw" /></Property>
+    <Property Id="OLD_PU_KEYS"><RegistrySearch Id="RsPUKEYS" Root="HKCU" Key="Software\Policies\SprkNotes" Name="UpdatePublicKeys" Type="raw" /></Property>
+    <Property Id="OLD_DU_CHANNEL"><RegistrySearch Id="RsDUCHANNEL" Root="HKCU" Key="Software\SprkNotes\Defaults" Name="UpdateChannel" Type="raw" /></Property>
+    <Property Id="OLD_DU_REPOURL"><RegistrySearch Id="RsDUREPOURL" Root="HKCU" Key="Software\SprkNotes\Defaults" Name="UpdateRepoUrl" Type="raw" /></Property>
+    <Property Id="OLD_DU_PROVIDER"><RegistrySearch Id="RsDUPROVIDER" Root="HKCU" Key="Software\SprkNotes\Defaults" Name="UpdateProvider" Type="raw" /></Property>
+    <Property Id="OLD_DU_MODE"><RegistrySearch Id="RsDUMODE" Root="HKCU" Key="Software\SprkNotes\Defaults" Name="UpdateMode" Type="raw" /></Property>
+    <Property Id="OLD_DU_KEYS"><RegistrySearch Id="RsDUKEYS" Root="HKCU" Key="Software\SprkNotes\Defaults" Name="UpdatePublicKeys" Type="raw" /></Property>
+    <SetProperty Action="Restore_UPDATE_CHANNEL_PM" Id="UPDATE_CHANNEL" Value="[OLD_PM_CHANNEL]" After="AppSearch" Condition="NOT UPDATE_CHANNEL AND OLD_PM_CHANNEL AND ALLUSERS=1" />
+    <SetProperty Action="Restore_UPDATE_CHANNEL_DM" Id="UPDATE_CHANNEL" Value="[OLD_DM_CHANNEL]" After="AppSearch" Condition="NOT UPDATE_CHANNEL AND OLD_DM_CHANNEL AND ALLUSERS=1" />
+    <SetProperty Action="Restore_UPDATE_CHANNEL_PU" Id="UPDATE_CHANNEL" Value="[OLD_PU_CHANNEL]" After="AppSearch" Condition="NOT UPDATE_CHANNEL AND OLD_PU_CHANNEL AND NOT ALLUSERS=1" />
+    <SetProperty Action="Restore_UPDATE_CHANNEL_DU" Id="UPDATE_CHANNEL" Value="[OLD_DU_CHANNEL]" After="AppSearch" Condition="NOT UPDATE_CHANNEL AND OLD_DU_CHANNEL AND NOT ALLUSERS=1" />
+    <SetProperty Action="Restore_UPDATE_REPO_URL_PM" Id="UPDATE_REPO_URL" Value="[OLD_PM_REPOURL]" After="AppSearch" Condition="NOT UPDATE_REPO_URL AND OLD_PM_REPOURL AND ALLUSERS=1" />
+    <SetProperty Action="Restore_UPDATE_REPO_URL_DM" Id="UPDATE_REPO_URL" Value="[OLD_DM_REPOURL]" After="AppSearch" Condition="NOT UPDATE_REPO_URL AND OLD_DM_REPOURL AND ALLUSERS=1" />
+    <SetProperty Action="Restore_UPDATE_REPO_URL_PU" Id="UPDATE_REPO_URL" Value="[OLD_PU_REPOURL]" After="AppSearch" Condition="NOT UPDATE_REPO_URL AND OLD_PU_REPOURL AND NOT ALLUSERS=1" />
+    <SetProperty Action="Restore_UPDATE_REPO_URL_DU" Id="UPDATE_REPO_URL" Value="[OLD_DU_REPOURL]" After="AppSearch" Condition="NOT UPDATE_REPO_URL AND OLD_DU_REPOURL AND NOT ALLUSERS=1" />
+    <SetProperty Action="Restore_UPDATE_PROVIDER_PM" Id="UPDATE_PROVIDER" Value="[OLD_PM_PROVIDER]" After="AppSearch" Condition="NOT UPDATE_PROVIDER AND OLD_PM_PROVIDER AND ALLUSERS=1" />
+    <SetProperty Action="Restore_UPDATE_PROVIDER_DM" Id="UPDATE_PROVIDER" Value="[OLD_DM_PROVIDER]" After="AppSearch" Condition="NOT UPDATE_PROVIDER AND OLD_DM_PROVIDER AND ALLUSERS=1" />
+    <SetProperty Action="Restore_UPDATE_PROVIDER_PU" Id="UPDATE_PROVIDER" Value="[OLD_PU_PROVIDER]" After="AppSearch" Condition="NOT UPDATE_PROVIDER AND OLD_PU_PROVIDER AND NOT ALLUSERS=1" />
+    <SetProperty Action="Restore_UPDATE_PROVIDER_DU" Id="UPDATE_PROVIDER" Value="[OLD_DU_PROVIDER]" After="AppSearch" Condition="NOT UPDATE_PROVIDER AND OLD_DU_PROVIDER AND NOT ALLUSERS=1" />
+    <SetProperty Action="Restore_UPDATE_MODE_PM" Id="UPDATE_MODE" Value="[OLD_PM_MODE]" After="AppSearch" Condition="NOT UPDATE_MODE AND OLD_PM_MODE AND ALLUSERS=1" />
+    <SetProperty Action="Restore_UPDATE_MODE_DM" Id="UPDATE_MODE" Value="[OLD_DM_MODE]" After="AppSearch" Condition="NOT UPDATE_MODE AND OLD_DM_MODE AND ALLUSERS=1" />
+    <SetProperty Action="Restore_UPDATE_MODE_PU" Id="UPDATE_MODE" Value="[OLD_PU_MODE]" After="AppSearch" Condition="NOT UPDATE_MODE AND OLD_PU_MODE AND NOT ALLUSERS=1" />
+    <SetProperty Action="Restore_UPDATE_MODE_DU" Id="UPDATE_MODE" Value="[OLD_DU_MODE]" After="AppSearch" Condition="NOT UPDATE_MODE AND OLD_DU_MODE AND NOT ALLUSERS=1" />
+    <SetProperty Action="Restore_UPDATE_PUBLIC_KEY_PM" Id="UPDATE_PUBLIC_KEY" Value="[OLD_PM_KEYS]" After="AppSearch" Condition="NOT UPDATE_PUBLIC_KEY AND OLD_PM_KEYS AND ALLUSERS=1" />
+    <SetProperty Action="Restore_UPDATE_PUBLIC_KEY_DM" Id="UPDATE_PUBLIC_KEY" Value="[OLD_DM_KEYS]" After="AppSearch" Condition="NOT UPDATE_PUBLIC_KEY AND OLD_DM_KEYS AND ALLUSERS=1" />
+    <SetProperty Action="Restore_UPDATE_PUBLIC_KEY_PU" Id="UPDATE_PUBLIC_KEY" Value="[OLD_PU_KEYS]" After="AppSearch" Condition="NOT UPDATE_PUBLIC_KEY AND OLD_PU_KEYS AND NOT ALLUSERS=1" />
+    <SetProperty Action="Restore_UPDATE_PUBLIC_KEY_DU" Id="UPDATE_PUBLIC_KEY" Value="[OLD_DU_KEYS]" After="AppSearch" Condition="NOT UPDATE_PUBLIC_KEY AND OLD_DU_KEYS AND NOT ALLUSERS=1" />
+    <SetProperty Action="RestoreLockM" Id="LOCK_UPDATES" Value="1" After="AppSearch" Condition="NOT LOCK_UPDATES AND ALLUSERS=1 AND (OLD_PM_CHANNEL OR OLD_PM_REPOURL OR OLD_PM_PROVIDER OR OLD_PM_MODE OR OLD_PM_KEYS)" />
+    <SetProperty Action="RestoreLockU" Id="LOCK_UPDATES" Value="1" After="AppSearch" Condition="NOT LOCK_UPDATES AND NOT ALLUSERS=1 AND (OLD_PU_CHANNEL OR OLD_PU_REPOURL OR OLD_PU_PROVIDER OR OLD_PU_MODE OR OLD_PU_KEYS)" />
+
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLFOLDER" Name="SprkNotes" />
     </StandardDirectory>
