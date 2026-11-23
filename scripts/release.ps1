@@ -100,7 +100,19 @@ foreach ($a in $arches) {
   if ($LASTEXITCODE -ne 0) { throw "sprkctl build failed ($($a.Name))" }
   # The assistant helper (ADR-009): a separate low-priority program with no network code. It builds
   # on its own because it compiles llama.cpp. Always shipped; the assistant stays off until turned on.
+  # llama.cpp refuses MSVC (cl) on ARM64 ("MSVC on ARM requires GGML_NATIVE=ON, use clang"), so the
+  # arm64 helper is compiled with clang-cl from LLVM (winget install LLVM.LLVM; needs clang-cl and
+  # ninja or the VS Build Tools cmake on PATH). x64 keeps the default MSVC toolchain.
+  $tk = $a.Triple.Replace('-', '_')
+  if ($a.Name -eq 'arm64') {
+    $llvm = Join-Path $env:ProgramFiles 'LLVM\bin'
+    if (Test-Path $llvm) { $env:PATH = "$llvm;$env:PATH"; $env:LIBCLANG_PATH = $llvm }
+    if (-not (Get-Command clang-cl -ErrorAction SilentlyContinue)) { throw 'arm64 assistant helper needs clang-cl (install LLVM)' }
+    Set-Item "env:CC_$tk" 'clang-cl'; Set-Item "env:CXX_$tk" 'clang-cl'
+    if (Get-Command ninja -ErrorAction SilentlyContinue) { $env:CMAKE_GENERATOR = 'Ninja' }
+  }
   cargo build --release --manifest-path crates/sprk-assistant-llama/Cargo.toml --bin sprk-assistant --target $a.Triple
+  Remove-Item "env:CC_$tk", "env:CXX_$tk", env:CMAKE_GENERATOR -ErrorAction SilentlyContinue
   if ($LASTEXITCODE -ne 0) { throw "assistant helper build failed ($($a.Name))" }
   Copy-Item "crates/sprk-assistant-llama/target/$($a.Triple)/release/sprk-assistant.exe" $dir
   Copy-Item "app/src-tauri/target/$($a.Triple)/release/sprknotes.exe" (Join-Path $dir 'SprkNotes.exe')
