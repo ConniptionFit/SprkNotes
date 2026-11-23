@@ -4272,18 +4272,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sprk-update"
-version = "0.1.0"
-dependencies = [
- "hex",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "sprk-models",
- "thiserror 1.0.69",
-]
-
-[[package]]
 name = "sprknotes"
 version = "0.1.0"
 dependencies = [
@@ -4300,7 +4288,6 @@ dependencies = [
  "sprk-models",
  "sprk-pipeline",
  "sprk-transcript",
- "sprk-update",
  "tauri",
  "tauri-build",
  "tauri-plugin-single-instance",
