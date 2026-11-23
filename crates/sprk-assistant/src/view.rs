@@ -139,6 +139,58 @@ pub fn render(
     }
 }
 
+/// Splits a window into pieces that each fit `budget_tokens`, in time order, so a long stretch
+/// can be handled one piece at a time (map, then reduce). A single line bigger than the budget
+/// still gets a piece of its own.
+pub fn render_chunks(
+    lines: &[Line],
+    notes: &[Note],
+    window: (u64, u64),
+    budget_tokens: usize,
+) -> Vec<Rendered> {
+    let mut items: Vec<Item> = lines
+        .iter()
+        .filter(|l| l.t_ms >= window.0 && l.t_ms < window.1)
+        .map(Item::Line)
+        .chain(
+            notes
+                .iter()
+                .filter(|n| n.t_ms >= window.0 && n.t_ms < window.1)
+                .map(Item::Note),
+        )
+        .collect();
+    items.sort_by_key(Item::t);
+    let mut out: Vec<Rendered> = Vec::new();
+    let mut cur: Vec<String> = Vec::new();
+    let mut ids: Vec<u64> = Vec::new();
+    let mut used = 0usize;
+    let flush = |cur: &mut Vec<String>, ids: &mut Vec<u64>, out: &mut Vec<Rendered>| {
+        if !cur.is_empty() {
+            out.push(Rendered {
+                text: cur.join("\n"),
+                line_ids: std::mem::take(ids),
+                truncated: false,
+            });
+            cur.clear();
+        }
+    };
+    for item in &items {
+        let text = item.render();
+        let cost = estimate_tokens(&text) + 1;
+        if used + cost > budget_tokens && !cur.is_empty() {
+            flush(&mut cur, &mut ids, &mut out);
+            used = 0;
+        }
+        used += cost;
+        if let Item::Line(l) = item {
+            ids.push(l.id);
+        }
+        cur.push(text);
+    }
+    flush(&mut cur, &mut ids, &mut out);
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -204,6 +256,18 @@ mod tests {
         let tail = render(&l, &n, (0, u64::MAX), budget, Keep::Tail);
         assert_eq!(tail.line_ids, vec![3]);
         assert!(tail.truncated);
+    }
+
+    #[test]
+    fn chunks_cover_everything_in_order_and_respect_the_budget() {
+        let (l, n) = sample();
+        let one = estimate_tokens("[L1 00:00:01] Me: Let's start with the budget.") + 1;
+        let chunks = render_chunks(&l, &n, (0, u64::MAX), one * 2);
+        let all: Vec<u64> = chunks.iter().flat_map(|c| c.line_ids.clone()).collect();
+        assert_eq!(all, vec![1, 2, 3]);
+        assert!(chunks.len() >= 2);
+        assert!(render_chunks(&l, &n, (0, 100_000), 1000).len() == 1);
+        assert!(render_chunks(&l, &n, (9_000_000, 9_000_001), 1000).is_empty());
     }
 
     #[test]
