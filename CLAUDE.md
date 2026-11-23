@@ -129,6 +129,7 @@ cargo run -p sprkctl -- model list --json
 4. Any decision not already in SPEC.md gets an ADR. Any behavior change updates SPEC.md in the same commit.
 5. Small commits, Conventional Commit messages (`feat(audio): ...`, `fix(writer): ...`).
 6. Never claim something works without running it. Report the command and its output.
+7. Fixes ship to the **alpha** channel first, never straight to stable. Add a bullet under `## Unreleased` in `CHANGELOG.md` with each change (release notes are made from it). Releasing: [docs/releasing.md](docs/releasing.md).
 
 ## Definition of done
 
