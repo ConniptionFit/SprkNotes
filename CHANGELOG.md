@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Fix (Windows): Summarize said "No Claude or Copilot app found" when the apps were installed from the Microsoft Store (MSIX). Store apps register their links through the package, not the classic `HKCR\<scheme>\shell\open\command` key the check looked at. Detection now also accepts a `URL Protocol` marker, the shell's own answer for the link (`AssocQueryString`), and the installed Store package (Claude; Microsoft 365 Copilot app). The Copilot link falls back to `ms-copilot:` when `ms-officeapp:` has no handler. Linux detection is unchanged. Needs a check on the work laptop.
 - Portable distribution source: the repository address the app updates and downloads models from now lives only in `distribution.toml` (compiled in; `SPRK_REPO_URL` and `SPRK_REPO_PROVIDER` override at build time; policy and MSI switches still override at run time). A GitHub copy of the CI workflow (`.github/workflows/ci.yml`) with a parity check, and `docs/forking.md`: a checklist for moving to another repository (keep the MSI `UpgradeCode`) or forking a separately branded edition (new `UpgradeCode` and identifier).
 
 ## 0.1.0
