@@ -17,4 +17,5 @@ jobs:
       - run: . "$HOME/.cargo/env" && cargo clippy --workspace --all-targets --target aarch64-pc-windows-msvc -- -D warnings
       - run: . "$HOME/.cargo/env" && cargo test --workspace
       - run: scripts/check-terms.sh
+      - run: . "$HOME/.cargo/env" && scripts/check-assistant-deps.sh
       - run: . "$HOME/.cargo/env" && scripts/bump-version.sh --check

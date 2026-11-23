@@ -26,7 +26,7 @@ SprkNotes is a lightweight, on-device Windows app that transcribes microphone an
 14. **Model signing is a 1.0 release gate.** Pilot builds may use the hash allow-list (SPEC.md 16.10). Do not tag or package 1.0 unless Ed25519 (OpenSSH SSHSIG) signature enforcement is implemented and tested. Signing goes through the 1Password SSH agent; code never reads or stores a private key.
 15. **Extend through interfaces.** New engines, exporters, calendar providers, filters or handoff targets are added as adapters behind the traits in SPEC.md 17, each with an ADR. Do not branch on specific models or vendors inside the pipeline.
 
-Wording: call them "transcription models", not "LLMs".
+Wording: call speech models "transcription models", not "LLMs". The on-device assistant (ADR-009) is called the "assistant" and its models "assistant models". Its prompts, questions, answers and titles are PHI-grade: never log them, keep question history in memory only.
 
 ---
 

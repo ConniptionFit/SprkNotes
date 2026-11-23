@@ -48,6 +48,8 @@ pub struct ActiveFile {
 pub struct ModelStore {
     root: PathBuf,
     kind: StoreKind,
+    /// Pack kind this store accepts (ADR-010). Transcription unless made with `for_kind`.
+    pack_kind: &'static str,
 }
 
 pub fn id_version(id: &str, version: &str) -> String {
@@ -56,7 +58,24 @@ pub fn id_version(id: &str, version: &str) -> String {
 
 impl ModelStore {
     pub fn new(root: PathBuf, kind: StoreKind) -> Self {
-        Self { root, kind }
+        Self {
+            root,
+            kind,
+            pack_kind: crate::manifest::KIND_TRANSCRIPTION,
+        }
+    }
+
+    /// A store for another pack kind (for example assistant models, in their own folder).
+    pub fn for_kind(root: PathBuf, kind: StoreKind, pack_kind: &'static str) -> Self {
+        Self {
+            root,
+            kind,
+            pack_kind,
+        }
+    }
+
+    pub fn pack_kind(&self) -> &'static str {
+        self.pack_kind
     }
 
     pub fn root(&self) -> &Path {

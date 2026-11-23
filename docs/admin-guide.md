@@ -33,6 +33,11 @@ Linux is a from-source build with no packaged artifact yet (see [install.md](ins
 | `ModelDownload` | 0 turns the "Download model" button and all model network use off (default 1) |
 | `ModelUpdateCheck` | 0 stops the launch-time check for a newer model (default 1) |
 | `ModelIndexUrl` | https address of an internal mirror's `models-index.json` |
+| `AssistantEnabled` | 0 or 1. The on-device assistant is off until turned on (ADR-009) |
+| `AssistantTier` | Largest size allowed: `off`, `titles`, `light`, `standard` or `auto` |
+| `AssistantPinnedModel` | `id@version` forced as the assistant model |
+| `AssistantIdleUnloadMinutes`, `AssistantMaxThreads` | Unload delay (default 5) and a thread cap |
+| `AssistantSaveOutputs`, `AssistantBackground` | May it write notes next to the transcript; may it work in the background |
 | `AudioSourceDetection`, `AudioMergeWindowSeconds`, `AudioSourceExcludePatterns` | Audio source events |
 | `CallContext`, `CallPollSeconds`, `NameOneToOneSpeakers`, `CallMergeWindowSeconds`, `TeamsLocalApi` | Call context |
 

@@ -48,7 +48,7 @@ SprkNotes is a minimal Windows desktop app that transcribes the user's microphon
 - Storing audio of any kind.
 - Identifying individual remote speakers (diarization). Labels are Me / Others only.
 - Languages other than English.
-- Built-in AI summarization (handled by the Claude / Copilot handoff).
+- Cloud or network AI of any kind. (An on-device assistant is in scope, off by default: ADR-009. Higher-quality summaries still go through the Claude / Copilot handoff.)
 - Cloud sync (handled by the Documents folder, which is OneDrive-backed).
 - Auto-update (RMM handles updates).
 

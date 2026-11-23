@@ -79,6 +79,18 @@ pub struct AppPolicy {
     pub model_public_keys: Vec<String>,
     pub allowed_model_hashes: Vec<String>,
     pub keep_model_versions: Option<u64>,
+    /// Assistant on or off (ADR-009). Off unless someone turns it on; `Some` locks the setting.
+    pub assistant_enabled: Option<bool>,
+    /// Largest assistant tier allowed: `off`, `titles`, `light`, `standard` or `auto`.
+    pub assistant_tier: Option<String>,
+    /// `<id>@<version>` or a bare id for the assistant pack.
+    pub assistant_pinned_model: Option<String>,
+    pub assistant_idle_unload_minutes: Option<u64>,
+    pub assistant_max_threads: Option<u64>,
+    /// May the assistant write notes next to the transcript.
+    pub assistant_save_outputs: Option<bool>,
+    /// May the assistant work in the background (rolling summaries) during a session.
+    pub assistant_background: Option<bool>,
 }
 
 /// An app link (`scheme:...`, scheme of two or more characters so `C:` is no link) or an https
@@ -153,6 +165,15 @@ impl AppPolicy {
                 .filter(|h| !h.is_empty())
                 .collect(),
             keep_model_versions: num(s, "KeepModelVersions"),
+            assistant_enabled: flag(s, "AssistantEnabled"),
+            assistant_tier: text("AssistantTier")
+                .map(|v| v.to_ascii_lowercase())
+                .filter(|v| matches!(v.as_str(), "off" | "titles" | "light" | "standard" | "auto")),
+            assistant_pinned_model: text("AssistantPinnedModel"),
+            assistant_idle_unload_minutes: num(s, "AssistantIdleUnloadMinutes"),
+            assistant_max_threads: num(s, "AssistantMaxThreads").filter(|n| *n > 0),
+            assistant_save_outputs: flag(s, "AssistantSaveOutputs"),
+            assistant_background: flag(s, "AssistantBackground"),
         }
     }
 }
@@ -261,5 +282,25 @@ mod tests {
         let p = AppPolicy::load(&l);
         assert_eq!(p.call_context, Some(false));
         assert_eq!(p.filler_removal, Some(false));
+    }
+
+    #[test]
+    fn assistant_keys_parse_and_bad_values_are_ignored() {
+        let p = AppPolicy::load(&fake(&[
+            ("AssistantEnabled", "1"),
+            ("AssistantTier", "Light"),
+            ("AssistantIdleUnloadMinutes", "10"),
+            ("AssistantMaxThreads", "0"),
+            ("AssistantSaveOutputs", "0"),
+            ("AssistantBackground", "maybe"),
+        ]));
+        assert_eq!(p.assistant_enabled, Some(true));
+        assert_eq!(p.assistant_tier.as_deref(), Some("light"));
+        assert_eq!(p.assistant_idle_unload_minutes, Some(10));
+        assert_eq!(p.assistant_max_threads, None);
+        assert_eq!(p.assistant_save_outputs, Some(false));
+        assert_eq!(p.assistant_background, None);
+        let bad = AppPolicy::load(&fake(&[("AssistantTier", "huge")]));
+        assert_eq!(bad.assistant_tier, None);
     }
 }
