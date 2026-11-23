@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Audio source lines: transcripts no longer get `Audio source started/ended` lines (pilot feedback: noise, and the title was wrong). The title was the focused window's, so it flipped as the user changed tabs; a browser's window title is no longer used at all, and other apps use it only when they have a single titled window. Old transcripts still read as before.
 - Portable distribution source: the repository address the app updates and downloads models from now lives only in `distribution.toml` (compiled in; `SPRK_REPO_URL` and `SPRK_REPO_PROVIDER` override at build time; policy and MSI switches still override at run time). A GitHub copy of the CI workflow (`.github/workflows/ci.yml`) with a parity check, and `docs/forking.md`: a checklist for moving to another repository (keep the MSI `UpgradeCode`) or forking a separately branded edition (new `UpgradeCode` and identifier).
 
 ## 0.1.0
