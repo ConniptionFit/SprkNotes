@@ -83,6 +83,15 @@ pub fn is_call_app(exe: &str) -> bool {
     CALL_APPS.iter().any(|c| e == *c)
 }
 
+const BROWSERS: &[&str] = &[
+    "firefox", "chrome", "msedge", "edge", "brave", "opera", "vivaldi", "iexplore", "arc",
+];
+
+pub fn is_browser(exe: &str) -> bool {
+    let e = exe.to_ascii_lowercase();
+    BROWSERS.iter().any(|b| e == *b)
+}
+
 /// Readable app name from an executable stem: `firefox` becomes `Firefox`.
 pub fn display_name(exe: &str) -> String {
     let mut c = exe.chars();
@@ -92,8 +101,8 @@ pub fn display_name(exe: &str) -> String {
     }
 }
 
-/// Title resolver chain, first hit wins (SPEC 18.3): media session, browser tab, window title,
-/// then the app name.
+/// Title resolver chain, first hit wins (SPEC 18.3): media session, browser tab, the window
+/// title of an app with exactly one titled window (never a browser), then the app name.
 pub fn resolve_title(
     s: &AudioSession,
     media: &[MediaSession],
@@ -115,11 +124,17 @@ pub fn resolve_title(
     if let Some(t) = tabs.playing_tab(&s.exe).filter(|t| !t.trim().is_empty()) {
         return strip_browser_suffix(&t);
     }
-    if let Some(w) = windows
-        .iter()
-        .find(|w| w.pid == s.owner_pid && !w.title.trim().is_empty())
-    {
-        return strip_browser_suffix(&w.title);
+    // A window title is only trusted when it cannot belong to something else. A browser's
+    // window title is its focused tab, not the tab that is making sound, and an app with
+    // several windows (Teams, an editor) gives no way to tell which one is playing. In
+    // those cases the title is left out and only the app name is used.
+    if !is_browser(&s.exe) {
+        let mut own = windows
+            .iter()
+            .filter(|w| w.pid == s.owner_pid && !w.title.trim().is_empty());
+        if let (Some(w), None) = (own.next(), own.next()) {
+            return strip_browser_suffix(&w.title);
+        }
     }
     display_name(&s.exe)
 }
@@ -232,7 +247,8 @@ mod tests {
         }
         assert_eq!(resolve_title(&s, &media, &Tab, &win), "Media title");
         assert_eq!(resolve_title(&s, &[], &Tab, &win), "Tab title");
-        assert_eq!(resolve_title(&s, &[], &NoTabs, &win), "Window title");
+        // A browser's window title is its focused tab, so it is never used.
+        assert_eq!(resolve_title(&s, &[], &NoTabs, &win), "Firefox");
         assert_eq!(resolve_title(&s, &[], &NoTabs, &[]), "Firefox");
         // A paused media session is not a hit.
         let paused = vec![MediaSession {
@@ -240,7 +256,62 @@ mod tests {
             title: Some("Old".into()),
             playing: false,
         }];
-        assert_eq!(resolve_title(&s, &paused, &NoTabs, &win), "Window title");
+        assert_eq!(resolve_title(&s, &paused, &NoTabs, &win), "Firefox");
+    }
+
+    #[test]
+    fn window_title_is_used_only_for_a_single_window_non_browser_app() {
+        let s = sess("vlc", 20, 0.2);
+        let one = vec![
+            Window {
+                pid: 20,
+                title: "Lecture 3 - VLC media player".into(),
+            },
+            Window {
+                pid: 99,
+                title: "Other app".into(),
+            },
+        ];
+        assert_eq!(
+            resolve_title(&s, &[], &NoTabs, &one),
+            "Lecture 3 - VLC media player"
+        );
+        let two = vec![
+            Window {
+                pid: 20,
+                title: "Lecture 3".into(),
+            },
+            Window {
+                pid: 20,
+                title: "Settings".into(),
+            },
+        ];
+        assert_eq!(resolve_title(&s, &[], &NoTabs, &two), "Vlc");
+    }
+
+    #[test]
+    fn a_browser_title_does_not_follow_the_focused_tab() {
+        // The user switches tabs while one tab keeps playing: one activity, no title flapping.
+        let mut p = poller();
+        let s = [sess("firefox", 10, 0.2)];
+        let mut ev = Vec::new();
+        for t in (0..=20_000).step_by(250) {
+            let title = if t < 10_000 {
+                "A - Mozilla Firefox"
+            } else {
+                "B - Mozilla Firefox"
+            };
+            let w = [Window {
+                pid: 10,
+                title: title.into(),
+            }];
+            ev.extend(p.poll(t, &s, &[], &NoTabs, &w));
+        }
+        let started = ev
+            .iter()
+            .filter(|e| e.text().starts_with("Audio source started"))
+            .count();
+        assert_eq!(started, 1, "{ev:?}");
     }
 
     #[test]
