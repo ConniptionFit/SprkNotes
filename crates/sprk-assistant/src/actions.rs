@@ -133,6 +133,21 @@ fn verified(item: &ActionItem, evidence: &Evidence, provided: &[u64]) -> bool {
     evidence.check(&claim, &item.cites, provided).is_ok()
 }
 
+/// Reply lines that may hold an item: marked list lines, and bare `ACTION: ...` lines (some models
+/// leave the list marker off).
+fn reply_lines(reply: &str) -> Vec<String> {
+    reply
+        .lines()
+        .flat_map(|l| {
+            if l.trim().to_lowercase().starts_with("action:") {
+                vec![l.trim().to_string()]
+            } else {
+                list_items(l)
+            }
+        })
+        .collect()
+}
+
 /// Extracts action items from the whole transcript (or from `since_ms` on), a piece at a time.
 pub fn extract(
     engine: &mut dyn AssistantEngine,
@@ -151,7 +166,7 @@ pub fn extract(
             data_block("transcript", &chunk.text)
         );
         let reply = complete(engine, control, format, SYSTEM, &user, 400)?;
-        for raw in list_items(&reply) {
+        for raw in reply_lines(&reply) {
             let Some(item) = parse_item(&raw) else {
                 continue;
             };
@@ -206,6 +221,16 @@ mod tests {
             0,
         )
         .unwrap()
+    }
+
+    #[test]
+    fn unmarked_action_lines_are_kept() {
+        let r = "ACTION: send the invoices | OWNER: Me | DUE: Thursday | [L3]\nnoise line";
+        assert_eq!(reply_lines(r).len(), 1);
+        assert_eq!(
+            parse_item(&reply_lines(r)[0]).map(|i| i.cites),
+            Some(vec![3])
+        );
     }
 
     #[test]

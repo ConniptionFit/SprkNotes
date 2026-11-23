@@ -10,6 +10,29 @@ pub fn parse_citations(text: &str) -> Vec<u64> {
     let mut i = 0;
     while i < bytes.len() {
         let c = bytes[i];
+        // A bracket of numbers, with or without the L: [L12], [12], [6, 7, 8].
+        if c == '[' {
+            if let Some(close) = bytes[i + 1..].iter().position(|&b| b == ']') {
+                let inner: String = bytes[i + 1..i + 1 + close].iter().collect();
+                let parts: Vec<&str> = inner
+                    .split(|ch: char| ch == ',' || ch.is_whitespace())
+                    .filter(|p| !p.is_empty())
+                    .collect();
+                let nums: Vec<u64> = parts
+                    .iter()
+                    .filter_map(|p| p.trim_start_matches(['L', 'l']).parse::<u64>().ok())
+                    .collect();
+                if !parts.is_empty() && nums.len() == parts.len() {
+                    for id in nums {
+                        if !out.contains(&id) {
+                            out.push(id);
+                        }
+                    }
+                    i += close + 2;
+                    continue;
+                }
+            }
+        }
         let boundary = i == 0 || !bytes[i - 1].is_alphanumeric();
         if (c == 'L' || c == 'l') && boundary {
             let mut j = i + 1;
@@ -61,7 +84,12 @@ pub fn strip_citations(text: &str) -> String {
         }
     }
     out.push_str(rest);
-    out.split_whitespace().collect::<Vec<_>>().join(" ")
+    let joined = out.split_whitespace().collect::<Vec<_>>().join(" ");
+    // Removing a mark in front of punctuation must not leave a gap ("Thursday .").
+    joined
+        .replace(" .", ".")
+        .replace(" ,", ",")
+        .replace(" ;", ";")
 }
 
 const WEEKDAYS: [&str; 7] = [
@@ -263,6 +291,15 @@ fn number_word_matches(n: &str, source: &BTreeSet<String>) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn bare_numbers_in_brackets_and_tidy_punctuation() {
+        assert_eq!(parse_citations("Done. [10]"), vec![10]);
+        assert_eq!(parse_citations("Done [6, 7, 8]."), vec![6, 7, 8]);
+        assert_eq!(parse_citations("Items [1,2] and [L3]"), vec![1, 2, 3]);
+        assert!(parse_citations("a [note] and [2024 plan]").is_empty());
+        assert_eq!(strip_citations("Due Thursday [L2]."), "Due Thursday.");
+    }
+
     use super::*;
 
     fn lines() -> Vec<Line> {
@@ -295,7 +332,7 @@ mod tests {
     fn citation_marks_are_stripped_but_other_brackets_stay() {
         assert_eq!(
             strip_citations("Send it [L2] today [L3, L4]."),
-            "Send it today ."
+            "Send it today."
         );
         assert_eq!(strip_citations("Use [the form] [L1]"), "Use [the form]");
     }

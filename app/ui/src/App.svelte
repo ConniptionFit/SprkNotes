@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { backend, type Backend } from "./lib/api";
-  import type { Caption, DownloadProgress, HandoffTarget, LibraryEntry, Line, ModelStatus, Source, Status, Summarized } from "./lib/types";
+  import type { AssistantStatus, Caption, DownloadProgress, HandoffTarget, LibraryEntry, Line, ModelStatus, Source, Status, Summarized } from "./lib/types";
   import TopBar from "./lib/TopBar.svelte";
   import Controls from "./lib/Controls.svelte";
   import LivePane from "./lib/LivePane.svelte";
@@ -9,7 +9,8 @@
   import Settings from "./lib/Settings.svelte";
   import Library from "./lib/Library.svelte";
   import ModelDownload from "./lib/ModelDownload.svelte";
-  import { captionFlags } from "./lib/prefs.svelte";
+  import { captionFlags, prefs } from "./lib/prefs.svelte";
+  import Ask from "./lib/Ask.svelte";
   import { Rows, type Row } from "./lib/live";
 
   let api = $state.raw<Backend | undefined>();
@@ -32,6 +33,11 @@
   let updateAvailable = $state(false);
   let checkMessage = $state("");
   let partial = $state<Caption | null>(null);
+  // Ask Sprk: off by default. The panel and the title suggestion only exist when it is ready.
+  let assistant = $state<AssistantStatus | null>(null);
+  let askOpen = $state(false);
+  let titleIdea = $state("");
+  let titleBusy = $state(false);
   // Sentences that locked in the live view until their committed line arrives (ADR-008).
   const locked = new Rows();
   let liveRows = $state<Row[]>([]);
@@ -86,9 +92,46 @@
       );
       offs.push(await b.onModelUpdate((u) => (updateAvailable = u.available)));
       model = await b.modelStatus();
+      await syncAssistant();
     });
     return () => offs.forEach((f) => f());
   });
+
+  async function syncAssistant() {
+    try {
+      await api?.assistantSet(prefs.assistantOn, prefs.assistantTier, prefs.assistantFeatures);
+      assistant = (await api?.assistantStatus()) ?? null;
+    } catch {
+      assistant = null;
+    }
+  }
+  // Settings changes arrive through the saved preferences; look again when leaving Settings.
+  $effect(() => {
+    if (view !== "settings") syncAssistant();
+  });
+  const askReady = $derived(!!assistant && assistant.enabled && assistant.state === "ready");
+  const canTitle = $derived(askReady && !!assistant?.features.includes("title") && status !== "ready" && !name.trim() && lines.length >= 6);
+
+  async function suggestTitle() {
+    if (!api || titleBusy) return;
+    titleBusy = true;
+    titleIdea = "";
+    try {
+      const r = await api.assistantRun({ op: "title" });
+      if (r.kind === "title" && r.text) titleIdea = r.text;
+      else say("Not enough has been said to suggest a title yet.");
+    } catch {
+      say("A title could not be suggested right now.");
+    } finally {
+      titleBusy = false;
+    }
+  }
+
+  function useTitle() {
+    name = titleIdea;
+    titleIdea = "";
+    api?.rename(name);
+  }
 
   async function download() {
     checkMessage = "";
@@ -217,6 +260,17 @@
       onrename={(n) => api?.rename(n)}
       onsource={(s: Source, on: boolean) => api?.setSource(s, on)}
     />
+    {#if canTitle}
+      <div class="titleidea">
+        {#if titleIdea}
+          <span>Title idea: <b>{titleIdea}</b></span>
+          <button onclick={useTitle}>Use it</button>
+          <button class="quiet" onclick={() => (titleIdea = "")}>No thanks</button>
+        {:else}
+          <button class="quiet" disabled={titleBusy} onclick={suggestTitle}>{titleBusy ? "Thinking…" : "Suggest a title"}</button>
+        {/if}
+      </div>
+    {/if}
     <LivePane {lines} {status} {partial} rows={liveRows} needsModel={!model.ready && status === "ready"}>
       {#snippet empty()}
         <ModelDownload
@@ -239,6 +293,8 @@
       onsettings={() => (view = view === "settings" ? "main" : "settings")}
       settingsOpen={view === "settings"}
       onsummarize={() => summarize(null)}
+      onask={askReady ? () => (askOpen = !askOpen) : undefined}
+      {askOpen}
       canSummarize={status === "ready" && hasTranscript}
       summarizeHint={status !== "ready" ? "Available after a session ends" : hasTranscript ? "Summarize your latest transcript" : "No transcript to summarize yet"}
     />
@@ -251,6 +307,9 @@
       onend={() => api?.end()}
     />
   </div>
+  {#if askOpen && askReady && view === "main"}
+    <Ask {api} {lines} features={assistant?.features ?? []} onclose={() => (askOpen = false)} />
+  {/if}
   {#if choose}
     <div class="choose" role="dialog" aria-label="Choose an app">
       <p>Summarize with</p>
@@ -271,6 +330,10 @@
     position: absolute; left: clamp(1.5rem, 4vw, 4rem); bottom: 4.5rem; z-index: 10; display: grid; gap: 0.35rem; min-width: 14rem;
     padding: 0.75rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow);
   }
+  .titleidea { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+  .titleidea button { padding: 0.35rem 0.75rem; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text); }
+  .titleidea button:hover:not(:disabled) { background: var(--accent-soft); }
+  .titleidea .quiet { color: var(--muted); }
   .recover {
     display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
     padding: 0.7rem 1rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow);

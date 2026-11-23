@@ -1737,6 +1737,8 @@ dependencies = [
  "serde",
  "serde_json",
  "sprk-config",
+ "sprk-models",
+ "tempfile",
  "thiserror 1.0.69",
 ]
 
