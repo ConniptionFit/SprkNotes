@@ -76,6 +76,11 @@ foreach ($a in $arches) {
   Pop-Location
   cargo build --release -p sprkctl --target $a.Triple --features 'engine-shared,live'
   if ($LASTEXITCODE -ne 0) { throw "sprkctl build failed ($($a.Name))" }
+  # The assistant helper (ADR-009): a separate low-priority program with no network code. It builds
+  # on its own because it compiles llama.cpp. Always shipped; the assistant stays off until turned on.
+  cargo build --release --manifest-path crates/sprk-assistant-llama/Cargo.toml --bin sprk-assistant --target $a.Triple
+  if ($LASTEXITCODE -ne 0) { throw "assistant helper build failed ($($a.Name))" }
+  Copy-Item "crates/sprk-assistant-llama/target/$($a.Triple)/release/sprk-assistant.exe" $dir
   Copy-Item "app/src-tauri/target/$($a.Triple)/release/sprknotes.exe" (Join-Path $dir 'SprkNotes.exe')
   Copy-Item "target/$($a.Triple)/release/sprkctl.exe" $dir
   Get-ChildItem $a.Sherpa -Filter *.dll | Copy-Item -Destination $dir
@@ -84,7 +89,7 @@ foreach ($a in $arches) {
   Copy-Item THIRD_PARTY_NOTICES.md, LICENSE $dir
   Copy-Item packaging/ninja/Install-SprkModel.ps1 $dir
   if ($ModelsDir) { Copy-Item $ModelsDir (Join-Path $dir 'models') -Recurse }
-  Sign (Join-Path $dir 'SprkNotes.exe'); Sign (Join-Path $dir 'sprkctl.exe')
+  Sign (Join-Path $dir 'SprkNotes.exe'); Sign (Join-Path $dir 'sprkctl.exe'); Sign (Join-Path $dir 'sprk-assistant.exe')
 }
 
 # Launcher for the portable zip (x64 build; runs emulated on ARM64 and starts the native build).
