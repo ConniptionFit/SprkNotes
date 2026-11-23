@@ -85,3 +85,42 @@ Compare the version with `release-manifest.json` and check file hashes against `
 
 ## Remove
 MSI or script uninstall as above; MSIX via `Remove-AppxPackage`; portable by deleting the folder. Transcripts are never deleted by uninstalling. Policy keys stay until you remove them.
+
+## Updates, channels and locking
+SprkNotes updates from the releases of a repository (Forgejo by default, GitHub supported). Design and options: [ADR-011](adr/011-app-updates.md) and [enterprise-install-research.md](enterprise-install-research.md).
+
+**How a release is found.** Tags `vX.Y.Z` are stable, `vX.Y.Z-beta.N` beta, `vX.Y.Z-alpha.N` alpha. A release must carry `update-manifest.json` (and `update-manifest.json.sig` when signed). A channel includes the more stable ones, and the app never downgrades.
+
+### Policy keys (`HKLM\Software\Policies\SprkNotes`, or the user hive)
+| Key | Type | Meaning |
+|---|---|---|
+| `UpdateMode` | string | `off` (no update traffic), `notify` (default for one user), `auto` (install quietly when the app is not in use), `force` (like auto; users cannot change it) |
+| `UpdateChannel` | string | `stable`, `beta` or `alpha`. Locks the Settings control |
+| `UpdateRepoUrl` | string | https address of the repository (for example `https://git.pwrs.dev/powers/sprknotes`). Locks the control |
+| `UpdateProvider` | string | `forgejo` or `github`; only needed when the address does not make it obvious (GitHub Enterprise) |
+| `UpdatePublicKeys` | string or multi-string | OpenSSH `ssh-ed25519 ...` keys allowed to sign update manifests. When set, unsigned updates are refused |
+| `UpdateCheckHours` | dword | Hours between checks (default 24) |
+
+A value set by policy wins and its control shows as managed. Order: policy, the user's choice, installer defaults, built-in defaults (stable, notify, the SprkNotes repository). An ADMX draft is in `packaging/admx` (not yet tried in Intune or gpedit).
+
+### Install switches (MSI)
+```powershell
+msiexec /i SprkNotes_<ver>_x64.msi ALLUSERS=1 /qn /norestart `
+  UPDATE_CHANNEL=beta UPDATE_REPO_URL="https://git.pwrs.dev/powers/sprknotes" UPDATE_MODE=auto LOCK_UPDATES=1
+```
+| Switch | Effect |
+|---|---|
+| `UPDATE_CHANNEL`, `UPDATE_REPO_URL`, `UPDATE_PROVIDER`, `UPDATE_MODE`, `UPDATE_PUBLIC_KEY` | Preconfigure the setting |
+| `LOCK_UPDATES=1` | Write them as policy (locked in Settings). Without it they are starting values the user may change. A real lock needs a per-machine install (HKLM); a per-user install writes the user's own hive |
+| `UPDATE_TASK=0` | Per-machine only: do not create the update task (use when Intune or an RMM pushes updates) |
+
+`Install-SprkNotes.ps1` and `install.ps1` take the same options as parameters.
+
+### Per-machine installs update themselves
+A per-machine MSI registers the scheduled task `SprkNotes\Update` (runs as SYSTEM every 6 hours, no window). It runs `SprkNotes.exe --update`: check on the `UpdateCheckHours` interval, download, verify the SHA-256 and signature, and install only when nobody has SprkNotes open. If it is open, the verified installer waits for the next run. Per-machine installs start in `auto` mode; set `UpdateMode=off` or `UPDATE_TASK=0` to manage versions yourself. Check it: `schtasks /Query /TN "SprkNotes\Update" /V`. Install logs: `%LocalAppData%\SprkNotes\updates\install.log` (the SYSTEM profile for the task). Firewalls need the release host (`git.pwrs.dev`, or `github.com` and `api.github.com`).
+
+### Early-release groups
+Give the pilot group `UpdateChannel=beta` (or `alpha`) by policy or MSI switch; everyone else stays on `stable`. Moving a group back to stable keeps its current build until a newer stable release appears.
+
+### Publishing a release (maintainers)
+Set the workspace version (`scripts/bump-version.sh 0.3.0` or `0.3.0-beta.1`), then `scripts/release.ps1 -UpdateSigningKey <path to the .pub key>` (signs through your ssh-agent; the private key never touches disk). Create the Forgejo release with the matching tag (`v0.3.0-beta.1`, marked pre-release), and attach `update-manifest.json`, `update-manifest.json.sig` and each MSI renamed `<name>.msi.zip` (Forgejo only accepts some file types; the manifest records the exact names).

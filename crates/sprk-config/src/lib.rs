@@ -94,6 +94,18 @@ pub struct AppPolicy {
     /// Comma separated allow-list of assistant features (`title,recap,actions,ask,agenda,...`).
     /// Absent means the user decides; present means only these can be turned on.
     pub assistant_features: Option<String>,
+    /// App updates (ADR-011): `off`, `notify`, `auto` or `force`. `Some` locks the setting.
+    pub update_mode: Option<String>,
+    /// Release channel: `stable`, `beta` or `alpha`. `Some` locks the setting.
+    pub update_channel: Option<String>,
+    /// https address of the repository releases come from. `Some` locks the setting.
+    pub update_repo_url: Option<String>,
+    /// `forgejo` or `github`. Inferred from the address when absent.
+    pub update_provider: Option<String>,
+    /// OpenSSH `ssh-ed25519 ...` public keys that may sign update manifests.
+    pub update_public_keys: Vec<String>,
+    /// Hours between checks (default 24, at least 1).
+    pub update_check_hours: Option<u64>,
 }
 
 /// An app link (`scheme:...`, scheme of two or more characters so `C:` is no link) or an https
@@ -111,6 +123,29 @@ fn safe_link(v: &str) -> bool {
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'+' | b'.'))
         && !matches!(scheme, "http" | "file" | "javascript" | "data")
+}
+
+/// Starting values the installer can set (MSI `UPDATE_*` switches). They never lock a setting:
+/// they apply until the user picks something else.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct InstallDefaults {
+    pub update_mode: Option<String>,
+    pub update_channel: Option<String>,
+    pub update_repo_url: Option<String>,
+    pub update_provider: Option<String>,
+}
+
+impl InstallDefaults {
+    pub fn load(s: &dyn PolicyStore) -> Self {
+        // Same validation as policy, so one rule set covers both.
+        let p = AppPolicy::load(s);
+        Self {
+            update_mode: p.update_mode,
+            update_channel: p.update_channel,
+            update_repo_url: p.update_repo_url,
+            update_provider: p.update_provider,
+        }
+    }
 }
 
 fn flag(s: &dyn PolicyStore, k: &str) -> Option<bool> {
@@ -178,6 +213,24 @@ impl AppPolicy {
             assistant_save_outputs: flag(s, "AssistantSaveOutputs"),
             assistant_background: flag(s, "AssistantBackground"),
             assistant_features: text("AssistantFeatures"),
+            update_mode: text("UpdateMode")
+                .map(|v| v.to_ascii_lowercase())
+                .filter(|v| matches!(v.as_str(), "off" | "notify" | "auto" | "force")),
+            update_channel: text("UpdateChannel")
+                .map(|v| v.to_ascii_lowercase())
+                .filter(|v| matches!(v.as_str(), "stable" | "beta" | "alpha")),
+            update_repo_url: text("UpdateRepoUrl")
+                .filter(|v| v.to_ascii_lowercase().starts_with("https://")),
+            update_provider: text("UpdateProvider")
+                .map(|v| v.to_ascii_lowercase())
+                .filter(|v| matches!(v.as_str(), "forgejo" | "github")),
+            update_public_keys: s
+                .get_multi("UpdatePublicKeys")
+                .into_iter()
+                .map(|k| k.trim().to_string())
+                .filter(|k| !k.is_empty())
+                .collect(),
+            update_check_hours: num(s, "UpdateCheckHours").filter(|n| *n >= 1),
         }
     }
 }
@@ -306,5 +359,31 @@ mod tests {
         assert_eq!(p.assistant_background, None);
         let bad = AppPolicy::load(&fake(&[("AssistantTier", "huge")]));
         assert_eq!(bad.assistant_tier, None);
+    }
+
+    #[test]
+    fn update_keys_parse_and_bad_values_are_ignored() {
+        let p = AppPolicy::load(&fake(&[
+            ("UpdateMode", "Force"),
+            ("UpdateChannel", "BETA"),
+            ("UpdateRepoUrl", "https://git.pwrs.dev/powers/sprknotes"),
+            ("UpdateProvider", "github"),
+            ("UpdateCheckHours", "6"),
+        ]));
+        assert_eq!(p.update_mode.as_deref(), Some("force"));
+        assert_eq!(p.update_channel.as_deref(), Some("beta"));
+        assert_eq!(p.update_provider.as_deref(), Some("github"));
+        assert_eq!(p.update_check_hours, Some(6));
+        assert!(p.update_repo_url.is_some());
+        let q = AppPolicy::load(&fake(&[
+            ("UpdateMode", "sometimes"),
+            ("UpdateChannel", "nightly"),
+            ("UpdateRepoUrl", "http://insecure/x/y"),
+            ("UpdateCheckHours", "0"),
+        ]));
+        assert_eq!(q.update_mode, None);
+        assert_eq!(q.update_channel, None);
+        assert_eq!(q.update_repo_url, None);
+        assert_eq!(q.update_check_hours, None);
     }
 }

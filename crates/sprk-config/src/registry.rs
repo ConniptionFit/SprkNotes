@@ -10,18 +10,41 @@ use windows::Win32::System::Registry::{
 
 pub struct RegistryPolicy {
     machine: bool,
+    /// Installer defaults (`Software\SprkNotes\Defaults`) instead of policy. Defaults never lock anything.
+    defaults: bool,
 }
 
 impl RegistryPolicy {
     pub fn machine() -> Self {
-        Self { machine: true }
+        Self {
+            machine: true,
+            defaults: false,
+        }
     }
     pub fn user() -> Self {
-        Self { machine: false }
+        Self {
+            machine: false,
+            defaults: false,
+        }
     }
     /// Machine policy first, then user policy.
     pub fn layered() -> Layered<RegistryPolicy, RegistryPolicy> {
         Layered(Self::machine(), Self::user())
+    }
+
+    /// Installer defaults: machine first, then user. Written by the MSI switches (`UPDATE_CHANNEL`
+    /// and friends); the user can still change what they allow.
+    pub fn defaults_layered() -> Layered<RegistryPolicy, RegistryPolicy> {
+        Layered(
+            Self {
+                machine: true,
+                defaults: true,
+            },
+            Self {
+                machine: false,
+                defaults: true,
+            },
+        )
     }
 
     fn raw(&self, name: &str) -> Option<(REG_VALUE_TYPE, Vec<u8>)> {
@@ -30,18 +53,15 @@ impl RegistryPolicy {
         } else {
             HKEY_CURRENT_USER
         };
+        let subkey = if self.defaults {
+            w!("Software\\SprkNotes\\Defaults")
+        } else {
+            w!("Software\\Policies\\SprkNotes")
+        };
         let wide: Vec<u16> = name.encode_utf16().chain(std::iter::once(0)).collect();
         let mut key = HKEY::default();
         // SAFETY: the subkey literal and `key` outlive the call; the handle is closed below.
-        let opened = unsafe {
-            RegOpenKeyExW(
-                hive,
-                w!("Software\\Policies\\SprkNotes"),
-                0,
-                KEY_READ,
-                &mut key,
-            )
-        };
+        let opened = unsafe { RegOpenKeyExW(hive, subkey, 0, KEY_READ, &mut key) };
         if opened != ERROR_SUCCESS {
             return None;
         }

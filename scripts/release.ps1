@@ -16,6 +16,13 @@
   or passwords in the repo.
 .PARAMETER Publisher
   MSIX publisher, must equal the certificate subject (for example "CN=Contoso IT").
+.PARAMETER UpdateSigningKey
+  Path to the PUBLIC key file (.pub) of the key that signs update manifests. Signing goes through
+  ssh-keygen and your ssh-agent (1Password), so no private key is read here. Without it the
+  manifest is written unsigned, which only pilot builds accept.
+.PARAMETER UploadSuffix
+  Appended to the MSI file name in the update manifest. Forgejo only accepts some file types as
+  release attachments, so MSIs are uploaded as `<name>.msi.zip` (default). Use '' for GitHub.
 .PARAMETER TimestampUrl
   Optional RFC 3161 timestamp server used by signtool on the build host.
 #>
@@ -28,6 +35,8 @@ param(
   [string]$CertThumbprint = $env:SPRK_SIGN_THUMBPRINT,
   [string]$Publisher = 'CN=SprkNotes Dev',
   [string]$TimestampUrl,
+  [string]$UpdateSigningKey,
+  [string]$UploadSuffix = '.zip',
   [switch]$SkipMsix,
   [switch]$SkipMsi
 )
@@ -44,6 +53,19 @@ function Get-WorkspaceVersion {
   throw 'No version in [workspace.package] of Cargo.toml'
 }
 $ver = Get-WorkspaceVersion
+# MSI and MSIX versions are numbers only. A stable x.y.z stays x.y.z (MSIX: x.y.z.0); x.y.z-beta.N
+# becomes x.y.z.(1000+N) and x.y.z-alpha.N becomes x.y.z.N (same mapping as
+# sprk_update::Version::msi_version). Windows Installer ignores the fourth field when ordering
+# upgrades, so the MSI allows same-version upgrades and the updater, not the MSI, decides order.
+function ConvertTo-FourPart($v) {
+  if ($v -match '^(\d+\.\d+\.\d+)$') { return $v }
+  if ($v -match '^(\d+\.\d+\.\d+)-beta\.(\d+)$') { return "$($Matches[1]).$(1000 + [Math]::Min([int]$Matches[2], 999))" }
+  if ($v -match '^(\d+\.\d+\.\d+)-alpha\.(\d+)$') { return "$($Matches[1]).$([Math]::Min([int]$Matches[2], 999))" }
+  throw "Version '$v' must be x.y.z, x.y.z-beta.N or x.y.z-alpha.N"
+}
+$ver4 = ConvertTo-FourPart $ver
+$msix4 = if ($ver4 -match '^\d+\.\d+\.\d+$') { "$ver4.0" } else { $ver4 }
+$channel = if ($ver -like '*-alpha.*') { 'alpha' } elseif ($ver -like '*-beta.*') { 'beta' } else { 'stable' }
 Write-Host "SprkNotes release $ver"
 
 $arches = @(
@@ -103,7 +125,7 @@ if (-not $SkipMsi) {
   foreach ($a in $arches) {
     $msi = Join-Path $Out "SprkNotes_${ver}_$($a.Name).msi"
     # WiX v5 is pinned: v7+ refuses to build until a person accepts the OSMF EULA.
-    wix build packaging/wix/Package.wxs -arch $a.Name -d "Version=$ver" -d "StageDir=$((Resolve-Path (Join-Path $stage $a.Name)).Path)" -pdbtype none -o $msi
+    wix build packaging/wix/Package.wxs -arch $a.Name -d "Version=$ver4" -d "StageDir=$((Resolve-Path (Join-Path $stage $a.Name)).Path)" -pdbtype none -o $msi
     if ($LASTEXITCODE -ne 0) { throw "wix build failed ($($a.Name))" }
     Sign $msi
     $artifacts += $msi
@@ -131,7 +153,7 @@ if (-not $SkipMsix) {
     Resize assets/icon-1024.png (Join-Path $assets 'Square44x44Logo.png') 44
     Resize assets/icon-1024.png (Join-Path $assets 'Square150x150Logo.png') 150
     (Get-Content packaging/msix/AppxManifest.xml -Raw).
-      Replace('{{VERSION}}', "$ver.0").Replace('{{ARCH}}', $a.Name).Replace('{{PUBLISHER}}', $Publisher) |
+      Replace('{{VERSION}}', $msix4).Replace('{{ARCH}}', $a.Name).Replace('{{PUBLISHER}}', $Publisher) |
       Set-Content (Join-Path $pk 'AppxManifest.xml') -Encoding utf8
     $msix = Join-Path $bundleDir "SprkNotes_${ver}_$($a.Name).msix"
     makeappx.exe pack /d $pk /p $msix /o
@@ -139,7 +161,7 @@ if (-not $SkipMsix) {
     Sign $msix
   }
   $bundle = Join-Path $Out "SprkNotes_$ver.msixbundle"
-  makeappx.exe bundle /d $bundleDir /p $bundle /bv "$ver.0" /o
+  makeappx.exe bundle /d $bundleDir /p $bundle /bv $msix4 /o
   if ($LASTEXITCODE -ne 0) { throw 'makeappx bundle failed' }
   Sign $bundle
   $artifacts += $bundle
@@ -189,7 +211,7 @@ if (-not $SkipMsi) {
     $v.GetType().InvokeMember('Execute', 'InvokeMethod', $null, $v, $null) | Out-Null
     $r = $v.GetType().InvokeMember('Fetch', 'InvokeMethod', $null, $v, $null)
     $mv = $r.GetType().InvokeMember('StringData', 'GetProperty', $null, $r, 1)
-    if ($mv -ne $ver) { $bad += "$($a.Name) MSI ProductVersion is $mv" }
+    if ($mv -ne $ver4) { $bad += "$($a.Name) MSI ProductVersion is $mv" }
     # An MSI that harvested nothing still builds: require files in the File table.
     $fv = $db.GetType().InvokeMember('OpenView', 'InvokeMethod', $null, $db, @('SELECT File FROM File'))
     $fv.GetType().InvokeMember('Execute', 'InvokeMethod', $null, $fv, $null) | Out-Null
@@ -200,10 +222,27 @@ if (-not $SkipMsi) {
 if (-not $SkipMsix) {
   foreach ($a in $arches) {
     $m = [xml](Get-Content (Join-Path $Out "msix-$($a.Name)/AppxManifest.xml") -Raw)
-    if ($m.Package.Identity.Version -ne "$ver.0") { $bad += "$($a.Name) MSIX version is $($m.Package.Identity.Version)" }
+    if ($m.Package.Identity.Version -ne $msix4) { $bad += "$($a.Name) MSIX version is $($m.Package.Identity.Version)" }
   }
 }
 if ($bad.Count) { $bad | ForEach-Object { Write-Error $_ }; throw 'Version alignment failed. Nothing was released.' }
+
+# --- Update manifest (what the in-app and scheduled-task updaters read; ADR-011) ---
+if (-not $SkipMsi) {
+  $pkgs = foreach ($a in $arches) {
+    $f = Get-Item (Join-Path $Out "SprkNotes_${ver}_$($a.Name).msi")
+    @{ arch = $a.Name; asset = "$($f.Name)$UploadSuffix"; sha256 = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.ToLower(); size = $f.Length }
+  }
+  $um = Join-Path $Out 'update-manifest.json'
+  @{ schema = 1; version = $ver; channel = $channel; notes_url = ''; packages = @($pkgs) } |
+    ConvertTo-Json -Depth 4 | Set-Content $um -Encoding utf8NoBOM
+  if ($UpdateSigningKey) {
+    ssh-keygen -Y sign -f $UpdateSigningKey -n sprknotes-update $um
+    if ($LASTEXITCODE -ne 0) { throw 'signing the update manifest failed' }
+    Move-Item "$um.sig" (Join-Path $Out 'update-manifest.json.sig') -Force
+  } else { Write-Warning 'Update manifest is unsigned (pass -UpdateSigningKey).' }
+}
+Copy-Item install.ps1 $Out
 
 # --- Hashes and manifest ---
 $files = Get-ChildItem $Out -File | Where-Object { $_.Name -ne 'SHA256SUMS.txt' -and $_.Name -ne 'release-manifest.json' }

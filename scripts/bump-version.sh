@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Usage: scripts/bump-version.sh <x.y.z> | --check
+# Usage: scripts/bump-version.sh <x.y.z[-beta.N|-alpha.N]> | --check
 # Root Cargo.toml [workspace.package] version is the only source. This script
 # mirrors it into the files that cannot inherit it (Tauri crate, UI package).
 set -euo pipefail
@@ -14,7 +14,7 @@ if [ "${1:-}" = "--check" ]; then
   [ $ok = 0 ] && echo "versions aligned at $v"; exit $ok
 fi
 new="${1:?usage: bump-version.sh <x.y.z> | --check}"
-[[ "$new" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "bad version"; exit 2; }
+[[ "$new" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta)\.[0-9]+)?$ ]] || { echo "bad version"; exit 2; }
 sed -i '/^\[workspace.package\]/,/^\[/s/^version = ".*"/version = "'"$new"'"/' Cargo.toml
 sed -i '0,/^version = ".*"/s//version = "'"$new"'"/' app/src-tauri/Cargo.toml
 sed -i '0,/"version": ".*"/s//"version": "'"$new"'"/' app/ui/package.json

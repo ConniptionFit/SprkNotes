@@ -16,6 +16,22 @@ export type ModelStatus = {
   busy: boolean;
 };
 
+/** Mirrors the Rust `UpdateStatus` (camelCase): app updates, and which settings policy locks. */
+export type AppUpdateStatus = {
+  installed: string;
+  mode: "off" | "notify" | "auto" | "force";
+  channel: "stable" | "beta" | "alpha";
+  repoUrl: string;
+  modeLocked: boolean;
+  channelLocked: boolean;
+  repoLocked: boolean;
+  busy: boolean;
+  readyToInstall: boolean;
+  /** Per-machine install: a background task keeps it current. */
+  managedInstall: boolean;
+};
+export type AppUpdateInfo = { available: boolean; version?: string | null; notesUrl?: string | null };
+
 export type PackInfo = { id: string; version: string; installed?: string | null };
 export type UpdateInfo = { available: boolean; packs: PackInfo[] };
 

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- First draft: app update policy only. Not yet loaded into Intune or gpedit (see docs/enterprise-install-research.md).
+     Keys live under Software\Policies\SprkNotes, the same place the registry examples in docs/deployment.md use. -->
+<policyDefinitions revision="1.0" schemaVersion="1.0" xmlns="http://schemas.microsoft.com/GroupPolicy/2006/07/PolicyDefinitions">
+  <policyNamespaces>
+    <target prefix="SprkNotes" namespace="SprkNotes.Policies.Updates" />
+  </policyNamespaces>
+  <resources minRequiredRevision="1.0" />
+  <categories>
+    <category name="SprkNotes" displayName="$(string.SprkNotes)" />
+    <category name="Updates" displayName="$(string.Updates)">
+      <parentCategory ref="SprkNotes" />
+    </category>
+  </categories>
+  <policies>
+    <policy name="UpdateMode" class="Machine" displayName="$(string.UpdateMode)" explainText="$(string.UpdateMode_Explain)" key="Software\Policies\SprkNotes" presentation="$(presentation.UpdateMode)">
+      <parentCategory ref="Updates" />
+      <supportedOn ref="windows:SUPPORTED_Windows7" />
+      <elements>
+        <enum id="UpdateModeValue" valueName="UpdateMode" required="true">
+          <item displayName="$(string.Mode_Off)"><value><string>off</string></value></item>
+          <item displayName="$(string.Mode_Notify)"><value><string>notify</string></value></item>
+          <item displayName="$(string.Mode_Auto)"><value><string>auto</string></value></item>
+          <item displayName="$(string.Mode_Force)"><value><string>force</string></value></item>
+        </enum>
+      </elements>
+    </policy>
+    <policy name="UpdateChannel" class="Machine" displayName="$(string.UpdateChannel)" explainText="$(string.UpdateChannel_Explain)" key="Software\Policies\SprkNotes" presentation="$(presentation.UpdateChannel)">
+      <parentCategory ref="Updates" />
+      <supportedOn ref="windows:SUPPORTED_Windows7" />
+      <elements>
+        <enum id="UpdateChannelValue" valueName="UpdateChannel" required="true">
+          <item displayName="$(string.Channel_Stable)"><value><string>stable</string></value></item>
+          <item displayName="$(string.Channel_Beta)"><value><string>beta</string></value></item>
+          <item displayName="$(string.Channel_Alpha)"><value><string>alpha</string></value></item>
+        </enum>
+      </elements>
+    </policy>
+    <policy name="UpdateRepoUrl" class="Machine" displayName="$(string.UpdateRepoUrl)" explainText="$(string.UpdateRepoUrl_Explain)" key="Software\Policies\SprkNotes" presentation="$(presentation.UpdateRepoUrl)">
+      <parentCategory ref="Updates" />
+      <supportedOn ref="windows:SUPPORTED_Windows7" />
+      <elements>
+        <text id="UpdateRepoUrlValue" valueName="UpdateRepoUrl" required="true" />
+      </elements>
+    </policy>
+    <policy name="UpdatePublicKeys" class="Machine" displayName="$(string.UpdatePublicKeys)" explainText="$(string.UpdatePublicKeys_Explain)" key="Software\Policies\SprkNotes" presentation="$(presentation.UpdatePublicKeys)">
+      <parentCategory ref="Updates" />
+      <supportedOn ref="windows:SUPPORTED_Windows7" />
+      <elements>
+        <text id="UpdatePublicKeysValue" valueName="UpdatePublicKeys" required="true" />
+      </elements>
+    </policy>
+  </policies>
+</policyDefinitions>

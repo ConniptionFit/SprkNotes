@@ -1,0 +1,21 @@
+[package]
+name = "sprk-update"
+description = "App update check: release sources (Forgejo, GitHub), channels, signed update manifests"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+sprk-models = { path = "../sprk-models" }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+hex.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+sprk-models = { path = "../sprk-models", features = ["test-support"] }
+ed25519-dalek.workspace = true
+
+[lints]
+workspace = true

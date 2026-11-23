@@ -25,6 +25,7 @@ sprk-context = { path = "../../crates/sprk-context" }
 sprk-handoff = { path = "../../crates/sprk-handoff" }
 sprk-models = { path = "../../crates/sprk-models" }
 sprk-transcript = { path = "../../crates/sprk-transcript" }
+sprk-update = { path = "../../crates/sprk-update" }
 
 [features]
 # Speech engine (needs the sherpa-onnx native libs, SHERPA_ONNX_LIB_DIR). Without one of these
