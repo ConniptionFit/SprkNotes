@@ -16,3 +16,9 @@ Assistant models are large weight files (GGUF), not speech models. They must arr
 ## Consequences
 - `Manifest` gained `kind` and `assistant`; validation is per kind. `sprkctl` and the resolver need no change for transcription packs.
 - The next steps (helper, resolver wiring for the assistant store, Settings row, download index entries) build on this.
+
+## Addendum: download button (2026-11-23)
+- Settings > Ask Sprk has a **Download model** button for the chosen size, a **Check for updates** action and a progress bar. The Ask Sprk switch is disabled, with the tip "Download the model first", until a pack is on the PC (a person who already turned it on can always turn it off).
+- The download reuses the ADR-005 flow and the same `models-index.json`. Index lines for assistant packs carry `kind: "assistant"` and a `tier`, and are never part of the plain "Download model" set (they are large and optional). The app installs the newest pack listed for the chosen size into the user's `assistant-models` folder, then runs the normal checks (checksum, manifest hashes, allow-list, signature from 1.0).
+- Same policy as speech models: `ModelDownload=0` hides the button, `ModelIndexUrl` points it at an internal mirror, `ModelUpdateCheck` controls the launch check. `AssistantTier` caps which size can be fetched. At launch the app only checks for newer packs of sizes already installed; it never starts a multi-GB download by itself.
+- The pack size limit is 4 GiB (was 2 GiB) so the Standard size fits. Hosts with a file cap use parts of about 80 MB; `scripts/publish-assistant-model.sh` builds, splits, merges the index and uploads.

@@ -1,4 +1,4 @@
-import type { AppUpdateInfo, AppUpdateStatus, AssistantRequest, AssistantResponse, AssistantStatus, Caption, DownloadProgress, ExportFormat, LibraryEntry, Line, ModelStatus, Source, Status, Summarized, TranscriptView, UpdateInfo } from "./types";
+import type { AppUpdateInfo, AppUpdateStatus, AssistantRequest, AssistantModelStatus, AssistantResponse, AssistantStatus, Caption, DownloadProgress, ExportFormat, LibraryEntry, Line, ModelStatus, Source, Status, Summarized, TranscriptView, UpdateInfo } from "./types";
 
 /** Typed surface between the UI and the Rust side. Every command has a matching Tauri command. */
 export interface Backend {
@@ -57,6 +57,12 @@ export interface Backend {
   assistantSet(enabled: boolean, tier: string, features: string[]): Promise<void>;
   assistantCancel(): Promise<void>;
   assistantRun(request: AssistantRequest): Promise<AssistantResponse>;
+  /** Ask Sprk model packs (ADR-010). Downloads reuse the model index; progress arrives as events. */
+  assistantModelStatus(): Promise<AssistantModelStatus>;
+  assistantModelCheck(tier: string): Promise<UpdateInfo>;
+  assistantModelDownload(tier: string): Promise<void>;
+  onAssistantModelDownload(cb: (p: DownloadProgress) => void): Promise<() => void>;
+  onAssistantModelUpdate(cb: (u: UpdateInfo) => void): Promise<() => void>;
   onLine(cb: (l: Line) => void): Promise<() => void>;
   onStatus(cb: (s: Status) => void): Promise<() => void>;
 }
@@ -102,6 +108,11 @@ async function tauri(): Promise<Backend> {
     assistantSet: (enabled, tier, features) => invoke("assistant_set", { enabled, tier, features }),
     assistantCancel: () => invoke("assistant_cancel"),
     assistantRun: (request) => invoke("assistant_run", { request }),
+    assistantModelStatus: () => invoke("assistant_model_status"),
+    assistantModelCheck: (tier) => invoke("assistant_model_check", { tier }),
+    assistantModelDownload: (tier) => invoke("assistant_model_download", { tier }),
+    onAssistantModelDownload: (cb) => listen<DownloadProgress>("assistant-model-download", (e) => cb(e.payload)),
+    onAssistantModelUpdate: (cb) => listen<UpdateInfo>("assistant-model-update", (e) => cb(e.payload)),
     onLine: (cb) => listen<Line>("transcript-line", (e) => cb(e.payload)),
     onStatus: (cb) => listen<Status>("session-status", (e) => cb(e.payload)),
   };
@@ -115,15 +126,22 @@ const mockLibrary: LibraryEntry[] = [
 const CORE = ["title", "recap", "actions", "ask"] as const;
 
 /** Synthetic Ask Sprk answers for the browser preview. "?assistant=nomodel|memory" previews the other states. */
-function mockAssistant(): Pick<Backend, "assistantStatus" | "assistantSet" | "assistantCancel" | "assistantRun"> {
+function mockAssistant(): Pick<
+  Backend,
+  | "assistantStatus" | "assistantSet" | "assistantCancel" | "assistantRun"
+  | "assistantModelStatus" | "assistantModelCheck" | "assistantModelDownload" | "onAssistantModelDownload" | "onAssistantModelUpdate"
+> {
   const flag = typeof location !== "undefined" ? new URLSearchParams(location.search).get("assistant") : null;
   let on = false;
+  // "?assistant=nomodel" starts with no model so the download button and the disabled switch show.
+  let installed = flag !== "nomodel";
+  let dlCb: (p: DownloadProgress) => void = () => {};
   let features: string[] = [...CORE];
   let pins: { lineId: number; t: string; label: string }[] = [];
   const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
   return {
     assistantStatus: async () => ({
-      state: !on ? "off" : flag === "nomodel" ? "noModel" : flag === "memory" ? "notEnoughMemory" : "ready",
+      state: !on ? "off" : !installed ? "noModel" : flag === "memory" ? "notEnoughMemory" : "ready",
       locked: false,
       canDownload: true,
       model: on ? "mock-light@2027.01.0" : null,
@@ -138,6 +156,31 @@ function mockAssistant(): Pick<Backend, "assistantStatus" | "assistantSet" | "as
       features = f;
     },
     assistantCancel: async () => {},
+    assistantModelStatus: async () => ({
+      installed: installed ? [{ id: "mock-light", version: "2027.01.0", tier: "light" }] : [],
+      anyInstalled: installed,
+      downloadEnabled: true,
+      updateCheckEnabled: true,
+      customSource: false,
+      busy: false,
+    }),
+    assistantModelCheck: async () => ({ available: false, packs: [] }),
+    assistantModelDownload: async () => {
+      const total = 1_500_000_000;
+      let done = 0;
+      dlCb({ stage: "checking", done: 0 });
+      const t = setInterval(() => {
+        done += 100_000_000;
+        if (done < total) dlCb({ stage: "downloading", pack: "Ask Sprk model", done, total });
+        else {
+          clearInterval(t);
+          dlCb({ stage: "verifying", done: total, total });
+          setTimeout(() => ((installed = true), dlCb({ stage: "done", done: total, total })), 700);
+        }
+      }, 250);
+    },
+    onAssistantModelDownload: async (cb) => ((dlCb = cb), () => {}),
+    onAssistantModelUpdate: async () => () => {},
     assistantRun: async (r) => {
       if (!on) throw "off";
       await wait(600);

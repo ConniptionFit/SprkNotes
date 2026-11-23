@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 pub const INDEX_SCHEMA: u32 = 1;
 /// Upper bounds so a bad or hostile server cannot fill the disk or memory.
 pub const MAX_INDEX_BYTES: u64 = 256 * 1024;
-pub const MAX_PACK_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+pub const MAX_PACK_BYTES: u64 = 4 * 1024 * 1024 * 1024;
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum RemoteError {
@@ -62,6 +62,19 @@ pub struct IndexEntry {
     /// Part of the "Download model" set.
     #[serde(default)]
     pub default: bool,
+    /// `assistant` for Ask Sprk packs (ADR-010). Empty means a transcription or voice pack, so
+    /// older indexes read the same as before.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub kind: String,
+    /// Assistant size (`titles`, `light` or `standard`). Empty for other packs.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub tier: String,
+}
+
+impl IndexEntry {
+    pub fn is_assistant(&self) -> bool {
+        self.kind == "assistant"
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -110,9 +123,24 @@ impl Index {
         Ok(i)
     }
 
-    /// The set the "Download model" button installs.
+    /// The set the "Download model" button installs. Assistant packs are never in it: they are
+    /// large and optional, so they have their own button (`assistant_entry`).
     pub fn defaults(&self) -> Vec<&IndexEntry> {
-        self.models.iter().filter(|m| m.default).collect()
+        self.models
+            .iter()
+            .filter(|m| m.default && !m.is_assistant())
+            .collect()
+    }
+
+    /// The newest assistant pack listed for `tier`.
+    pub fn assistant_entry(&self, tier: &str) -> Option<&IndexEntry> {
+        self.models
+            .iter()
+            .filter(|m| m.is_assistant() && m.tier == tier)
+            .fold(None, |best: Option<&IndexEntry>, m| match best {
+                Some(b) if !newer(&m.version, &b.version) => Some(b),
+                _ => Some(m),
+            })
     }
 }
 
@@ -187,6 +215,26 @@ pub fn pending(index: &Index, stores: &[&ModelStore]) -> Vec<Update> {
         }
     }
     out
+}
+
+/// Whether the index's assistant pack for `tier` is missing from `store` or newer than what is there.
+pub fn pending_assistant(index: &Index, store: &ModelStore, tier: &str) -> Option<Update> {
+    let e = index.assistant_entry(tier)?;
+    let mut best: Option<String> = None;
+    for i in store.list().into_iter().filter(|i| i.id == e.id) {
+        if best.as_deref().is_none_or(|b| newer(&i.version, b)) {
+            best = Some(i.version);
+        }
+    }
+    if best.as_deref().is_none_or(|b| newer(&e.version, b)) {
+        Some(Update {
+            id: e.id.clone(),
+            version: e.version.clone(),
+            installed: best,
+        })
+    } else {
+        None
+    }
 }
 
 pub fn fetch_index(f: &dyn Fetcher, url: &str) -> Result<Index, RemoteError> {
@@ -302,8 +350,11 @@ pub fn entry_for_pack(
     let size = std::fs::metadata(pack)
         .map_err(|_| RemoteError::Disk)?
         .len();
+    let assistant = m.kind == crate::manifest::KIND_ASSISTANT;
     Ok(IndexEntry {
-        role: if m.engine.contains("vad") {
+        role: if assistant {
+            "assistant"
+        } else if m.engine.contains("vad") {
             "vad"
         } else {
             "transcription"
@@ -314,8 +365,15 @@ pub fn entry_for_pack(
         url,
         sha256: sha256_file(pack)?,
         size,
-        default,
+        // Assistant packs are picked by size, never part of the plain "Download model" set.
+        default: default && !assistant,
         parts: Vec::new(),
+        kind: if assistant {
+            "assistant".into()
+        } else {
+            String::new()
+        },
+        tier: m.assistant.map(|a| a.tier).unwrap_or_default(),
     })
 }
 
@@ -583,6 +641,8 @@ mod tests {
                     size: b.len() as u64,
                 },
             ],
+            kind: String::new(),
+            tier: String::new(),
         }
     }
 
@@ -679,5 +739,86 @@ mod tests {
             RemoteError::NotHttps
         );
         assert!(f.calls.borrow().is_empty());
+    }
+
+    fn assistant_index() -> Index {
+        let h = "a".repeat(64);
+        let e = |id: &str, ver: &str, tier: &str| IndexEntry {
+            id: id.into(),
+            version: ver.into(),
+            role: "assistant".into(),
+            url: format!("https://h/{id}.zip"),
+            sha256: h.clone(),
+            size: 10,
+            default: false,
+            parts: Vec::new(),
+            kind: "assistant".into(),
+            tier: tier.into(),
+        };
+        Index {
+            schema: INDEX_SCHEMA,
+            models: vec![
+                e("qwen-2b", "2026.11.0", "light"),
+                e("qwen-2b", "2026.12.0", "light"),
+                e("qwen-4b", "2026.11.0", "standard"),
+            ],
+        }
+    }
+
+    #[test]
+    fn assistant_packs_are_not_in_the_plain_download_set() {
+        let mut i = assistant_index();
+        for m in &mut i.models {
+            m.default = true;
+        }
+        assert!(i.defaults().is_empty());
+    }
+
+    #[test]
+    fn assistant_entry_picks_newest_for_the_tier() {
+        let i = assistant_index();
+        assert_eq!(i.assistant_entry("light").unwrap().version, "2026.12.0");
+        assert_eq!(i.assistant_entry("standard").unwrap().id, "qwen-4b");
+        assert!(i.assistant_entry("titles").is_none());
+    }
+
+    #[test]
+    fn old_indexes_without_kind_still_parse() {
+        let h = "b".repeat(64);
+        let j = format!(
+            r#"{{"schema":1,"models":[{{"id":"m","version":"2026.12.0","role":"transcription","url":"https://h/m.zip","sha256":"{h}","size":5,"default":true}}]}}"#
+        );
+        let i = Index::parse(j.as_bytes()).unwrap();
+        assert!(!i.models[0].is_assistant());
+        assert_eq!(i.defaults().len(), 1);
+    }
+
+    #[test]
+    fn assistant_pending_compares_with_installed() {
+        let dir = std::env::temp_dir().join(format!("sprk-ap-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let install = |ver: &str| {
+            let d = dir.join(format!("qwen-2b@{ver}"));
+            std::fs::create_dir_all(&d).unwrap();
+            let h = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
+            let j = format!(
+                r#"{{"schema":1,"kind":"assistant","id":"qwen-2b","version":"{ver}","display_name":"T","engine":"llama-cpp","min_app_version":"0.0.1","files":{{"weights":"model.gguf"}},"sha256":{{"model.gguf":"{h}"}},"assistant":{{"tier":"light","prompt_format":"chatml","context_tokens":8192,"ram_estimate_mb":2000}},"license":"Apache-2.0","source":"synthetic"}}"#
+            );
+            std::fs::write(d.join("model.json"), j).unwrap();
+        };
+        install("2026.11.0");
+        let store = ModelStore::for_kind(
+            dir.clone(),
+            StoreKind::User,
+            crate::manifest::KIND_ASSISTANT,
+        );
+        let i = assistant_index();
+        let u = pending_assistant(&i, &store, "light").unwrap();
+        assert_eq!(u.installed.as_deref(), Some("2026.11.0"));
+        assert_eq!(u.version, "2026.12.0");
+        assert!(pending_assistant(&i, &store, "titles").is_none());
+        install("2026.12.0");
+        assert!(pending_assistant(&i, &store, "light").is_none());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

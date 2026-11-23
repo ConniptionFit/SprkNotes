@@ -32,6 +32,16 @@ export type AppUpdateStatus = {
 };
 export type AppUpdateInfo = { available: boolean; version?: string | null; notesUrl?: string | null };
 
+/** Mirrors the Rust `AssistantModelStatus` (camelCase): Ask Sprk model packs on this PC. No network call behind it. */
+export type AssistantModelStatus = {
+  installed: { id: string; version: string; tier: string }[];
+  anyInstalled: boolean;
+  downloadEnabled: boolean;
+  updateCheckEnabled: boolean;
+  customSource: boolean;
+  busy: boolean;
+};
+
 export type PackInfo = { id: string; version: string; installed?: string | null };
 export type UpdateInfo = { available: boolean; packs: PackInfo[] };
 
