@@ -7,6 +7,8 @@ pub enum PromptFormat {
     ChatMl,
     /// ChatML with an empty reasoning block so the model answers directly.
     ChatMlNoThink,
+    /// Gemma 4 turns (`<|turn>` ... `<turn|>`), with the start token written out.
+    Gemma4,
 }
 
 impl PromptFormat {
@@ -14,12 +16,18 @@ impl PromptFormat {
         match id {
             "chatml" => Some(Self::ChatMl),
             "chatml-nothink" => Some(Self::ChatMlNoThink),
+            "gemma4" => Some(Self::Gemma4),
             _ => None,
         }
     }
 
     /// One system message and one user message, ending where the model starts answering.
     pub fn build(self, system: &str, user: &str) -> String {
+        if self == Self::Gemma4 {
+            return format!(
+                "<bos><|turn>system\n{system}<turn|>\n<|turn>user\n{user}<turn|>\n<|turn>model\n"
+            );
+        }
         let mut p = format!(
             "<|im_start|>system\n{system}<|im_end|>\n<|im_start|>user\n{user}<|im_end|>\n<|im_start|>assistant\n"
         );
@@ -31,6 +39,9 @@ impl PromptFormat {
 
     /// Text that ends a turn in this format.
     pub fn stop(self) -> Vec<String> {
+        if self == Self::Gemma4 {
+            return vec!["<turn|>".to_string(), "<|turn>".to_string()];
+        }
         vec!["<|im_end|>".to_string(), "<|im_start|>".to_string()]
     }
 }
@@ -59,6 +70,15 @@ mod tests {
         assert!(p.ends_with("<|im_start|>assistant\n"));
         let q = PromptFormat::ChatMlNoThink.build("S", "U");
         assert!(q.ends_with("</think>\n\n"));
+    }
+
+    #[test]
+    fn gemma4_uses_its_own_turns_and_stops() {
+        let f = PromptFormat::from_id("gemma4").unwrap();
+        let p = f.build("S", "U");
+        assert!(p.starts_with("<bos><|turn>system\nS<turn|>\n<|turn>user\nU<turn|>"));
+        assert!(p.ends_with("<|turn>model\n"));
+        assert_eq!(f.stop()[0], "<turn|>");
     }
 
     #[test]

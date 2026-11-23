@@ -124,7 +124,7 @@ pub struct Pin {
     pub label: String,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct Pins {
     pins: Vec<Pin>,
 }

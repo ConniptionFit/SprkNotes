@@ -19,6 +19,7 @@ pub mod protocol;
 pub mod qa;
 pub mod recap;
 pub mod retrieve;
+pub mod runtime;
 pub mod service;
 pub mod stream;
 pub mod task;

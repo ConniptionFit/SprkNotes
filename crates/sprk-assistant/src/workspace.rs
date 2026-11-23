@@ -23,7 +23,8 @@ pub enum WorkspaceError {
     Engine(#[from] EngineError),
 }
 
-#[derive(Debug, Default)]
+/// Cloned under a short lock before a long model call, so new lines never wait on the model.
+#[derive(Debug, Clone, Default)]
 pub struct Workspace {
     lines: Vec<Line>,
     notes: Vec<Note>,
