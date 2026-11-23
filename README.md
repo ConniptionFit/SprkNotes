@@ -52,6 +52,7 @@ Pre-release (0.0.1, pilot builds are on the Releases page). Built so far: transc
 |---|---|
 | [Features and usage](docs/features.md) | Everything the app does, with screenshots |
 | [Install](docs/install.md) | Installing on one PC: portable zip, MSI, MSIX, Linux, models, uninstall |
+| [Moving or forking](docs/forking.md) | Moving to another repository (such as a corporate GitHub) or forking an edition |
 | [Deployment](docs/deployment.md) | Intune, GPO, SCCM, RMM as SYSTEM, registry policy, updates and channels |
 | [Enterprise install research](docs/enterprise-install-research.md) | Installer and update options compared, with recommendations |
 | [User guide](docs/user-guide.md) | Using the app |

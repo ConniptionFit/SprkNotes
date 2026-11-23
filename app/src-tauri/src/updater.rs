@@ -17,7 +17,10 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Emitter};
 
-pub const DEFAULT_REPO: &str = "https://git.pwrs.dev/powers/sprknotes";
+/// Compiled in from `distribution.toml` (see docs/forking.md).
+pub const DEFAULT_REPO: &str = env!("SPRK_DEFAULT_REPO_URL");
+/// Provider named in `distribution.toml`; empty means infer it from the address.
+pub const DEFAULT_PROVIDER: &str = env!("SPRK_DEFAULT_PROVIDER");
 const DEFAULT_CHECK_HOURS: u64 = 24;
 /// Keys compiled into the app as a fallback trust root for update manifests. Empty until the
 /// release key exists; admins add their own with `UpdatePublicKeys`.
@@ -97,19 +100,24 @@ fn resolve(p: &AppPolicy, d: &InstallDefaults, u: &UserChoice) -> Effective {
                 .unwrap_or_else(|| fallback.to_string())
         };
     let channel = pick(&p.update_channel, &u.channel, &d.update_channel, "stable");
+    let repo_url = pick(
+        &p.update_repo_url,
+        &u.repo_url,
+        &d.update_repo_url,
+        DEFAULT_REPO,
+    );
+    // The built-in provider only goes with the built-in address.
+    let built_in_provider = (repo_url == DEFAULT_REPO && !DEFAULT_PROVIDER.is_empty())
+        .then(|| DEFAULT_PROVIDER.to_string());
     Effective {
         mode: pick(&p.update_mode, &u.mode, &d.update_mode, "notify"),
         channel: Channel::parse(&channel).unwrap_or(Channel::Stable),
-        repo_url: pick(
-            &p.update_repo_url,
-            &u.repo_url,
-            &d.update_repo_url,
-            DEFAULT_REPO,
-        ),
+        repo_url,
         provider: p
             .update_provider
             .clone()
-            .or_else(|| d.update_provider.clone()),
+            .or_else(|| d.update_provider.clone())
+            .or(built_in_provider),
         mode_locked: p.update_mode.is_some(),
         channel_locked: p.update_channel.is_some(),
         repo_locked: p.update_repo_url.is_some(),
@@ -194,7 +202,7 @@ pub fn set_choice(
         if p.update_repo_url.is_some() {
             return Err("The update source is managed by your organization.".into());
         }
-        Source::parse(&r, p.update_provider.as_deref())
+        Source::parse(&r, p.update_provider.as_deref().or((r == DEFAULT_REPO && !DEFAULT_PROVIDER.is_empty()).then_some(DEFAULT_PROVIDER)))
             .map_err(|_| "That is not a valid repository address.".to_string())?;
         c.repo_url = Some(r);
     }
