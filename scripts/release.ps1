@@ -76,6 +76,12 @@ $stage = Join-Path $Out 'stage'
 Remove-Item -Recurse -Force $Out -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $stage | Out-Null
 
+# makeappx.exe lives in the Windows SDK and is usually not on PATH.
+if (-not (Get-Command makeappx.exe -ErrorAction SilentlyContinue)) {
+  $kit = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\makeappx.exe" -ErrorAction SilentlyContinue | Sort-Object FullName | Select-Object -Last 1
+  if ($kit) { $env:PATH = "$($kit.DirectoryName);$env:PATH" }
+}
+
 function Sign($file) {
   if (-not $CertThumbprint) { return }
   $a = @('sign', '/sha1', $CertThumbprint, '/fd', 'SHA256')
@@ -109,10 +115,12 @@ foreach ($a in $arches) {
     if (Test-Path $llvm) { $env:PATH = "$llvm;$env:PATH"; $env:LIBCLANG_PATH = $llvm }
     if (-not (Get-Command clang-cl -ErrorAction SilentlyContinue)) { throw 'arm64 assistant helper needs clang-cl (install LLVM)' }
     Set-Item "env:CC_$tk" 'clang-cl'; Set-Item "env:CXX_$tk" 'clang-cl'
+    # clang-cl does not enable C++ exceptions by default; llama.cpp uses try/catch.
+    Set-Item "env:CXXFLAGS_$tk" '/EHsc'
     if (Get-Command ninja -ErrorAction SilentlyContinue) { $env:CMAKE_GENERATOR = 'Ninja' }
   }
   cargo build --release --manifest-path crates/sprk-assistant-llama/Cargo.toml --bin sprk-assistant --target $a.Triple
-  Remove-Item "env:CC_$tk", "env:CXX_$tk", env:CMAKE_GENERATOR -ErrorAction SilentlyContinue
+  Remove-Item "env:CC_$tk", "env:CXX_$tk", "env:CXXFLAGS_$tk", env:CMAKE_GENERATOR -ErrorAction SilentlyContinue
   if ($LASTEXITCODE -ne 0) { throw "assistant helper build failed ($($a.Name))" }
   Copy-Item "crates/sprk-assistant-llama/target/$($a.Triple)/release/sprk-assistant.exe" $dir
   Copy-Item "app/src-tauri/target/$($a.Triple)/release/sprknotes.exe" (Join-Path $dir 'SprkNotes.exe')

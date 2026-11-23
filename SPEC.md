@@ -763,7 +763,7 @@ Record which apps were heard through system audio (a Teams call, a YouTube video
 ### 18.3 Finding the title (resolver chain, first hit wins)
 1. **Media session** (Windows Global System Media Transport Controls): title and artist the app publishes (browsers publish the video/page media title; Spotify and others publish track info).
 2. **Browser tab with the audio indicator** via UI Automation on the tab strip (Chrome, Edge, Firefox). Confirm each browser's accessible tab names in the M11 spike.
-3. **Top-level window title** of the owning app (for browsers this is the active tab, so it ranks below 1 and 2).
+3. **Top-level window title** of the owning app, only when the app has exactly one titled window. Never for browsers (their window title is the focused tab, not the tab making sound) and never when several windows could be the source; the title is then left out.
 4. **App name** from the executable's file description.
 - Strip browser suffixes (" - Mozilla Firefox", " - Google Chrome", " - Microsoft Edge"). Matching rules live in a config file so they can be tuned without a release.
 
@@ -784,7 +784,7 @@ Rules:
 - Durations are measured on the session clock, so they line up with transcript timestamps.
 
 ### 18.5 Output
-- **Live:** an event line once an activity passes the minimum length (timestamped at its real start), and another when it ends (timestamped at the last audible moment, with duration). End events can be written after later-timestamped statement lines; the timestamp is authoritative and parsers sort by it.
+- **Live:** activity is tracked in memory only. No start or end event lines are written to the transcript (changed after pilot feedback: they were noise, and a wrong title was worse than none). Parsers still read the `Audio source started/ended` lines of older transcripts.
 - **Finalize:** `audio_sources` in front matter and the **Audio sources** table (5.1). JSON export includes `audio_sources[]`.
 - **Crash:** everything needed is already in the event lines; recovery rebuilds the table from them.
 
