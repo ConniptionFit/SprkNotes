@@ -37,6 +37,7 @@ Linux is a from-source build with no packaged artifact yet (see [install.md](ins
 | `AssistantTier` | Largest size allowed: `off`, `titles`, `light`, `standard` or `auto` |
 | `AssistantPinnedModel` | `id@version` forced as the assistant model |
 | `AssistantIdleUnloadMinutes`, `AssistantMaxThreads` | Unload delay (default 5) and a thread cap |
+| `AssistantFeatures` | Allow-list of assistant features, comma separated: `title,recap,actions,ask,agenda,commitments,pins,parkinglot,explain,shorten,prep`. Absent means the user chooses (the extras start off) |
 | `AssistantSaveOutputs`, `AssistantBackground` | May it write notes next to the transcript; may it work in the background |
 | `AudioSourceDetection`, `AudioMergeWindowSeconds`, `AudioSourceExcludePatterns` | Audio source events |
 | `CallContext`, `CallPollSeconds`, `NameOneToOneSpeakers`, `CallMergeWindowSeconds`, `TeamsLocalApi` | Call context |

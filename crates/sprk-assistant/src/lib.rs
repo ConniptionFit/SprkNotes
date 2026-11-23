@@ -11,6 +11,8 @@
 //! error value carries transcript text.
 pub mod actions;
 pub mod engine;
+pub mod extras;
+pub mod features;
 pub mod governor;
 pub mod prompt;
 pub mod protocol;

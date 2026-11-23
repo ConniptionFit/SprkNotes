@@ -1,5 +1,6 @@
 //! What the app shows and allows (ADR-009): combines admin policy, the user's choice, the
 //! installed assistant packs and free memory into one answer. Pure, so it tests on Linux.
+use crate::features::FeatureSet;
 use crate::governor::{choose_pack, PackChoice, Refusal, Tier};
 use sprk_config::AppPolicy;
 
@@ -8,6 +9,8 @@ use sprk_config::AppPolicy;
 pub struct UserSettings {
     pub enabled: bool,
     pub tier: Tier,
+    /// What the user turned on. The extras start off.
+    pub features: FeatureSet,
 }
 
 impl Default for UserSettings {
@@ -15,6 +18,7 @@ impl Default for UserSettings {
         Self {
             enabled: false,
             tier: Tier::Light,
+            features: FeatureSet::default(),
         }
     }
 }
@@ -33,6 +37,8 @@ pub struct Effective {
     /// Minutes before an idle model unloads. `None` means never.
     pub idle_unload_minutes: Option<u64>,
     pub max_threads: Option<u64>,
+    /// The user's choice, narrowed by the `AssistantFeatures` policy list.
+    pub features: FeatureSet,
 }
 
 pub const DEFAULT_IDLE_UNLOAD_MINUTES: u64 = 5;
@@ -64,6 +70,10 @@ pub fn effective(policy: &AppPolicy, user: &UserSettings) -> Effective {
         save_outputs: policy.assistant_save_outputs.unwrap_or(true),
         idle_unload_minutes: idle,
         max_threads: policy.assistant_max_threads,
+        features: match policy.assistant_features.as_deref() {
+            Some(list) => user.features.intersect(FeatureSet::parse_list(list)),
+            None => user.features,
+        },
     }
 }
 
@@ -153,6 +163,7 @@ mod tests {
         let u = UserSettings {
             enabled: true,
             tier: Tier::Standard,
+            ..UserSettings::default()
         };
         let off = effective(&policy(&[("AssistantEnabled", "0")]), &u);
         assert!(!off.enabled && off.enabled_locked);
@@ -218,5 +229,18 @@ mod tests {
                 tier: Tier::Light
             }
         );
+    }
+
+    #[test]
+    fn extras_are_off_and_policy_only_narrows() {
+        let e = effective(&policy(&[]), &UserSettings::default());
+        assert!(e.features.has(crate::features::Feature::Recap));
+        assert!(!e.features.has(crate::features::Feature::Agenda));
+        let user = UserSettings {
+            features: FeatureSet::all(),
+            ..UserSettings::default()
+        };
+        let e = effective(&policy(&[("AssistantFeatures", "recap,agenda")]), &user);
+        assert_eq!(e.features.keys(), vec!["recap", "agenda"]);
     }
 }

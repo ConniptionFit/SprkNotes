@@ -91,6 +91,9 @@ pub struct AppPolicy {
     pub assistant_save_outputs: Option<bool>,
     /// May the assistant work in the background (rolling summaries) during a session.
     pub assistant_background: Option<bool>,
+    /// Comma separated allow-list of assistant features (`title,recap,actions,ask,agenda,...`).
+    /// Absent means the user decides; present means only these can be turned on.
+    pub assistant_features: Option<String>,
 }
 
 /// An app link (`scheme:...`, scheme of two or more characters so `C:` is no link) or an https
@@ -174,6 +177,7 @@ impl AppPolicy {
             assistant_max_threads: num(s, "AssistantMaxThreads").filter(|n| *n > 0),
             assistant_save_outputs: flag(s, "AssistantSaveOutputs"),
             assistant_background: flag(s, "AssistantBackground"),
+            assistant_features: text("AssistantFeatures"),
         }
     }
 }
