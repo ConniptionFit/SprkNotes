@@ -18,6 +18,18 @@ On-device app for Windows (x64 and ARM64), with a native Linux build, that **tra
 
 More in [Features and usage](docs/features.md) and the [user guide](docs/user-guide.md).
 
+## Install (Windows)
+Open PowerShell (no admin needed) and run:
+```powershell
+irm https://git.pwrs.dev/powers/sprknotes/raw/branch/main/install.ps1 | iex
+```
+It installs for you only, in `%LocalAppData%\Programs\SprkNotes`, adds **SprkNotes** to the Start menu, and picks the right build for x64 or ARM64. Then open it and press **Download model** in Settings. Remove it any time with Settings, Apps (transcripts are kept).
+
+- **Updates:** SprkNotes checks the repository's releases and tells you when a newer build exists. Settings lets you pick the channel: **Stable** (default), **Beta** or **Alpha** for early builds.
+- **Early builds:** `& ([scriptblock]::Create((irm https://git.pwrs.dev/powers/sprknotes/raw/branch/main/install.ps1))) -Channel beta`
+- **Whole-PC or managed installs** (all users, locked channel and source, forced or disabled updates, silent update task): see [Deployment](docs/deployment.md#updates-channels-and-locking).
+- Other ways (portable zip, MSI, MSIX, Linux): [Install](docs/install.md).
+
 ## What it does
 - **Me and Others.** Your mic is labeled `Me`. Everyone you hear through the speakers is `Others`, or a name on a confirmed 1:1 call. When unsure, it says `Others` and never guesses.
 - **Crash-safe.** Every committed line is appended to the file and flushed immediately. Kill the app and the transcript is intact.
@@ -30,7 +42,7 @@ More in [Features and usage](docs/features.md) and the [user guide](docs/user-gu
 - **Models are data.** The speech model is a `.sprkmodel` pack chosen by a resolver, never hard-coded. Default: Parakeet TDT 0.6B v2 (NVIDIA, CC BY 4.0). Press **Download model** in Settings to fetch it (and check for a newer one at launch), or use the bundled-model build offline.
 
 ## Privacy guarantees
-No audio on disk. No network except downloading transcription model packs, which admins can turn off (the only local interfaces are Outlook COM, the Teams local API on `localhost`, and launching Claude/Copilot). No telemetry, app update checks or crash upload. Logs never contain transcript text, subjects or names. Details: [SPEC.md](SPEC.md) section 12 and [CLAUDE.md](CLAUDE.md) hard rules.
+No audio on disk. No network except downloading transcription model packs, which admins can turn off (the only local interfaces are Outlook COM, the Teams local API on `localhost`, and launching Claude/Copilot). No telemetry or crash upload. The only other network use is checking the release page for a newer SprkNotes (admins can turn it off with `UpdateMode=off`). Logs never contain transcript text, subjects or names. Details: [SPEC.md](SPEC.md) section 12 and [CLAUDE.md](CLAUDE.md) hard rules.
 
 ## Status
 Pre-release (0.0.1, pilot builds are on the Releases page). Built so far: transcript format, writer and recovery, exports, commit buffer and dedupe, session orchestration, model packs, signing and download, calendar selection, handoff plans, call context, admin policy, live captions (ADR-006, ADR-007), the redesigned main window, Settings, overlay and tray, and installers (portable zip, MSI, MSIX). Windows capture (WASAPI) and the desktop shell run on x64; the Snapdragon laptop checks are pending ([manual checks](docs/manual-checks.md)). Linux runs natively (PipeWire or PulseAudio system audio, model download, tray, overlay) with a per-user install script, but no packaged release yet. The Library window (list, search, read, export) and Summarize work. Close hides to the tray. Not finished: Library folders, rename and delete, Teams local API. See [CHANGELOG.md](CHANGELOG.md) and the milestone table in SPEC.md section 14.
@@ -40,7 +52,8 @@ Pre-release (0.0.1, pilot builds are on the Releases page). Built so far: transc
 |---|---|
 | [Features and usage](docs/features.md) | Everything the app does, with screenshots |
 | [Install](docs/install.md) | Installing on one PC: portable zip, MSI, MSIX, Linux, models, uninstall |
-| [Deployment](docs/deployment.md) | Intune, GPO, SCCM, RMM as SYSTEM, registry policy |
+| [Deployment](docs/deployment.md) | Intune, GPO, SCCM, RMM as SYSTEM, registry policy, updates and channels |
+| [Enterprise install research](docs/enterprise-install-research.md) | Installer and update options compared, with recommendations |
 | [User guide](docs/user-guide.md) | Using the app |
 | [Admin guide](docs/admin-guide.md) | Deploying, policy keys, model runbook |
 | [Architecture](docs/architecture.md) | Crates, data flow, extension points |

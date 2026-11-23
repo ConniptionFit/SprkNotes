@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<policyDefinitionResources revision="1.0" schemaVersion="1.0" xmlns="http://schemas.microsoft.com/GroupPolicy/2006/07/PolicyDefinitions">
+  <displayName>SprkNotes</displayName>
+  <description>SprkNotes policy settings</description>
+  <resources>
+    <stringTable>
+      <string id="SprkNotes">SprkNotes</string>
+      <string id="Updates">Updates</string>
+      <string id="UpdateMode">Update mode</string>
+      <string id="UpdateMode_Explain">Off: no update checks. Notify: tell the user an update exists. Auto: download and install when the app is not in use. Force: same as Auto, and users cannot turn it off. Setting this locks the control in Settings.</string>
+      <string id="Mode_Off">Off</string>
+      <string id="Mode_Notify">Notify</string>
+      <string id="Mode_Auto">Automatic</string>
+      <string id="Mode_Force">Forced</string>
+      <string id="UpdateChannel">Release channel</string>
+      <string id="UpdateChannel_Explain">Stable gets final releases only. Beta adds beta builds. Alpha adds alpha builds. Setting this locks the channel in Settings.</string>
+      <string id="Channel_Stable">Stable</string>
+      <string id="Channel_Beta">Beta</string>
+      <string id="Channel_Alpha">Alpha</string>
+      <string id="UpdateRepoUrl">Update source (https repository address)</string>
+      <string id="UpdateRepoUrl_Explain">For example https://git.pwrs.dev/powers/sprknotes or a GitHub repository. Setting this locks the source.</string>
+      <string id="UpdatePublicKeys">Trusted update signing key</string>
+      <string id="UpdatePublicKeys_Explain">An OpenSSH ssh-ed25519 public key line. When set, updates must carry a signature from this key.</string>
+    </stringTable>
+    <presentationTable>
+      <presentation id="UpdateMode"><dropdownList refId="UpdateModeValue" defaultItem="1">Mode</dropdownList></presentation>
+      <presentation id="UpdateChannel"><dropdownList refId="UpdateChannelValue" defaultItem="0">Channel</dropdownList></presentation>
+      <presentation id="UpdateRepoUrl"><textBox refId="UpdateRepoUrlValue"><label>Repository address</label></textBox></presentation>
+      <presentation id="UpdatePublicKeys"><textBox refId="UpdatePublicKeysValue"><label>Public key</label></textBox></presentation>
+    </presentationTable>
+  </resources>
+</policyDefinitionResources>

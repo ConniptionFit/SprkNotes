@@ -7,11 +7,11 @@ SprkNotes is a lightweight, on-device Windows app that transcribes microphone an
 ## Hard rules (never break these)
 
 1. **On-device only.** Audio is captured, processed and transcribed locally. Audio samples live in memory only. Never write audio to disk (no WAV, no temp files, no debug dumps).
-2. **No network.** SprkNotes makes no outbound network connections, with one exception (ADR-005): https GETs for **model packs only** (the model index at launch, and packs when the user presses "Download model"), verified by checksum and the normal import rules, switchable off by policy (`ModelDownload=0`). sprkctl's other exception is the admin-run `model sync`, which reads an internal file share. No Entra app, no Microsoft Graph, no external APIs. Allowed local interfaces only:
+2. **No network.** SprkNotes makes no outbound network connections, with two exceptions (ADR-005 models, ADR-011 app updates; see below): https GETs for **model packs only** (the model index at launch, and packs when the user presses "Download model"), verified by checksum and the normal import rules, switchable off by policy (`ModelDownload=0`). sprkctl's other exception is the admin-run `model sync`, which reads an internal file share. No Entra app, no Microsoft Graph, no external APIs. Allowed local interfaces only:
    - Outlook COM (classic Outlook) for the calendar.
    - The Teams local API on `localhost`, probed silently at session start; any failure is silent and falls back.
    - The AI handoff, which only launches Claude/Copilot (link or clipboard); the user sends from that app.
-   No telemetry, no analytics, no app update checks (the model index check is the only one), no crash upload, no CDN fonts or scripts in the UI.
+   No telemetry, no analytics, no crash upload. App updates (ADR-011) add exactly one more https use: the release list, a signed update manifest and the installer MSI from the configured release repository, switchable off by policy (`UpdateMode=off`) and never during a session. No CDN fonts or scripts in the UI.
 3. **Terminology.** User-facing strings say "transcribing", "transcript", "paused". Never "recording", "record", "recorded". This includes tooltips, logs shown to users, installer text, README and the admin guide. A CI check enforces this (see SPEC.md 13.1).
 4. **No PHI anywhere outside transcript files.** Logs never contain transcript text, meeting subjects, attendee names or meeting bodies. Log IDs and counts only.
 5. **Public repo hygiene.** No real names, no tenant or client IDs, no certificates, no secrets. Test audio and sample transcripts are synthetic or public-domain only.

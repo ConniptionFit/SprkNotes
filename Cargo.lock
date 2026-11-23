@@ -1823,6 +1823,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "sprk-update"
+version = "0.0.1"
+dependencies = [
+ "ed25519-dalek",
+ "hex",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sprk-models",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "sprkctl"
 version = "0.0.1"
 dependencies = [

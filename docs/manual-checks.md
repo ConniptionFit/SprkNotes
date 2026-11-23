@@ -12,6 +12,14 @@ what it unblocks. Tick them off in the PR that carries the milestone.
   copy the ARM64 portable build to the Snapdragon laptop, run a 5-minute synthetic session, confirm
   transcript, labels, scrolling and the mini controller. Note the result in the PR.
 
+## App updates and install (ADR-011), on the Windows VM
+- [ ] **One-line install.** In a normal PowerShell on a clean user: run the `irm ... install.ps1 | iex` line against a real release that carries `update-manifest.json`. Confirm the Start menu entry, `%LocalAppData%\Programs\SprkNotes`, then `install.ps1 -Uninstall`. (Written without a PowerShell to run it in; not yet exercised.)
+- [ ] **MSI switches.** `msiexec /i SprkNotes_<ver>_x64.msi ALLUSERS=1 /qn UPDATE_CHANNEL=beta UPDATE_MODE=auto LOCK_UPDATES=1`, then check `HKLM\Software\Policies\SprkNotes` holds the values and Settings shows the channel as managed. Repeat without `LOCK_UPDATES` and check `HKLM\Software\SprkNotes\Defaults` and an editable channel.
+- [ ] **Update task.** After a per-machine install, `schtasks /Query /TN "SprkNotes\Update" /V` shows SYSTEM and a 6 hour repeat. Publish a newer test release, run `schtasks /Run /TN "SprkNotes\Update"` with the app closed (version changes) and with the app open (nothing happens, installer waits). Uninstall removes the task.
+- [ ] **Per-user update.** Install an older test build per user, publish a newer one, Settings, Check for updates, "Update when I close the app", close, confirm the new version at next launch.
+- [ ] **Signing.** `scripts/release.ps1 -UpdateSigningKey <pub>` through the 1Password agent; confirm `ssh-keygen -Y verify -n sprknotes-update` accepts the signature and the app refuses a tampered manifest.
+- [ ] **ADMX draft** loads in Intune (custom ADMX ingestion) or `gpedit` and writes the same registry values.
+
 ## Secrets and accounts (never in the repo)
 - [ ] **Model signing keys (M15, 1.0 gate).** Create two Ed25519 SSH keys in 1Password (release owner and a
   separate backup holder, separate vaults). Export only the **public** keys into an `allowed_signers` file.

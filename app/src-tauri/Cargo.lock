@@ -4197,6 +4197,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "sprk-assistant"
+version = "0.0.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sprk-config",
+ "sprk-models",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "sprk-audio"
 version = "0.0.1"
 dependencies = [
@@ -4269,6 +4280,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sprk-asr",
+ "sprk-assistant",
  "sprk-audio",
  "sprk-config",
  "sprk-context",

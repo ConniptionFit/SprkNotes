@@ -1,4 +1,4 @@
-import type { AssistantRequest, AssistantResponse, AssistantStatus, Caption, DownloadProgress, ExportFormat, LibraryEntry, Line, ModelStatus, Source, Status, Summarized, TranscriptView, UpdateInfo } from "./types";
+import type { AppUpdateInfo, AppUpdateStatus, AssistantRequest, AssistantResponse, AssistantStatus, Caption, DownloadProgress, ExportFormat, LibraryEntry, Line, ModelStatus, Source, Status, Summarized, TranscriptView, UpdateInfo } from "./types";
 
 /** Typed surface between the UI and the Rust side. Every command has a matching Tauri command. */
 export interface Backend {
@@ -11,6 +11,12 @@ export interface Backend {
   modelStatus(): Promise<ModelStatus>;
   modelCheckUpdate(): Promise<UpdateInfo>;
   modelDownload(): Promise<void>;
+  /** App updates (ADR-011). Policy-locked settings refuse changes with a short sentence. */
+  appUpdateStatus(): Promise<AppUpdateStatus>;
+  appUpdateCheck(): Promise<AppUpdateInfo>;
+  appUpdateSet(change: { channel?: string; repoUrl?: string; mode?: string }): Promise<void>;
+  /** Downloads and verifies; installs when the app closes. Resolves to the new version, or null. */
+  appUpdateInstall(): Promise<string | null>;
   onModelDownload(cb: (p: DownloadProgress) => void): Promise<() => void>;
   onModelUpdate(cb: (u: UpdateInfo) => void): Promise<() => void>;
   /** Overlay only: size the floating window to its content (logical pixels). */
@@ -70,6 +76,10 @@ async function tauri(): Promise<Backend> {
     modelStatus: () => invoke("model_status"),
     modelCheckUpdate: () => invoke("model_check_update"),
     modelDownload: () => invoke("model_download"),
+    appUpdateStatus: () => invoke("update_status"),
+    appUpdateCheck: () => invoke("update_check"),
+    appUpdateSet: ({ channel, repoUrl, mode }) => invoke("update_set", { channel, repoUrl, mode }),
+    appUpdateInstall: () => invoke("update_install"),
     onModelDownload: (cb) => listen<DownloadProgress>("model-download", (e) => cb(e.payload)),
     onModelUpdate: (cb) => listen<UpdateInfo>("model-update", (e) => cb(e.payload)),
     miniResize: (width, height, flipped) => invoke("mini_resize", { width, height, flipped }),
@@ -155,6 +165,7 @@ function mockAssistant(): Pick<Backend, "assistantStatus" | "assistantSet" | "as
 
 /** Browser-only stand-in with synthetic text, so the UI can be built and checked without Tauri. */
 export function mockBackend(): Backend {
+  const upd = { channel: "stable" as "stable" | "beta" | "alpha" };
   let lineCb: (l: Line) => void = () => {};
   let statusCb: (s: Status) => void = () => {};
   let timer: ReturnType<typeof setInterval> | undefined;
@@ -218,6 +229,23 @@ export function mockBackend(): Backend {
       busy: false,
     }),
     modelCheckUpdate: async () => ({ available: flag === "update", packs: [] }),
+    appUpdateStatus: async () => ({
+      installed: "0.0.1",
+      mode: "notify",
+      channel: upd.channel,
+      repoUrl: "https://git.pwrs.dev/powers/sprknotes",
+      modeLocked: flag === "managed",
+      channelLocked: flag === "managed",
+      repoLocked: flag === "managed",
+      busy: false,
+      readyToInstall: false,
+      managedInstall: false,
+    }),
+    appUpdateCheck: async () => ({ available: upd.channel !== "stable", version: "0.2.0-beta.1" }),
+    appUpdateSet: async ({ channel }) => {
+      if (channel) upd.channel = channel as typeof upd.channel;
+    },
+    appUpdateInstall: async () => "0.2.0-beta.1",
     modelDownload: async () => {
       const total = 640_000_000;
       let done = 0;

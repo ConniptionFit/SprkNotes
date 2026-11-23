@@ -3,6 +3,7 @@
   import ModelDownload from "./ModelDownload.svelte";
   import Segmented from "./Segmented.svelte";
   import AssistantSettings from "./AssistantSettings.svelte";
+  import AppUpdates from "./AppUpdates.svelte";
   import { prefs, setPref, type CaptionWho, type CaptionDelay, type Theme } from "./prefs.svelte";
 
   let {
@@ -63,6 +64,8 @@
       />
     </div>
   </div>
+
+  <AppUpdates />
 
   <AssistantSettings />
 

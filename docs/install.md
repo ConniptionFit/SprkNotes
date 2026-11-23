@@ -12,6 +12,19 @@ Pick the shortest path that fits. All paths install the same build and never tou
 
 For fleets see [deployment.md](deployment.md).
 
+## Quick install (one line, per user)
+```powershell
+irm https://git.pwrs.dev/powers/sprknotes/raw/branch/main/install.ps1 | iex
+```
+Needs no admin rights. It finds the newest release on your channel, checks the download's SHA-256, and installs the matching MSI for this user with a Start menu entry. Options (wrap the script so it can take parameters):
+```powershell
+& ([scriptblock]::Create((irm https://git.pwrs.dev/powers/sprknotes/raw/branch/main/install.ps1))) -Channel beta
+```
+`-Channel stable|beta|alpha`, `-RepoUrl <https address>`, `-Mode off|notify|auto|force`, `-Machine` (all users, elevated), `-Lock`, `-PublicKey`, `-NoUpdateTask`, `-Uninstall`. The same values can come from the environment variables `SPRK_CHANNEL`, `SPRK_REPO_URL` and `SPRK_MODE`. The script is short and readable: open it before you run it if you like.
+
+## Updates
+SprkNotes checks the repository's releases at launch (at most once a day) and, in Settings, shows **Updates**: your version, a **Release channel** (Stable, Beta, Alpha) and **Check for updates**. When a newer build exists you choose **Update when I close the app**; it installs quietly when you close SprkNotes, never during a session. Beta includes stable releases and alpha includes both. Your organization can lock the channel and source, or run updates for you (see [deployment.md](deployment.md#updates-channels-and-locking)).
+
 ## Before you start
 - Windows 10 or 11, x64 or ARM64. The portable zip and the installers pick the right build automatically.
 - The Microsoft Edge WebView2 runtime. It ships with Windows 11 and current Windows 10.

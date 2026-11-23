@@ -37,6 +37,11 @@ Linux is a from-source build with no packaged artifact yet (see [install.md](ins
 | `AssistantTier` | Largest size allowed: `off`, `titles`, `light`, `standard` or `auto` |
 | `AssistantPinnedModel` | `id@version` forced as the assistant model |
 | `AssistantIdleUnloadMinutes`, `AssistantMaxThreads` | Unload delay (default 5) and a thread cap |
+| `UpdateMode` | `off`, `notify`, `auto` or `force` (ADR-011). Locks the Settings control. See [deployment](deployment.md#updates-channels-and-locking) |
+| `UpdateChannel` | `stable`, `beta` or `alpha`. Locks the channel |
+| `UpdateRepoUrl` / `UpdateProvider` | https address of the repository releases come from, and `forgejo` or `github` when needed. Locks the source |
+| `UpdatePublicKeys` | `ssh-ed25519` keys allowed to sign update manifests; unsigned updates are refused when set |
+| `UpdateCheckHours` | Hours between update checks (default 24) |
 | `AssistantFeatures` | Allow-list of assistant features, comma separated: `title,recap,actions,ask,agenda,commitments,pins,parkinglot,explain,shorten,prep,asked,summary,rolling`. Absent means the user chooses (the extras start off) |
 | `AssistantSaveOutputs`, `AssistantBackground` | May it write notes next to the transcript; may it work in the background |
 | `AudioSourceDetection`, `AudioMergeWindowSeconds`, `AudioSourceExcludePatterns` | Audio source events |
@@ -63,7 +68,7 @@ sprkctl model remove <id>@<ver>
 Packs are signed with Ed25519 (OpenSSH SSHSIG, namespace `sprknotes-model`) through the 1Password SSH agent: `sprkctl model sign <pack> --pubkey <file>`. Two public keys are accepted so keys can rotate. Private keys never touch the repo or endpoints. Pilot builds may use `AllowedModelHashes` instead; 1.0 cannot ship without signature enforcement.
 
 ## Privacy and network
-SprkNotes makes no outbound connections except model downloads (ADR-005): at launch it fetches a small model index to see whether a newer model exists, and downloads a pack only when the user presses "Download model". Nothing about the user or any transcript is sent. Set `ModelDownload=0` to turn all of it off, `ModelUpdateCheck=0` to stop only the launch check, or `ModelIndexUrl` to point at an internal mirror. Otherwise expect only `localhost` traffic (Teams local API, if enabled). `sprkctl model sync` (admin-run) reads an internal file share. No telemetry or crash upload, and no app update checks. Logs hold IDs and counts only; context data (titles, names) goes only into transcript files.
+SprkNotes makes no outbound connections except model downloads (ADR-005): at launch it fetches a small model index to see whether a newer model exists, and downloads a pack only when the user presses "Download model". Nothing about the user or any transcript is sent. Set `ModelDownload=0` to turn all of it off, `ModelUpdateCheck=0` to stop only the launch check, or `ModelIndexUrl` to point at an internal mirror. Otherwise expect only `localhost` traffic (Teams local API, if enabled). `sprkctl model sync` (admin-run) reads an internal file share. The app also checks the release page for a newer SprkNotes (ADR-011): plain GETs for the release list, a small signed manifest and, when an update is due, the installer. `UpdateMode=off` stops all of it; `UpdateRepoUrl` points it at your own source. No telemetry or crash upload. Logs hold IDs and counts only; context data (titles, names) goes only into transcript files.
 
 ## Live captions
 Captions and the live line are shown from in-memory text only: never written to disk, never logged, never part of the transcript (ADR-006, ADR-007, ADR-008). They are a per-user setting in the app; there is no policy key. Others-only is the default and the cheapest on CPU. If decoding cannot keep up, the engine switches captions off for the session.

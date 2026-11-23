@@ -9,6 +9,7 @@ mod models;
 mod net;
 mod net_unix;
 mod shell;
+mod updater;
 
 use serde::Serialize;
 use sprk_audio::cpal_backend::CpalBackend;
@@ -242,6 +243,40 @@ fn model_download(app: AppHandle, state: State<AppState>) -> Result<(), String> 
     model_download::start_install(app, policy())
 }
 
+/// Settings pane: update mode, channel and source, and which of them policy locks. No network.
+#[tauri::command]
+fn update_status() -> updater::UpdateStatus {
+    updater::status(&policy())
+}
+
+/// Ask the release source whether a newer build exists on the chosen channel.
+#[tauri::command]
+async fn update_check() -> Result<updater::UpdateInfo, String> {
+    let p = policy();
+    tauri::async_runtime::spawn_blocking(move || updater::check_now(&p))
+        .await
+        .map_err(|_| "The check was interrupted.".to_string())?
+}
+
+/// Save the user's channel, source or mode. Anything policy locks is refused.
+#[tauri::command]
+fn update_set(
+    channel: Option<String>,
+    repo_url: Option<String>,
+    mode: Option<String>,
+) -> Result<(), String> {
+    updater::set_choice(&policy(), channel, repo_url, mode)
+}
+
+/// "Update now": download and verify, then install when the app closes. Never mid-session.
+#[tauri::command]
+async fn update_install() -> Result<Option<String>, String> {
+    let p = policy();
+    tauri::async_runtime::spawn_blocking(move || updater::fetch_update(&p))
+        .await
+        .map_err(|_| "The update was interrupted.".to_string())?
+}
+
 #[tauri::command]
 fn start_session(app: AppHandle, state: State<AppState>, name: String) -> Result<(), String> {
     let mut slot = state.host.lock().map_err(|_| "busy".to_string())?;
@@ -380,6 +415,11 @@ fn main() -> anyhow::Result<()> {
         let _ = writeln!(std::io::stdout(), "SprkNotes {}", env!("CARGO_PKG_VERSION"));
         return Ok(());
     }
+    // The SYSTEM scheduled task of a per-machine install runs this: no window, exits when done.
+    if std::env::args().any(|a| a == "--update") {
+        updater::run_headless(&policy());
+        return Ok(());
+    }
     // Panic messages can carry text from anywhere: report only where it happened (CLAUDE.md rule 4).
     // The session thread closes its transcript as interrupted on its own.
     std::panic::set_hook(Box::new(|info| {
@@ -399,6 +439,7 @@ fn main() -> anyhow::Result<()> {
         .setup(|app| {
             shell::init(app.handle())?;
             model_download::launch_check(app.handle().clone(), policy());
+            updater::launch_check(app.handle().clone(), policy());
             app.state::<assistant::Assistant>().start_idle_timer();
             Ok(())
         })
@@ -423,6 +464,10 @@ fn main() -> anyhow::Result<()> {
             model_status,
             model_check_update,
             model_download,
+            update_status,
+            update_check,
+            update_set,
+            update_install,
             assistant::assistant_status,
             assistant::assistant_set,
             assistant::assistant_cancel,
@@ -436,6 +481,12 @@ fn main() -> anyhow::Result<()> {
             library::latest_transcript,
             library::summarize
         ])
-        .run(tauri::generate_context!())?;
+        .build(tauri::generate_context!())?
+        .run(|_app, event| {
+            // Exit is final: hand a verified installer to msiexec so the next launch is the new build.
+            if let tauri::RunEvent::Exit = event {
+                updater::on_exit(&policy());
+            }
+        });
     Ok(())
 }

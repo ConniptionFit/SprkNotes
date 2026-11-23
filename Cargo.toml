@@ -3,7 +3,7 @@ resolver = "2"
 members = [
   "crates/sprk-audio", "crates/sprk-asr", "crates/sprk-models", "crates/sprk-context",
   "crates/sprk-pipeline", "crates/sprk-transcript", "crates/sprk-calendar",
-  "crates/sprk-handoff", "crates/sprk-config", "crates/sprk-assistant", "tools/sprkctl", "tools/sprk-launcher",
+  "crates/sprk-handoff", "crates/sprk-config", "crates/sprk-update", "crates/sprk-assistant", "tools/sprkctl", "tools/sprk-launcher",
 ]
 # app/src-tauri needs WebView2 / webkit2gtk, so it builds on Windows only (see ADR-002).
 exclude = ["app/src-tauri", "crates/sprk-assistant-llama"]

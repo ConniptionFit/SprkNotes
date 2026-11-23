@@ -8,6 +8,8 @@ use ed25519_dalek::{Signature, VerifyingKey};
 use sha2::{Digest, Sha256, Sha512};
 
 pub const NAMESPACE: &str = "sprknotes-model";
+/// Namespace for app update manifests, so a model signature can never pass as an update signature.
+pub const UPDATE_NAMESPACE: &str = "sprknotes-update";
 const BEGIN: &str = "-----BEGIN SSH SIGNATURE-----";
 const END: &str = "-----END SSH SIGNATURE-----";
 const MAGIC: &[u8] = b"SSHSIG";
@@ -112,6 +114,16 @@ pub struct Verified {
 /// Verify an armored SSHSIG over `message` against the trusted keys. The namespace must be
 /// `sprknotes-model` so a signature made for another purpose cannot be replayed.
 pub fn verify(message: &[u8], armored: &[u8], trusted: &[TrustedKey]) -> Result<Verified, String> {
+    verify_in(NAMESPACE, message, armored, trusted)
+}
+
+/// Like [`verify`] for an explicit namespace (`UPDATE_NAMESPACE` for update manifests).
+pub fn verify_in(
+    expected_namespace: &str,
+    message: &[u8],
+    armored: &[u8],
+    trusted: &[TrustedKey],
+) -> Result<Verified, String> {
     let blob = dearmor(armored)?;
     let mut r = Reader(&blob);
     if r.take(6) != Some(MAGIC) {
@@ -125,7 +137,7 @@ pub fn verify(message: &[u8], armored: &[u8], trusted: &[TrustedKey]) -> Result<
     let reserved = r.string().ok_or("truncated signature")?;
     let hash_alg = r.string().ok_or("truncated signature")?;
     let sig_blob = r.string().ok_or("truncated signature")?;
-    if namespace != NAMESPACE.as_bytes() {
+    if namespace != expected_namespace.as_bytes() {
         return Err("wrong signature namespace".into());
     }
     let digest: Vec<u8> = match hash_alg {
