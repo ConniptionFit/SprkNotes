@@ -70,3 +70,47 @@ export type HandoffTarget = { id: string; name: string };
 /** Result of Summarize: either a choice to make, or what happened. */
 export type Summarized = { choose: HandoffTarget[]; toasts: string[]; clipboard?: string | null };
 export type ExportFormat = "txt" | "json" | "docx";
+
+/** Ask Sprk (ADR-009). Mirrors `assistant.rs`; every error is a short code, never text from the meeting. */
+export type AssistantFeature =
+  | "title" | "recap" | "actions" | "ask"
+  | "agenda" | "commitments" | "pins" | "parkinglot" | "explain" | "shorten" | "prep";
+export type AssistantTier = "titles" | "light" | "standard";
+export type AssistantStatus = {
+  state: "off" | "noModel" | "notEnoughMemory" | "ready";
+  /** Policy decides on/off, so the switch is read-only. */
+  locked: boolean;
+  canDownload: boolean;
+  model: string | null;
+  tier: string;
+  maxTier: string;
+  enabled: boolean;
+  features: AssistantFeature[];
+  allowedFeatures: AssistantFeature[];
+};
+export type AssistantRequest =
+  | { op: "title" }
+  | { op: "recap"; minutes: number }
+  | { op: "actions" }
+  | { op: "ask"; question: string }
+  | { op: "agenda"; items: string[] }
+  | { op: "commitments" }
+  | { op: "explain"; lineId: number }
+  | { op: "shorten"; fromId: number; toId: number }
+  | { op: "prep" }
+  | { op: "pinNow"; label: string }
+  | { op: "unpin"; lineId: number }
+  | { op: "pins" }
+  | { op: "parking" };
+export type Cited = { text: string; cites: number[] };
+export type ActionOut = { task: string; ownerKind: "me" | "named" | "unknown"; ownerName: string | null; due: string | null; cites: number[] };
+export type AssistantResponse =
+  | { kind: "title"; text: string | null }
+  | { kind: "recap"; bullets: Cited[]; dropped: number; nothingSaid: boolean }
+  | { kind: "actions"; items: ActionOut[]; dropped: number }
+  | { kind: "answer"; state: "ok" | "notStated" | "unconfirmed"; text: string | null; cites: number[] }
+  | { kind: "agenda"; items: { item: string; covered: boolean; cites: number[] }[] }
+  | { kind: "commitments"; items: ActionOut[] }
+  | { kind: "pins"; pins: { lineId: number; t: string; label: string }[] }
+  | { kind: "parking"; items: { lineId: number; t: string; text: string }[] }
+  | { kind: "prep"; markdown: string };

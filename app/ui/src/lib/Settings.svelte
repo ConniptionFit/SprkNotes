@@ -2,6 +2,7 @@
   import type { DownloadProgress, ModelStatus } from "./types";
   import ModelDownload from "./ModelDownload.svelte";
   import Segmented from "./Segmented.svelte";
+  import AssistantSettings from "./AssistantSettings.svelte";
   import { prefs, setPref, type CaptionWho, type CaptionDelay, type Theme } from "./prefs.svelte";
 
   let {
@@ -62,6 +63,8 @@
       />
     </div>
   </div>
+
+  <AssistantSettings />
 
   <div class="panel">
     <div class="row">

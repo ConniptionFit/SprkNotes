@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod assistant;
 mod clock;
 mod library;
 mod model_download;
@@ -59,6 +60,7 @@ struct TauriEvents(AppHandle);
 
 impl Events for TauriEvents {
     fn line(&self, l: UiLine) {
+        self.0.state::<assistant::Assistant>().feed(&l);
         let p = match l {
             UiLine::Statement {
                 id,
@@ -151,7 +153,10 @@ mod default_dir_tests {
     #[test]
     fn falls_back_to_home_documents() {
         let got = default_transcripts_dir(None, Some("/h".into()));
-        assert_eq!(got, Some(PathBuf::from("/h/Documents/SprkNotes/Transcripts")));
+        assert_eq!(
+            got,
+            Some(PathBuf::from("/h/Documents/SprkNotes/Transcripts"))
+        );
     }
 
     #[test]
@@ -243,6 +248,7 @@ fn start_session(app: AppHandle, state: State<AppState>, name: String) -> Result
     if slot.is_some() {
         return Err("A session is already running.".into());
     }
+    app.state::<assistant::Assistant>().clear();
     // The model is chosen now and never swapped mid-session.
     let policy = policy();
     let loaded = models::load_active(env!("CARGO_PKG_VERSION"))?;
@@ -388,10 +394,12 @@ fn main() -> anyhow::Result<()> {
             shell::open_main(app);
         }))
         .manage(AppState::default())
+        .manage(assistant::Assistant::new())
         .manage(shell::Shell::default())
         .setup(|app| {
             shell::init(app.handle())?;
             model_download::launch_check(app.handle().clone(), policy());
+            app.state::<assistant::Assistant>().start_idle_timer();
             Ok(())
         })
         .on_window_event(|window, event| match window.label() {
@@ -415,6 +423,10 @@ fn main() -> anyhow::Result<()> {
             model_status,
             model_check_update,
             model_download,
+            assistant::assistant_status,
+            assistant::assistant_set,
+            assistant::assistant_cancel,
+            assistant::assistant_run,
             library::library_list,
             library::library_open,
             library::library_reveal,
