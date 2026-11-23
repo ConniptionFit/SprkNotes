@@ -18,3 +18,5 @@ pub mod view;
 
 pub use engine::{AssistantEngine, Control, EngineError, GenRequest, GenStats, RunControl};
 pub use governor::Tier;
+pub mod client;
+pub mod host;

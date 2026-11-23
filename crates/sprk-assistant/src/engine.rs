@@ -95,6 +95,8 @@ pub struct FakeEngine {
     pub piece_chars: usize,
     pub loaded: bool,
     pub fail_load: bool,
+    /// Sleep between pieces, to let tests hold or cancel a request in flight.
+    pub piece_delay_ms: u64,
     pub seen_prompts: Vec<String>,
     next: usize,
 }
@@ -151,9 +153,16 @@ impl AssistantEngine for FakeEngine {
         let mut out = String::new();
         let mut produced = 0u32;
         for piece in chars.chunks(step) {
-            // A fake never sleeps: Hold simply means "not now", so treat it as Run here.
-            if control.state() == Control::Cancel {
-                return Err(EngineError::Cancelled);
+            // Like a real engine: wait while held, stop when cancelled.
+            loop {
+                match control.state() {
+                    Control::Cancel => return Err(EngineError::Cancelled),
+                    Control::Hold => std::thread::sleep(std::time::Duration::from_millis(5)),
+                    Control::Run => break,
+                }
+            }
+            if self.piece_delay_ms > 0 {
+                std::thread::sleep(std::time::Duration::from_millis(self.piece_delay_ms));
             }
             let text: String = piece.iter().collect();
             out.push_str(&text);
