@@ -25,6 +25,9 @@
   let pinLabel = $state("");
   let lineId = $state<number | null>(null);
 
+  // A few ready-made questions. Each one is sent as an ordinary typed question.
+  const PRESETS = ["What was decided?", "What is still open?", "Who owns what?"];
+
   const has = (f: AssistantFeature) => features.includes(f);
   const statements = $derived(lines.filter((l) => l.kind === "statement").slice(-8).reverse());
   const stamp = (id: number) => lines.find((l) => l.id === id)?.t ?? "";
@@ -93,7 +96,24 @@
     <button class="x" onclick={onclose} aria-label="Close">×</button>
   </header>
 
+  <form class="inline ask-box" onsubmit={(e) => (e.preventDefault(), ask())}>
+    <input
+      aria-label="Your question"
+      placeholder="Type a question about this transcript"
+      maxlength="500"
+      disabled={!has("ask")}
+      bind:value={question}
+    />
+    <button class="go" disabled={busy || !has("ask") || !question.trim()}>Ask</button>
+  </form>
+  {#if !has("ask")}<p class="muted note">Turn on "Ask a question" in Settings to type your own.</p>{/if}
+
   <div class="chips" role="group" aria-label="Quick questions">
+    {#if has("ask")}
+      {#each PRESETS as q (q)}
+        <button disabled={busy} onclick={() => run(q, { op: "ask", question: q })}>{q}</button>
+      {/each}
+    {/if}
     {#if has("recap")}<button disabled={busy} onclick={() => run("What did I miss?", { op: "recap", minutes: 5 })}>What did I miss?</button>{/if}
     {#if has("actions")}<button disabled={busy} onclick={() => run("Action items", { op: "actions" })}>Action items</button>{/if}
     {#if has("commitments")}<button disabled={busy} onclick={() => run("My commitments", { op: "commitments" })}>My commitments</button>{/if}
@@ -131,13 +151,6 @@
       {#if has("explain")}<button disabled={busy || lineId === null} onclick={() => lineId !== null && run("Explain this", { op: "explain", lineId })}>Explain this</button>{/if}
       {#if has("shorten")}<button disabled={busy || lineId === null} onclick={() => lineId !== null && run("Say it again, short", { op: "shorten", fromId: lineId, toId: lineId })}>Say it short</button>{/if}
     </div>
-  {/if}
-
-  {#if has("ask")}
-    <form class="inline" onsubmit={(e) => (e.preventDefault(), ask())}>
-      <input aria-label="Your question" placeholder="Ask about this transcript" bind:value={question} />
-      <button disabled={busy || !question.trim()}>Ask</button>
-    </form>
   {/if}
 
   {#if busy}
@@ -216,6 +229,10 @@
   .inline input, .inline textarea, .inline select {
     flex: 1; min-width: 0; font: inherit; padding: 0.4rem 0.6rem; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text);
   }
+  .ask-box input { padding: 0.55rem 0.75rem; }
+  .ask-box .go { background: var(--accent); border-color: transparent; color: var(--on-accent); font-weight: 600; }
+  .ask-box .go:hover:not(:disabled) { background: var(--accent-hover); }
+  .note { margin: 0; font-size: 0.85rem; }
   .results { display: grid; gap: 0.7rem; }
   article { padding-top: 0.5rem; border-top: 1px solid var(--border); }
   article p, article ul { margin: 0; }
