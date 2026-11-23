@@ -13,6 +13,7 @@ pub mod engine;
 pub mod governor;
 pub mod prompt;
 pub mod protocol;
+pub mod service;
 pub mod title;
 pub mod view;
 
