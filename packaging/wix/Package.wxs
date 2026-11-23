@@ -150,10 +150,15 @@
          It skips while SprkNotes is open and tries again at the next run. -->
     <CustomAction Id="CreateUpdateTask" Directory="INSTALLFOLDER" Execute="deferred" Impersonate="no" Return="ignore"
       ExeCommand="schtasks.exe /Create /F /TN &quot;SprkNotes\Update&quot; /SC HOURLY /MO 6 /RU SYSTEM /RL HIGHEST /TR &quot;\&quot;[INSTALLFOLDER]SprkNotes.exe\&quot; --update&quot;" />
+    <!-- schtasks /Create defaults stop a task on battery and skip missed runs. Loosen that so a laptop updates
+         unattended too. Return="ignore": if this fails the task still exists with the defaults. -->
+    <CustomAction Id="TuneUpdateTask" Directory="INSTALLFOLDER" Execute="deferred" Impersonate="no" Return="ignore"
+      ExeCommand="powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command &quot;$s = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew; Set-ScheduledTask -TaskPath '\SprkNotes\' -TaskName 'Update' -Settings $s&quot;" />
     <CustomAction Id="RemoveUpdateTask" Directory="INSTALLFOLDER" Execute="deferred" Impersonate="no" Return="ignore"
       ExeCommand="schtasks.exe /Delete /F /TN &quot;SprkNotes\Update&quot;" />
     <InstallExecuteSequence>
       <Custom Action="CreateUpdateTask" Before="InstallFinalize" Condition="ALLUSERS=1 AND NOT (UPDATE_TASK=&quot;0&quot;) AND NOT REMOVE" />
+      <Custom Action="TuneUpdateTask" After="CreateUpdateTask" Condition="ALLUSERS=1 AND NOT (UPDATE_TASK=&quot;0&quot;) AND NOT REMOVE" />
       <Custom Action="RemoveUpdateTask" After="InstallInitialize" Condition="REMOVE=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE" />
     </InstallExecuteSequence>
   </Package>

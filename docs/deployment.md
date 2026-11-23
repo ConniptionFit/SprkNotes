@@ -119,6 +119,11 @@ msiexec /i SprkNotes_<ver>_x64.msi ALLUSERS=1 /qn /norestart `
 ### Per-machine installs update themselves
 A per-machine MSI registers the scheduled task `SprkNotes\Update` (runs as SYSTEM every 6 hours, no window). It runs `SprkNotes.exe --update`: check on the `UpdateCheckHours` interval, download, verify the SHA-256 and signature, and install only when nobody has SprkNotes open. If it is open, the verified installer waits for the next run. Per-machine installs start in `auto` mode; set `UpdateMode=off` or `UPDATE_TASK=0` to manage versions yourself. Check it: `schtasks /Query /TN "SprkNotes\Update" /V`. Install logs: `%LocalAppData%\SprkNotes\updates\install.log` (the SYSTEM profile for the task). Firewalls need the release host (`git.pwrs.dev`, or `github.com` and `api.github.com`).
 
+### Upgrades keep your settings
+An upgrade (including the updater's own plain `msiexec /i new.msi /qn`) reads the existing `UPDATE_*` values and `LOCK_UPDATES` back, so policy written by the installer survives. Passing new `UPDATE_*` values on an upgrade changes them. A locked install stays locked: the MSI cannot lift `LOCK_UPDATES` on upgrade. To unlock, uninstall and install again without `LOCK_UPDATES=1`, or remove the values under `HKLM\Software\Policies\SprkNotes` yourself.
+
+The update task also runs on battery and catches up after a missed run (the Windows default would skip both).
+
 ### Early-release groups
 Give the pilot group `UpdateChannel=beta` (or `alpha`) by policy or MSI switch; everyone else stays on `stable`. Moving a group back to stable keeps its current build until a newer stable release appears.
 
