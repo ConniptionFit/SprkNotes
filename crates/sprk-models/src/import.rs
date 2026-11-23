@@ -68,6 +68,14 @@ pub fn import_pack(
         Ok(v) => v,
         Err(e) => return reject(store, pack, e.to_string(), o.now),
     };
+    if verified.manifest.kind != store.pack_kind() {
+        let reason = format!(
+            "this is a {} pack and this store holds {} packs",
+            verified.manifest.kind,
+            store.pack_kind()
+        );
+        return reject(store, pack, reason, o.now);
+    }
     let iv = crate::store::id_version(&verified.manifest.id, &verified.manifest.version);
     let final_dir = store.model_dir(&iv);
     let staging = store.root().join(".staging").join(&iv);

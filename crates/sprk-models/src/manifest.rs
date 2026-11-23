@@ -8,7 +8,19 @@ use std::path::{Component, Path};
 
 pub const SCHEMA: u32 = 1;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// Pack kinds (ADR-010). A pack without `kind` is a transcription model.
+pub const KIND_TRANSCRIPTION: &str = "transcription";
+pub const KIND_ASSISTANT: &str = "assistant";
+
+fn default_kind() -> String {
+    KIND_TRANSCRIPTION.to_string()
+}
+
+fn is_transcription(k: &str) -> bool {
+    k == KIND_TRANSCRIPTION
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Features {
     pub punctuation: bool,
     pub casing: bool,
@@ -21,18 +33,45 @@ pub struct SmokeTest {
     pub expect_contains: Vec<String>,
 }
 
+/// Extra fields for `kind: "assistant"` packs (ADR-010). Data only: the app owns the prompt
+/// format named here, so a pack can never change how prompts are built.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AssistantSpec {
+    /// `titles`, `light` or `standard` (ADR-009).
+    pub tier: String,
+    /// Fixed prompt format id compiled into the app (for example `chatml`). Never a template.
+    pub prompt_format: String,
+    /// Largest context the app may ask for with this model.
+    pub context_tokens: u32,
+    /// Estimated resident memory with the model loaded, in MB. Used by the memory gate.
+    pub ram_estimate_mb: u32,
+    /// Required notice text (for example Apache 2.0 attribution).
+    #[serde(default)]
+    pub attribution: String,
+}
+
+pub const ASSISTANT_TIERS: [&str; 3] = ["titles", "light", "standard"];
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Manifest {
     pub schema: u32,
+    #[serde(default = "default_kind", skip_serializing_if = "is_transcription")]
+    pub kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assistant: Option<AssistantSpec>,
     pub id: String,
     /// `YYYY.MM.patch`, sorts correctly.
     pub version: String,
     pub display_name: String,
     /// Must match an adapter compiled into the app (SPEC 17.2).
     pub engine: String,
+    #[serde(default)]
     pub languages: Vec<String>,
+    #[serde(default)]
     pub sample_rate: u32,
+    #[serde(default)]
     pub features: Features,
+    #[serde(default)]
     pub accelerators: Vec<String>,
     pub min_app_version: String,
     /// Logical role (encoder, tokens, ...) to file name inside the model folder.
@@ -115,8 +154,37 @@ impl Manifest {
         if parse_semver(&self.min_app_version).is_none() {
             return bad("min_app_version must be MAJOR.MINOR.PATCH");
         }
-        if self.engine.is_empty() || self.languages.is_empty() || self.sample_rate == 0 {
-            return bad("engine, languages and sample_rate are required");
+        match self.kind.as_str() {
+            KIND_TRANSCRIPTION => {
+                if self.engine.is_empty() || self.languages.is_empty() || self.sample_rate == 0 {
+                    return bad("engine, languages and sample_rate are required");
+                }
+                if self.assistant.is_some() {
+                    return bad("assistant details belong only in an assistant pack");
+                }
+            }
+            KIND_ASSISTANT => {
+                if self.engine.is_empty() {
+                    return bad("engine is required");
+                }
+                let Some(a) = &self.assistant else {
+                    return bad("an assistant pack needs an assistant section");
+                };
+                if !ASSISTANT_TIERS.contains(&a.tier.as_str()) {
+                    return bad("assistant tier must be titles, light or standard");
+                }
+                let fmt_ok = !a.prompt_format.is_empty()
+                    && a.prompt_format
+                        .chars()
+                        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+                if !fmt_ok {
+                    return bad("prompt_format must be a plain id such as chatml");
+                }
+                if a.context_tokens < 512 || a.ram_estimate_mb == 0 {
+                    return bad("context_tokens and ram_estimate_mb must be set");
+                }
+            }
+            _ => return bad("kind must be transcription or assistant"),
         }
         if self.files.is_empty() {
             return bad("files must not be empty");
@@ -260,5 +328,48 @@ mod tests {
             m.verify_files(dir.path()),
             Err(ManifestError::HashMismatch(_))
         ));
+    }
+
+    fn assistant_json(tier: &str) -> String {
+        format!(
+            r#"{{"schema":1,"kind":"assistant","id":"qwen-test","version":"2027.01.0",
+"display_name":"Test assistant","engine":"llama-cpp","min_app_version":"0.0.1",
+"files":{{"weights":"model.gguf"}},"sha256":{{"model.gguf":"{H}"}},
+"assistant":{{"tier":"{tier}","prompt_format":"chatml","context_tokens":8192,"ram_estimate_mb":2000,
+"attribution":"Apache 2.0"}},"license":"Apache-2.0","source":"synthetic"}}"#
+        )
+    }
+
+    #[test]
+    fn old_manifest_is_a_transcription_pack_and_serializes_unchanged() {
+        let m = Manifest::from_json(&sample(H)).unwrap();
+        assert_eq!(m.kind, KIND_TRANSCRIPTION);
+        let out = serde_json::to_string(&m).unwrap();
+        assert!(!out.contains("\"kind\""), "kind stays out of old packs");
+        assert!(!out.contains("assistant"));
+    }
+
+    #[test]
+    fn assistant_pack_parses_without_speech_fields() {
+        let m = Manifest::from_json(&assistant_json("light")).unwrap();
+        assert_eq!(m.kind, KIND_ASSISTANT);
+        assert_eq!(m.assistant.as_ref().map(|a| a.tier.as_str()), Some("light"));
+    }
+
+    #[test]
+    fn assistant_pack_rules() {
+        assert!(Manifest::from_json(&assistant_json("huge")).is_err());
+        let no_section = assistant_json("light").replace("\"assistant\":{", "\"x\":{");
+        assert!(Manifest::from_json(&no_section).is_err());
+        let bad_fmt = assistant_json("light").replace("chatml", "{{ jinja }}");
+        assert!(Manifest::from_json(&bad_fmt).is_err());
+        let wrong_kind = sample(H).replace("\"schema\":1,", "\"schema\":1,\"kind\":\"magic\",");
+        assert!(Manifest::from_json(&wrong_kind).is_err());
+        // A transcription pack may not carry assistant details.
+        let mixed = sample(H).replace(
+            "\"license\"",
+            "\"assistant\":{\"tier\":\"light\",\"prompt_format\":\"chatml\",\"context_tokens\":4096,\"ram_estimate_mb\":1},\"license\"",
+        );
+        assert!(Manifest::from_json(&mixed).is_err());
     }
 }
