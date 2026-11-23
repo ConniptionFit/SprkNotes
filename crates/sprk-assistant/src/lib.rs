@@ -25,6 +25,7 @@ pub mod task;
 pub mod title;
 pub mod verify;
 pub mod view;
+pub mod workspace;
 
 pub use engine::{AssistantEngine, Control, EngineError, GenRequest, GenStats, RunControl};
 pub use governor::Tier;
