@@ -16,8 +16,8 @@ sprk-config = { path = "../sprk-config" }
 fake-engine = []
 
 [[bin]]
-name = "sprk-assistant"
-path = "src/bin/sprk-assistant.rs"
+name = "sprk-assistant-stub"
+path = "src/bin/sprk-assistant-stub.rs"
 
 [lints]
 workspace = true

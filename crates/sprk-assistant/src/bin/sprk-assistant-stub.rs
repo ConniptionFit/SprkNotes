@@ -1,4 +1,4 @@
-//! The assistant helper process (ADR-009). The app starts it at low priority and talks to it
+//! A stand-in helper for tests (ADR-009): the real one is crates/sprk-assistant-llama. The app starts it at low priority and talks to it
 //! over stdin and stdout (JSON lines). It has no network code and writes nothing to disk.
 //!
 //! Real engines are added as adapters here (the llama.cpp adapter arrives with the benchmark

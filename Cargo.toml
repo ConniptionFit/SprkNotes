@@ -6,7 +6,7 @@ members = [
   "crates/sprk-handoff", "crates/sprk-config", "crates/sprk-assistant", "tools/sprkctl", "tools/sprk-launcher",
 ]
 # app/src-tauri needs WebView2 / webkit2gtk, so it builds on Windows only (see ADR-002).
-exclude = ["app/src-tauri"]
+exclude = ["app/src-tauri", "crates/sprk-assistant-llama"]
 
 [workspace.package]
 # The ONLY version source. scripts/bump-version.sh keeps app/src-tauri in step.
