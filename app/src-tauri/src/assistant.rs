@@ -89,14 +89,17 @@ impl Assistant {
                 t,
                 speaker,
                 text,
-            } => self.rt.with_workspace(|w| {
-                w.push_line(Line {
-                    id: *id,
-                    t_ms: parse_t(t),
-                    speaker: speaker.to_string(),
-                    text: text.clone(),
+            } => {
+                self.rt.observe_line(parse_t(t));
+                self.rt.with_workspace(|w| {
+                    w.push_line(Line {
+                        id: *id,
+                        t_ms: parse_t(t),
+                        speaker: speaker.to_string(),
+                        text: text.clone(),
+                    })
                 })
-            }),
+            }
             UiLine::Event { t, text, .. } => self.rt.with_workspace(|w| {
                 w.push_note(Note {
                     t_ms: parse_t(t),

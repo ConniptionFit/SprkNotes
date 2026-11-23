@@ -4,13 +4,16 @@
 //! never logged; errors are plain kinds with no text.
 use crate::engine::{AssistantEngine, Control, EngineError, RunControl, SharedControl};
 use crate::features::FeatureSet;
-use crate::governor::{choose_pack, default_threads, IdleUnload, PackChoice, Refusal, Tier};
+use crate::governor::{
+    choose_pack, default_threads, IdleUnload, LagYield, PackChoice, Refusal, Tier,
+};
 use crate::host::LoadParams;
 use crate::prompt::PromptFormat;
 use crate::service::{effective, Effective, UserSettings};
 use crate::workspace::{Workspace, WorkspaceError};
 use sprk_config::AppPolicy;
 use sprk_models::{Manifest, ModelStore, StoreKind};
+use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, TryLockError};
 use std::time::Instant;
@@ -95,7 +98,40 @@ struct Loaded {
     format: PromptFormat,
 }
 
+/// Estimates how far transcription is running behind, from the lines as they arrive. A line's
+/// time is elapsed meeting time; the wall clock since the session began minus that is its delay
+/// plus a constant (utterance length). Only the rise above the lowest recent value counts.
+#[derive(Debug, Default)]
+pub struct LagTracker {
+    recent: VecDeque<(u64, u64)>,
+}
+
+impl LagTracker {
+    const WINDOW_MS: u64 = 120_000;
+
+    /// Returns how much the delay has grown beyond its recent best, in ms.
+    pub fn excess(&mut self, now_ms: u64, lag_ms: u64) -> u64 {
+        self.recent.push_back((now_ms, lag_ms));
+        while self
+            .recent
+            .front()
+            .is_some_and(|(t, _)| now_ms.saturating_sub(*t) > Self::WINDOW_MS)
+        {
+            self.recent.pop_front();
+        }
+        let best = self.recent.iter().map(|(_, l)| *l).min().unwrap_or(lag_ms);
+        lag_ms.saturating_sub(best)
+    }
+}
+
+struct LagState {
+    started: Instant,
+    tracker: LagTracker,
+    yield_: LagYield,
+}
+
 pub struct Runtime {
+    lag: Mutex<LagState>,
     ws: Mutex<Workspace>,
     user: Mutex<UserSettings>,
     engine: Mutex<Option<Loaded>>,
@@ -114,6 +150,11 @@ fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 impl Runtime {
     pub fn new(spawn: Spawner, packs: PackSource, cores: usize) -> Self {
         Self {
+            lag: Mutex::new(LagState {
+                started: Instant::now(),
+                tracker: LagTracker::default(),
+                yield_: LagYield::default(),
+            }),
             ws: Mutex::default(),
             user: Mutex::new(UserSettings::default()),
             engine: Mutex::new(None),
@@ -149,6 +190,25 @@ impl Runtime {
 
     pub fn clear_session(&self) {
         lock(&self.ws).clear();
+        *lock(&self.lag) = LagState {
+            started: Instant::now(),
+            tracker: LagTracker::default(),
+            yield_: LagYield::default(),
+        };
+    }
+
+    /// Call for every committed line with its meeting time. When transcription falls behind, a
+    /// running request is told to wait (and after a long wait, to stop). Transcription always wins.
+    pub fn observe_line(&self, t_ms: u64) {
+        let mut g = lock(&self.lag);
+        let now = u64::try_from(g.started.elapsed().as_millis()).unwrap_or(u64::MAX);
+        let excess = g.tracker.excess(now, now.saturating_sub(t_ms));
+        let ctl = g.yield_.update(now, excess);
+        drop(g);
+        // Only a request in flight reads this; the next request starts from Run.
+        if self.engine.try_lock().is_err() {
+            self.control.set(ctl);
+        }
     }
 
     /// Stops the request in flight, if any.
@@ -492,6 +552,16 @@ mod tests {
         // Policy can turn the background off.
         let off = policy(&[("AssistantBackground", "0")]);
         rt.background_tick(&off, 16_000);
+    }
+
+    #[test]
+    fn lag_tracker_counts_only_growth() {
+        let mut t = LagTracker::default();
+        assert_eq!(t.excess(1_000, 3_000), 0);
+        assert_eq!(t.excess(2_000, 3_100), 100);
+        assert_eq!(t.excess(3_000, 7_000), 4_000);
+        // Old lows age out of the two-minute window.
+        assert_eq!(t.excess(200_000, 7_000), 0);
     }
 
     #[test]
