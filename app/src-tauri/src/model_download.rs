@@ -15,8 +15,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Emitter};
 
 /// Where the default index lives unless policy names a mirror.
-pub const DEFAULT_INDEX_URL: &str =
-    "https://git.pwrs.dev/powers/sprknotes/releases/download/models/models-index.json";
+/// Compiled in from `distribution.toml` (see docs/forking.md).
+pub const DEFAULT_INDEX_URL: &str = env!("SPRK_DEFAULT_MODELS_INDEX_URL");
 
 static BUSY: AtomicBool = AtomicBool::new(false);
 

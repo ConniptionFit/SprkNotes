@@ -1,0 +1,17 @@
+# Where this build of SprkNotes gets its updates and models from.
+#
+# This is the one place the repository address lives. Change it when the project moves to another
+# host or organization (for example a corporate GitHub repository), then rebuild. Nothing else in
+# the app code names a host. Admins can still override it per machine with the UpdateRepoUrl and
+# ModelIndexUrl policies, and at build time with SPRK_REPO_URL / SPRK_REPO_PROVIDER.
+# See docs/forking.md.
+
+# https address of the repository that publishes releases (https://host/owner/repo).
+repo_url = "https://git.pwrs.dev/powers/sprknotes"
+
+# "forgejo" or "github". Leave empty to infer from the address (github.com means GitHub).
+# Set it for GitHub Enterprise Server or a self-hosted Forgejo/Gitea on an unusual host.
+provider = ""
+
+# Release tag that carries models-index.json. Default model packs are fetched from there.
+models_release_tag = "models"

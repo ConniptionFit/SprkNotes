@@ -18,6 +18,7 @@ jobs:
       - run: . "$HOME/.cargo/env" && cargo test --workspace
       - run: . "$HOME/.cargo/env" && cargo test -p sprk-assistant --features fake-engine
       - run: scripts/check-terms.sh
+      - run: scripts/check-ci-parity.sh
       - run: . "$HOME/.cargo/env" && scripts/check-assistant-deps.sh
       - run: . "$HOME/.cargo/env" && scripts/bump-version.sh --check
   # The llama.cpp helper compiles C++ (slow), so it is its own job and its own workspace.

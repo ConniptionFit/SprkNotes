@@ -16,7 +16,7 @@
 .PARAMETER Channel
   stable (default), beta or alpha. Beta includes stable releases, alpha includes both.
 .PARAMETER RepoUrl
-  Where releases come from. Default: the SprkNotes repository on git.pwrs.dev. GitHub addresses work too.
+  Where releases come from. Default: the SprkNotes repository on git.pwrs.dev (keep this default in step with distribution.toml). GitHub addresses work too.
 .PARAMETER Mode
   off, notify (default for one user), auto or force: how updates are applied after install.
 .PARAMETER Machine

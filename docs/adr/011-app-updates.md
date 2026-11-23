@@ -50,3 +50,4 @@ the app at install time, and keep per-machine installs current without prompts.
 - Version rule: the workspace version may carry `-beta.N` or `-alpha.N`. `release.ps1` maps it to MSI and MSIX numbers.
 - Windows Installer orders upgrades by the first three version fields only, so the MSI allows same-version upgrades and the updater, not the MSI, decides what is newer.
 - Open: a code-signing certificate for Authenticode (SmartScreen), an ADMX template tested in Intune, and a private WinGet source are separate follow-ups.
+- Addendum: the built-in repository address is read from `distribution.toml` at build time, so moving the project to another host or organization needs no code change (see `docs/forking.md`).
