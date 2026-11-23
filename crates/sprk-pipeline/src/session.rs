@@ -8,6 +8,7 @@ use crate::caption::{Caption, Captioner};
 use crate::commit::{CommitBuffer, Config};
 use crate::{Segment, Speaker};
 use sprk_asr::{transcribe_utterance, Engine, Vad};
+use sprk_audio::echo::EchoPath;
 use sprk_audio::Source;
 use sprk_transcript::writer::TranscriptWriter;
 use sprk_transcript::TranscriptError;
@@ -91,6 +92,8 @@ pub struct Session {
     captions: Captioner,
     /// Final captions waiting for the host to send them.
     final_captions: Vec<Caption>,
+    /// Echo canceller on the microphone, fed by the system stream (SPEC 4.2 layer 2).
+    echo: Option<EchoPath>,
 }
 
 impl Session {
@@ -124,6 +127,31 @@ impl Session {
             stats: Stats::default(),
             captions: Captioner::new(),
             final_captions: Vec::new(),
+            echo: None,
+        }
+    }
+
+    /// Run the microphone through an echo canceller that uses the system stream as the
+    /// reference, so speaker sound picked up by the mic is removed before transcription.
+    /// Only active while both sources are on.
+    pub fn with_echo_cancellation(mut self, on: bool) -> Self {
+        self.echo = on.then(EchoPath::new);
+        self
+    }
+
+    fn echo_active(&self) -> bool {
+        self.echo.is_some() && self.mic.enabled && self.system.enabled
+    }
+
+    /// Release mic audio the canceller still holds, then start it fresh (stale reference
+    /// history must not leak across a pause, a source toggle or a device change).
+    fn flush_echo(&mut self) {
+        if let Some(e) = self.echo.as_mut() {
+            let rest = e.flush();
+            *e = EchoPath::new();
+            if !rest.is_empty() && self.mic.enabled && self.state == State::Running {
+                self.ingest(Source::Mic, &rest);
+            }
         }
     }
 
@@ -139,6 +167,13 @@ impl Session {
     /// finishes what it was hearing; turning it back on starts its timeline at `now_ms`, so
     /// lines after the gap carry the right time (they ran early by the length of the gap).
     pub fn set_source_enabled(&mut self, source: Source, on: bool, now_ms: u64) {
+        let current = match source {
+            Source::Mic => self.mic.enabled,
+            Source::System => self.system.enabled,
+        };
+        if current != on {
+            self.flush_echo();
+        }
         let (stream, speaker) = match source {
             Source::Mic => (&mut self.mic, Speaker::Me),
             Source::System => (&mut self.system, self.remote.clone()),
@@ -169,6 +204,33 @@ impl Session {
         if self.state != State::Running {
             return;
         }
+        if !self.echo_active() {
+            self.ingest(source, samples);
+            return;
+        }
+        let Some(echo) = self.echo.as_mut() else {
+            return;
+        };
+        match source {
+            Source::Mic => {
+                echo.push_mic(samples);
+                let clean = echo.take();
+                if !clean.is_empty() {
+                    self.ingest(Source::Mic, &clean);
+                }
+            }
+            Source::System => {
+                echo.push_reference(samples);
+                let clean = echo.take();
+                self.ingest(Source::System, samples);
+                if !clean.is_empty() {
+                    self.ingest(Source::Mic, &clean);
+                }
+            }
+        }
+    }
+
+    fn ingest(&mut self, source: Source, samples: &[f32]) {
         let (stream, speaker) = match source {
             Source::Mic => (&mut self.mic, Speaker::Me),
             Source::System => (&mut self.system, self.remote.clone()),
@@ -285,6 +347,7 @@ impl Session {
 
     /// Release speech still held by the VADs and commit everything (pause, end, panic).
     fn drain_all(&mut self, now_ms: u64) -> Result<Vec<Segment>, SessionError> {
+        self.flush_echo();
         let u = self.mic.vad.flush();
         let b = self.mic.base_ms;
         self.decode(u, b, &Speaker::Me, Source::Mic);
@@ -579,5 +642,18 @@ mod tests {
         assert!(log.0.lock().unwrap().is_empty(), "nothing written yet");
         s.pause(2_000).unwrap();
         assert!(s.captions(10_000).is_empty(), "none while paused");
+    }
+
+    #[test]
+    fn echo_path_neither_loses_nor_adds_mic_audio() {
+        let (s, _log) = make(&[]);
+        let mut s = s.with_echo_cancellation(true);
+        for _ in 0..50 {
+            s.feed(Source::Mic, &[0.01; 320]);
+            s.feed(Source::System, &[0.0; 320]);
+        }
+        s.set_source_enabled(Source::System, false, 1_000); // flushes the canceller
+        let held = 50 * 320 - s.mic.fed;
+        assert_eq!(held, 0, "{held} mic samples left in the echo path");
     }
 }

@@ -364,7 +364,8 @@ fn run(
         events: events.clone(),
         next_id: 0,
     };
-    let mut session = Session::new(engine, make_vad, Box::new(sink), commit);
+    let mut session =
+        Session::new(engine, make_vad, Box::new(sink), commit).with_echo_cancellation(true);
     let start = Instant::now();
     let now_ms = |s: &Instant| s.elapsed().as_millis() as u64;
     let mut last_tick = 0u64;

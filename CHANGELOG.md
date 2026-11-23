@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Mic bleed fix (ADR-012, alpha): speaker sound picked up by the mic (a video playing through speakers was labelled Me) is now removed with WebRTC AEC3 using the system stream as reference, and the system stream keeps wall-clock time while silent (Windows loopback sends nothing during silence, which pushed Others lines minutes away from the matching Me lines so dedupe never matched). Needs a speakers-on check on the laptops.
 - Portable distribution source: the repository address the app updates and downloads models from now lives only in `distribution.toml` (compiled in; `SPRK_REPO_URL` and `SPRK_REPO_PROVIDER` override at build time; policy and MSI switches still override at run time). A GitHub copy of the CI workflow (`.github/workflows/ci.yml`) with a parity check, and `docs/forking.md`: a checklist for moving to another repository (keep the MSI `UpgradeCode`) or forking a separately branded edition (new `UpgradeCode` and identifier).
 
 ## 0.1.0

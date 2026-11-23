@@ -11,6 +11,7 @@ cpal-backend = ["dep:cpal", "dep:ringbuf"]
 
 [dependencies]
 thiserror.workspace = true
+sonora = { version = "0.3", default-features = false }
 cpal = { version = "0.15", optional = true }
 ringbuf = { version = "0.4", optional = true }
 
