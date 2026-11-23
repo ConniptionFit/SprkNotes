@@ -20,3 +20,17 @@ jobs:
       - run: scripts/check-terms.sh
       - run: . "$HOME/.cargo/env" && scripts/check-assistant-deps.sh
       - run: . "$HOME/.cargo/env" && scripts/bump-version.sh --check
+  # The llama.cpp helper compiles C++ (slow), so it is its own job and its own workspace.
+  assistant-engine:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build tools
+        run: |
+          if ! command -v cmake >/dev/null || ! command -v clang >/dev/null; then
+            (sudo -n true 2>/dev/null && SUDO=sudo || SUDO=; $SUDO apt-get update -qq && $SUDO apt-get install -y -qq cmake clang libclang-dev python3-venv)
+          fi
+      - name: Rust toolchain
+        run: |
+          curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal -c clippy,rustfmt
+      - run: . "$HOME/.cargo/env" && scripts/test-assistant-engine.sh

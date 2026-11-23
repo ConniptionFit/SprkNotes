@@ -9,14 +9,15 @@ license.workspace = true
 thiserror.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sprk-config = { path = "../sprk-config" }
 
 [features]
 # A scripted engine inside the helper binary, for tests only. Never enabled in shipped builds.
 fake-engine = []
 
 [[bin]]
-name = "sprk-assistant"
-path = "src/bin/sprk-assistant.rs"
+name = "sprk-assistant-stub"
+path = "src/bin/sprk-assistant-stub.rs"
 
 [lints]
 workspace = true

@@ -48,6 +48,9 @@ sprkctl model install .\parakeet@2026.11.0.sprkmodel --scope machine   # elevate
 sprkctl model list --json
 sprkctl model activate <id>@<ver>
 sprkctl model rollback
+# Assistant packs (off by default, ADR-009) live in their own folder; add --kind assistant:
+sprkctl model install .\qwen3-5-2b-q4@2027.01.0.sprkmodel --kind assistant --scope machine
+sprkctl model list --kind assistant --scope machine --json
 sprkctl model remove <id>@<ver>
 ```
 - A new or rolled-back model takes effect at the **next session start**, never mid-session.

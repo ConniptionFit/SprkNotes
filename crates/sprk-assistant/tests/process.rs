@@ -17,8 +17,11 @@ fn params() -> LoadParams {
 #[test]
 fn the_helper_process_answers_and_exits_when_dropped() {
     std::env::set_var("SPRK_ASSISTANT_FAKE_REPLIES", r#"["Budget review"]"#);
-    let mut e =
-        RemoteEngine::spawn(Path::new(env!("CARGO_BIN_EXE_sprk-assistant")), params()).unwrap();
+    let mut e = RemoteEngine::spawn(
+        Path::new(env!("CARGO_BIN_EXE_sprk-assistant-stub")),
+        params(),
+    )
+    .unwrap();
     e.load().unwrap();
     let c = SharedControl::default();
     let mut got = String::new();
