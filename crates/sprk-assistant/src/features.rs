@@ -14,9 +14,15 @@ pub enum Feature {
     Explain,
     Shorten,
     Prep,
+    /// "Was I asked something?": questions from Others since you last spoke. No model.
+    Asked,
+    /// A summary of the whole meeting so far, on this PC.
+    Summary,
+    /// A short catch-up written in the background every 10 minutes of meeting time.
+    Rolling,
 }
 
-pub const ALL: [Feature; 11] = [
+pub const ALL: [Feature; 14] = [
     Feature::Title,
     Feature::Recap,
     Feature::Actions,
@@ -28,6 +34,9 @@ pub const ALL: [Feature; 11] = [
     Feature::Explain,
     Feature::Shorten,
     Feature::Prep,
+    Feature::Asked,
+    Feature::Summary,
+    Feature::Rolling,
 ];
 
 impl Feature {
@@ -45,6 +54,9 @@ impl Feature {
             Feature::Explain => "explain",
             Feature::Shorten => "shorten",
             Feature::Prep => "prep",
+            Feature::Asked => "asked",
+            Feature::Summary => "summary",
+            Feature::Rolling => "rolling",
         }
     }
 

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { backend, type Backend } from "./api";
-  import type { Caption, Status } from "./types";
+  import type { AssistantStatus, Caption, Status } from "./types";
   import { prefs, setPref, captionFlags, CAPTION_TEXT, CAPTION_LIMITS } from "./prefs.svelte";
   import Light from "./Light.svelte";
   import IconButton from "./IconButton.svelte";
@@ -31,6 +31,30 @@
   // Captions: the last few committed lines plus the line still being spoken.
   let finals = $state<{ id: number; speaker: string; text: string; utt?: number }[]>([]);
   let partial = $state<Caption | null>(null);
+
+  // "Catch me up" (Ask Sprk): only when it is on and ready. The answer stays here until dismissed.
+  let assistant = $state<AssistantStatus | null>(null);
+  let catchBusy = $state(false);
+  let catchUp = $state<{ text: string }[] | null>(null);
+  let catchNote = $state("");
+  const canCatchUp = $derived(!!assistant && assistant.state === "ready" && assistant.features.includes("recap") && status !== "ready");
+  async function catchMeUp() {
+    if (!api || catchBusy) return;
+    catchBusy = true;
+    catchNote = "";
+    try {
+      const r = await api.assistantRun({ op: "recap", minutes: 5 });
+      if (r.kind === "recap") {
+        catchUp = r.bullets.map((b) => ({ text: b.text }));
+        catchNote = r.nothingSaid ? "No one has spoken in that time." : r.bullets.length === 0 ? "Nothing I could confirm from the transcript." : "";
+      }
+    } catch (e) {
+      catchUp = [];
+      catchNote = String(e) === "notEnoughMemory" ? "Not enough free memory right now." : "That did not work. Try again.";
+    } finally {
+      catchBusy = false;
+    }
+  }
 
   let nextId = 0;
   // Words already on screen per speaker, so only new words fade in, one after another.
@@ -86,6 +110,7 @@
         }),
       );
       offs.push(await b.onMiniFlip((f) => (flipped = f)));
+      b.assistantStatus().then((a) => (assistant = a)).catch(() => {});
       flipped = await b.miniFlipped();
     });
 
@@ -138,7 +163,12 @@
     // Linger briefly so a stray mouse move never makes the buttons jump away.
     else collapseTimer = setTimeout(() => (expanded = false), HIDE_DELAY);
   }
-  const hover = (on: boolean) => ((hovering = on), refresh());
+  const hover = (on: boolean) => {
+    hovering = on;
+    // Settings may have changed in the main window; look again when the pointer arrives.
+    if (on) api?.assistantStatus().then((a) => (assistant = a)).catch(() => {});
+    refresh();
+  };
 
   const stepText = (d: number) =>
     setPref("captionText", Math.min(CAPTION_TEXT.length - 1, Math.max(0, textStep + d)));
@@ -220,6 +250,11 @@
 
       {#if expanded}
         <div class="actions">
+          {#if canCatchUp}
+            <IconButton label={catchBusy ? "Working on it" : "Catch me up"} disabled={catchBusy} onclick={catchMeUp}>
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 5h12v8H9l-3 3v-3H4z" /></svg>
+            </IconButton>
+          {/if}
           {#if status === "ready"}
             <IconButton label="Start" primary onclick={() => api?.start("")}>
               <svg viewBox="0 0 20 20" aria-hidden="true"><path class="solid" d="M6.5 4.5l9 5.5-9 5.5z" /></svg>
@@ -245,6 +280,13 @@
       {/if}
     </div>
 
+    {#if catchUp}
+      <div class="catchup" role="status">
+        <button class="close" onclick={() => (catchUp = null)} aria-label="Close">×</button>
+        {#each catchUp as b}<p>{b.text}</p>{/each}
+        {#if catchNote}<p class="note">{catchNote}</p>{/if}
+      </div>
+    {/if}
     {#if prefs.captionsOn}
       <!-- A fixed-height bar so new words never make the window jump. -->
       <div class="drawer" class:flipped style:width="{drawerW}px" style:height="{drawerH}px" style:--cap-size="{CAPTION_TEXT[textStep]}px">
@@ -362,4 +404,11 @@
   .caret { display: inline-block; width: 2px; height: 1em; margin-left: 3px; vertical-align: -2px; background: var(--accent); animation: blink 1s steps(2) infinite; }
   @keyframes blink { 50% { opacity: 0; } }
   @media (forced-colors: active) { .orb, .drawer, .zoom { border: 1px solid CanvasText; } }
+  .catchup {
+    position: relative; max-width: 26rem; margin-top: 0.4rem; padding: 0.6rem 1.8rem 0.6rem 0.8rem;
+    border-radius: 12px; background: rgba(20, 16, 30, 0.86); color: #fff; font-size: 0.95rem; display: grid; gap: 0.3rem;
+  }
+  .catchup p { margin: 0; }
+  .catchup .note { opacity: 0.75; }
+  .catchup .close { position: absolute; top: 0.2rem; right: 0.4rem; border: none; background: transparent; color: inherit; font-size: 1.2rem; cursor: pointer; }
 </style>

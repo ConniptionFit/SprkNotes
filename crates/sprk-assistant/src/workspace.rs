@@ -4,8 +4,8 @@
 use crate::actions::{extract, ActionItem, ActionList};
 use crate::engine::{AssistantEngine, EngineError, RunControl};
 use crate::extras::{
-    agenda_check, explain, my_commitments, next_meeting_prep, parking_lot, say_it_short,
-    AgendaStatus, Explained, ParkedItem, Pin, Pins, Prep, Shortened,
+    agenda_check, asked_me, explain, my_commitments, next_meeting_prep, parking_lot, say_it_short,
+    AgendaStatus, Asked, Explained, ParkedItem, Pin, Pins, Prep, Shortened,
 };
 use crate::features::{Feature, FeatureSet};
 use crate::prompt::PromptFormat;
@@ -30,7 +30,19 @@ pub struct Workspace {
     notes: Vec<Note>,
     participants: Vec<String>,
     pins: Pins,
+    catchups: Vec<Catchup>,
 }
+
+/// A background catch-up for one stretch of the meeting (the Rolling feature).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Catchup {
+    pub from_ms: u64,
+    pub to_ms: u64,
+    pub bullets: Vec<crate::recap::Bullet>,
+}
+
+/// How often the Rolling feature writes a catch-up, in meeting time.
+pub const ROLLING_MS: u64 = 10 * 60_000;
 
 fn need(features: FeatureSet, f: Feature) -> Result<(), WorkspaceError> {
     if features.has(f) {
@@ -264,6 +276,58 @@ impl Workspace {
     pub fn pins(&self, features: FeatureSet) -> Result<Vec<Pin>, WorkspaceError> {
         need(features, Feature::Pins)?;
         Ok(self.pins.list().to_vec())
+    }
+
+    /// Questions from Others since you last spoke.
+    pub fn asked(
+        &self,
+        features: FeatureSet,
+        window_ms: u64,
+    ) -> Result<Vec<Asked>, WorkspaceError> {
+        need(features, Feature::Asked)?;
+        Ok(asked_me(&self.lines, self.now_ms(), window_ms))
+    }
+
+    /// The whole meeting so far, piece by piece then merged (same checks as the recap).
+    pub fn summary(
+        &self,
+        features: FeatureSet,
+        engine: &mut dyn AssistantEngine,
+        control: &dyn RunControl,
+        format: PromptFormat,
+    ) -> Result<Recap, WorkspaceError> {
+        need(features, Feature::Summary)?;
+        let minutes = u32::try_from(self.now_ms() / 60_000 + 1).unwrap_or(u32::MAX);
+        Ok(recap(
+            engine,
+            control,
+            format,
+            &self.lines,
+            &self.notes,
+            &self.participants,
+            self.now_ms(),
+            minutes,
+        )?)
+    }
+
+    /// True when a new background catch-up is due: Rolling is on and 10 minutes of meeting
+    /// have passed since the last one, with at least a few lines to cover.
+    pub fn catchup_due(&self, features: FeatureSet) -> bool {
+        if !features.has(Feature::Rolling) {
+            return false;
+        }
+        let last = self.catchups.last().map_or(0, |c| c.to_ms);
+        let fresh = self.lines.iter().filter(|l| l.t_ms > last).count();
+        self.now_ms().saturating_sub(last) >= ROLLING_MS && fresh >= 6
+    }
+
+    pub fn add_catchup(&mut self, c: Catchup) {
+        self.catchups.push(c);
+    }
+
+    pub fn catchups(&self, features: FeatureSet) -> Result<Vec<Catchup>, WorkspaceError> {
+        need(features, Feature::Rolling)?;
+        Ok(self.catchups.clone())
     }
 
     pub fn parking(&self, features: FeatureSet) -> Result<Vec<ParkedItem>, WorkspaceError> {

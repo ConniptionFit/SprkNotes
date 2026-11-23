@@ -121,7 +121,7 @@ function mockAssistant(): Pick<Backend, "assistantStatus" | "assistantSet" | "as
       maxTier: "standard",
       enabled: on,
       features: features as AssistantStatus["features"],
-      allowedFeatures: ["title", "recap", "actions", "ask", "agenda", "commitments", "pins", "parkinglot", "explain", "shorten", "prep"],
+      allowedFeatures: ["title", "recap", "actions", "ask", "agenda", "commitments", "pins", "parkinglot", "explain", "shorten", "prep", "asked", "summary", "rolling"],
     }),
     assistantSet: async (enabled, _tier, f) => {
       on = enabled;
@@ -141,6 +141,9 @@ function mockAssistant(): Pick<Backend, "assistantStatus" | "assistantSet" | "as
         case "explain": return { kind: "answer", state: "ok", text: "They meant the shared budget sheet.", cites: [r.lineId] };
         case "shorten": return { kind: "answer", state: "ok", text: "The budget is in the sheet.", cites: [r.fromId] };
         case "prep": return { kind: "prep", markdown: "# Next meeting\n\n## Open action items\n- Send the sample sheet (Me, Thursday)\n" };
+        case "summary": return { kind: "recap", bullets: [{ text: "The meeting covered the synthetic budget.", cites: [1] }], dropped: 0, nothingSaid: false };
+        case "asked": return { kind: "asked", items: [{ lineId: 5, t: "00:00:50", text: "Can you send the sheet today?" }] };
+        case "catchups": return { kind: "catchups", items: [{ from: "00:00:00", to: "00:10:00", bullets: [{ text: "The first ten minutes covered the budget.", cites: [1] }] }] };
         case "pinNow": pins = [...pins, { lineId: pins.length + 1, t: "00:00:10", label: r.label }]; return { kind: "pins", pins };
         case "unpin": pins = pins.filter((p) => p.lineId !== r.lineId); return { kind: "pins", pins };
         case "pins": return { kind: "pins", pins };

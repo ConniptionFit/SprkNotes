@@ -118,6 +118,12 @@ impl Assistant {
             std::thread::sleep(std::time::Duration::from_secs(30));
             rt.idle_tick(&crate::policy());
         });
+        // The Rolling feature: one short catch-up per ten minutes of meeting, only if chosen.
+        let rt = Arc::clone(&self.rt);
+        std::thread::spawn(move || loop {
+            std::thread::sleep(std::time::Duration::from_secs(60));
+            rt.background_tick(&crate::policy(), available_mb());
+        });
     }
 }
 
@@ -242,6 +248,12 @@ pub enum Request {
         to_id: u64,
     },
     Prep,
+    /// Whole-meeting summary.
+    Summary,
+    /// Questions from Others since I last spoke.
+    Asked,
+    /// Background catch-ups written so far.
+    Catchups,
     PinNow {
         label: String,
     },
@@ -339,6 +351,20 @@ pub enum Response {
     Prep {
         markdown: String,
     },
+    Asked {
+        items: Vec<ParkedOut>,
+    },
+    Catchups {
+        items: Vec<CatchupOut>,
+    },
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatchupOut {
+    from: String,
+    to: String,
+    bullets: Vec<Cited>,
 }
 
 #[derive(Serialize)]
@@ -347,6 +373,21 @@ pub struct AgendaOut {
     item: String,
     covered: bool,
     cites: Vec<u64>,
+}
+
+fn recap_out(r: sprk_assistant::recap::Recap) -> Response {
+    Response::Recap {
+        bullets: r
+            .bullets
+            .into_iter()
+            .map(|b| Cited {
+                text: b.text,
+                cites: b.cites,
+            })
+            .collect(),
+        dropped: r.dropped,
+        nothing_said: r.nothing_said,
+    }
 }
 
 fn err_code(e: sprk_assistant::runtime::RunError) -> String {
@@ -396,18 +437,7 @@ fn run_blocking(state: &Assistant, request: Request) -> Result<Response, String>
             .map(|text| Response::Title { text })),
         Request::Recap { minutes } => go(rt
             .run(&policy, mb, |w, f, e, c, fm| w.recap(f, e, c, fm, minutes))
-            .map(|r| Response::Recap {
-                bullets: r
-                    .bullets
-                    .into_iter()
-                    .map(|b| Cited {
-                        text: b.text,
-                        cites: b.cites,
-                    })
-                    .collect(),
-                dropped: r.dropped,
-                nothing_said: r.nothing_said,
-            })),
+            .map(recap_out)),
         Request::Actions => go(rt
             .run(&policy, mb, |w, f, e, c, fm| w.actions(f, e, c, fm))
             .map(|l| Response::Actions {
@@ -468,7 +498,43 @@ fn run_blocking(state: &Assistant, request: Request) -> Result<Response, String>
             .map(|p| Response::Prep {
                 markdown: sprk_assistant::extras::prep_markdown(&p),
             })),
+        Request::Summary => go(rt
+            .run(&policy, mb, |w, f, e, c, fm| w.summary(f, e, c, fm))
+            .map(recap_out)),
         // No model needed below: these never start the helper.
+        Request::Asked => {
+            let items = rt
+                .with_workspace(|w| w.asked(feats, 5 * 60_000))
+                .map_err(ws_err)?
+                .into_iter()
+                .map(|a| ParkedOut {
+                    line_id: a.line_id,
+                    t: hms(a.t_ms),
+                    text: a.text,
+                })
+                .collect();
+            Ok(Response::Asked { items })
+        }
+        Request::Catchups => {
+            let items = rt
+                .with_workspace(|w| w.catchups(feats))
+                .map_err(ws_err)?
+                .into_iter()
+                .map(|c| CatchupOut {
+                    from: hms(c.from_ms),
+                    to: hms(c.to_ms),
+                    bullets: c
+                        .bullets
+                        .into_iter()
+                        .map(|b| Cited {
+                            text: b.text,
+                            cites: b.cites,
+                        })
+                        .collect(),
+                })
+                .collect();
+            Ok(Response::Catchups { items })
+        }
         Request::PinNow { label } => {
             rt.with_workspace(|w| w.pin_now(feats, &label))
                 .map_err(ws_err)?;

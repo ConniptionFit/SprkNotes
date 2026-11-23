@@ -88,7 +88,7 @@ If the desktop has no tray host (some Linux setups), Close minimizes instead so 
 Ask Sprk answers questions about the transcript while it is still going. It is **off until you turn it on** in Settings, runs on this PC at low priority, and never saves or sends anything. Question history lasts only until you close the app.
 
 - **Included once it is on:** Suggest a title, What did I miss? (the last few minutes), Action items (who, and when it is due only if someone said), and a question box. Every answer shows the times of the lines it came from. If the transcript does not say, it says so instead of guessing.
-- **More, each off until you choose:** Agenda check, My commitments, Pin a moment, Parking lot, Explain this, Say it again short, Next-meeting prep.
+- **More, each off until you choose:** Agenda check, My commitments, Pin a moment, Parking lot, Explain this, Say it again short, Next-meeting prep, Was I asked something?, Summary so far, and Catch-ups (a short note written in the background every 10 minutes). With the overlay, hover it and press Catch me up for a quick recap without opening the app.
 - **Size:** Light is the default. Standard is slower and needs more memory. Your organization can limit which size and features are allowed.
 - It needs an assistant model installed first (Settings shows when one is missing).
 

@@ -282,6 +282,28 @@ impl Runtime {
         }
     }
 
+    /// Called about once a minute while a session runs. When the Rolling feature is on and a
+    /// catch-up is due, writes one for the last 10 minutes. Never queues behind a user request:
+    /// if the helper is busy this simply tries again at the next tick.
+    pub fn background_tick(&self, policy: &AppPolicy, available_mb: u64) {
+        let eff = self.effective(policy);
+        if !eff.enabled || !eff.background || !lock(&self.ws).catchup_due(eff.features) {
+            return;
+        }
+        let out = self.run(policy, available_mb, |w, f, e, c, fm| {
+            let to = w.now_ms();
+            let r = w.recap(f, e, c, fm, 10)?;
+            Ok((to, r))
+        });
+        if let Ok((to_ms, r)) = out {
+            lock(&self.ws).add_catchup(crate::workspace::Catchup {
+                from_ms: to_ms.saturating_sub(crate::workspace::ROLLING_MS),
+                to_ms,
+                bullets: r.bullets,
+            });
+        }
+    }
+
     /// The loaded model's id, for the status line. `None` when nothing is loaded.
     pub fn loaded_model(&self) -> Option<String> {
         self.engine
@@ -429,6 +451,47 @@ mod tests {
         rt.set_user(u);
         let pins = rt.with_workspace(|w| w.pin_now(rt.effective(&policy(&[])).features, "x"));
         assert!(pins.unwrap().is_some());
+    }
+
+    #[test]
+    fn rolling_catchup_runs_when_due_and_only_when_chosen() {
+        let rt = runtime(
+            vec![pack(Tier::Light, 1500)],
+            &["- The invoices are due on the fifteenth. [L2]"],
+        );
+        let mut u = on();
+        rt.set_user(u);
+        // Plenty of lines spread over more than ten minutes.
+        rt.with_workspace(|w| {
+            for i in 1..=12u64 {
+                w.push_line(Line {
+                    id: i,
+                    t_ms: i * 60_000,
+                    speaker: "Others".into(),
+                    text: if i == 2 {
+                        "The invoices are due on the fifteenth.".into()
+                    } else {
+                        format!("Filler line number {i} about the project plan.")
+                    },
+                });
+            }
+        });
+        let eff = |rt: &Runtime| rt.effective(&policy(&[])).features;
+        rt.background_tick(&policy(&[]), 16_000);
+        assert!(rt.with_workspace(|w| w.catchups(eff(&rt)).is_err()));
+        u.features = u.features.with(Feature::Rolling, true);
+        rt.set_user(u);
+        assert!(rt.with_workspace(|w| w.catchup_due(eff(&rt))));
+        rt.background_tick(&policy(&[]), 16_000);
+        assert_eq!(
+            rt.with_workspace(|w| w.catchups(eff(&rt)).map(|c| c.len())),
+            Ok(1)
+        );
+        // Just ran: not due again until another ten minutes pass.
+        assert!(!rt.with_workspace(|w| w.catchup_due(eff(&rt))));
+        // Policy can turn the background off.
+        let off = policy(&[("AssistantBackground", "0")]);
+        rt.background_tick(&off, 16_000);
     }
 
     #[test]

@@ -22,6 +22,9 @@
     { key: "explain", text: "Explain this", help: "Says what a chosen line meant, from the transcript." },
     { key: "shorten", text: "Say it again, short", help: "One short sentence for a chosen line." },
     { key: "prep", text: "Next-meeting prep", help: "Open items, set-aside topics and pins in one list." },
+    { key: "asked", text: "Was I asked something?", help: "Shows questions from others since you last spoke. No model needed." },
+    { key: "summary", text: "Summary of the meeting so far", help: "A short summary of everything said, written on this PC." },
+    { key: "rolling", text: "Catch-ups while you work", help: "Writes a short catch-up every 10 minutes in the background, on this PC." },
   ];
 
   async function refresh() {

@@ -207,6 +207,62 @@ pub fn parking_lot(lines: &[Line]) -> Vec<ParkedItem> {
         .collect()
 }
 
+// --------------------------------------------------------- was I asked something?
+
+/// A question from Others that came after the user last spoke.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Asked {
+    pub line_id: u64,
+    pub t_ms: u64,
+    pub text: String,
+}
+
+const QUESTION_STARTS: [&str; 12] = [
+    "what",
+    "when",
+    "where",
+    "who",
+    "why",
+    "how",
+    "can you",
+    "could you",
+    "would you",
+    "do you",
+    "did you",
+    "are you",
+];
+
+fn looks_like_question(text: &str) -> bool {
+    let t = text.trim();
+    if t.ends_with('?') {
+        return true;
+    }
+    let low = t.to_lowercase();
+    QUESTION_STARTS.iter().any(|s| low.starts_with(s)) && t.split_whitespace().count() >= 3
+}
+
+/// Questions from Others in the last `window_ms`, after the user's own last line. Plain code,
+/// so it is instant and quotes the line exactly; it never guesses who a question was for.
+pub fn asked_me(lines: &[Line], now_ms: u64, window_ms: u64) -> Vec<Asked> {
+    let from = now_ms.saturating_sub(window_ms);
+    let last_me = lines
+        .iter()
+        .filter(|l| l.speaker == "Me")
+        .map(|l| l.t_ms)
+        .max()
+        .unwrap_or(0);
+    lines
+        .iter()
+        .filter(|l| l.speaker == "Others" && l.t_ms >= from && l.t_ms > last_me)
+        .filter(|l| looks_like_question(&l.text))
+        .map(|l| Asked {
+            line_id: l.id,
+            t_ms: l.t_ms,
+            text: l.text.clone(),
+        })
+        .collect()
+}
+
 // ---------------------------------------------------------------- explain this
 
 const EXPLAIN_SYSTEM: &str = "You explain a term, acronym or remark from a meeting to a listener who \
@@ -501,6 +557,23 @@ mod tests {
         let got = parking_lot(&meeting());
         assert_eq!(got.len(), 1);
         assert_eq!(got[0].line_id, 4);
+    }
+
+    #[test]
+    fn asked_finds_questions_after_my_last_line() {
+        let mut l = meeting();
+        l.push(Line {
+            id: 6,
+            t_ms: 60_000,
+            speaker: "Others".into(),
+            text: "Can you send the invoices today?".into(),
+        });
+        let got = asked_me(&l, 62_000, 120_000);
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].line_id, 6);
+        // Earlier than the window, or before I last spoke: not shown.
+        assert!(asked_me(&l, 400_000, 120_000).is_empty());
+        assert!(asked_me(&meeting(), 50_000, 120_000).is_empty());
     }
 
     #[test]

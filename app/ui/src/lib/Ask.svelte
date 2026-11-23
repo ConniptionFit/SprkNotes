@@ -100,6 +100,9 @@
     {#if has("parkinglot")}<button disabled={busy} onclick={() => run("Parking lot", { op: "parking" })}>Parking lot</button>{/if}
     {#if has("pins")}<button disabled={busy} onclick={() => run("Pinned moments", { op: "pins" })}>Pinned moments</button>{/if}
     {#if has("agenda")}<button disabled={busy} onclick={() => (agendaOpen = !agendaOpen)}>Agenda check</button>{/if}
+    {#if has("asked")}<button disabled={busy} onclick={() => run("Was I asked something?", { op: "asked" })}>Was I asked something?</button>{/if}
+    {#if has("summary")}<button disabled={busy} onclick={() => run("Summary so far", { op: "summary" })}>Summary so far</button>{/if}
+    {#if has("rolling")}<button disabled={busy} onclick={() => run("Earlier catch-ups", { op: "catchups" })}>Earlier catch-ups</button>{/if}
     {#if has("prep")}<button disabled={busy} onclick={() => run("Next meeting", { op: "prep" })}>Next meeting</button>{/if}
   </div>
 
@@ -174,6 +177,15 @@
         {:else if e.res.kind === "parking"}
           {#if e.res.items.length === 0}<p class="muted">Nothing was set aside.</p>{/if}
           <ul class="plain">{#each e.res.items as p}<li><span class="cite">{p.t}</span> {p.text}</li>{/each}</ul>
+        {:else if e.res.kind === "asked"}
+          {#if e.res.items.length === 0}<p class="muted">No one has asked you anything since you last spoke.</p>{/if}
+          <ul class="plain">{#each e.res.items as p}<li><span class="cite">{p.t}</span> {p.text}</li>{/each}</ul>
+        {:else if e.res.kind === "catchups"}
+          {#if e.res.items.length === 0}<p class="muted">The first one is written after 10 minutes.</p>{/if}
+          {#each e.res.items as c}
+            <h3>{c.from} to {c.to}</h3>
+            <ul>{#each c.bullets as b}<li>{b.text} {@render cites(b.cites)}</li>{/each}</ul>
+          {/each}
         {:else if e.res.kind === "prep"}
           <pre>{e.res.markdown}</pre>
           <button class="link" onclick={() => e.res?.kind === "prep" && copy(e.res.markdown)}>Copy</button>

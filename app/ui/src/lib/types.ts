@@ -74,7 +74,8 @@ export type ExportFormat = "txt" | "json" | "docx";
 /** Ask Sprk (ADR-009). Mirrors `assistant.rs`; every error is a short code, never text from the meeting. */
 export type AssistantFeature =
   | "title" | "recap" | "actions" | "ask"
-  | "agenda" | "commitments" | "pins" | "parkinglot" | "explain" | "shorten" | "prep";
+  | "agenda" | "commitments" | "pins" | "parkinglot" | "explain" | "shorten" | "prep"
+  | "asked" | "summary" | "rolling";
 export type AssistantTier = "titles" | "light" | "standard";
 export type AssistantStatus = {
   state: "off" | "noModel" | "notEnoughMemory" | "ready";
@@ -98,6 +99,9 @@ export type AssistantRequest =
   | { op: "explain"; lineId: number }
   | { op: "shorten"; fromId: number; toId: number }
   | { op: "prep" }
+  | { op: "summary" }
+  | { op: "asked" }
+  | { op: "catchups" }
   | { op: "pinNow"; label: string }
   | { op: "unpin"; lineId: number }
   | { op: "pins" }
@@ -113,4 +117,6 @@ export type AssistantResponse =
   | { kind: "commitments"; items: ActionOut[] }
   | { kind: "pins"; pins: { lineId: number; t: string; label: string }[] }
   | { kind: "parking"; items: { lineId: number; t: string; text: string }[] }
-  | { kind: "prep"; markdown: string };
+  | { kind: "prep"; markdown: string }
+  | { kind: "asked"; items: { lineId: number; t: string; text: string }[] }
+  | { kind: "catchups"; items: { from: string; to: string; bullets: Cited[] }[] };
