@@ -525,9 +525,9 @@ impl Ctx {
             }
             let sessions = (inputs.sessions)();
 
-            for ev in self.poller.poll(t, &sessions, &[], &NoTabs, &self.windows) {
-                Self::write(session, ev.at_ms(), &ev.text());
-            }
+            // Audio source activity is tracked (it can name an unnamed transcript) but is not
+            // written into the transcript: start and end lines were noise for the reader.
+            let _ = self.poller.poll(t, &sessions, &[], &NoTabs, &self.windows);
         }
         if self.cfg.call_context
             && self
@@ -581,10 +581,8 @@ impl Ctx {
         best
     }
 
-    fn pause(&mut self, t: u64, session: &mut Session) {
-        for ev in self.poller.pause(t) {
-            Self::write(session, ev.at_ms(), &ev.text());
-        }
+    fn pause(&mut self, t: u64, _session: &mut Session) {
+        let _ = self.poller.pause(t);
     }
 }
 
@@ -894,7 +892,7 @@ mod tests {
     }
 
     #[test]
-    fn audible_apps_become_audio_source_events_and_close_at_end() {
+    fn audible_apps_write_no_audio_source_lines() {
         let sess = vec![AudioSession {
             owner_pid: 7,
             exe: "firefox".into(),
@@ -910,15 +908,8 @@ mod tests {
         std::thread::sleep(Duration::from_millis(2_400));
         host.end().unwrap();
         let text = only_md(dir.path());
-        assert!(
-            text.contains("Audio source started: Firefox \"Safety training\""),
-            "{text}"
-        );
-        assert!(
-            text.contains("Audio source ended: Firefox \"Safety training\""),
-            "{text}"
-        );
-        assert!(text.contains("## Audio sources"));
+        assert!(!text.contains("Audio source"), "{text}");
+        assert!(!text.contains("Safety training"), "{text}");
     }
 
     struct PanicEngine;
