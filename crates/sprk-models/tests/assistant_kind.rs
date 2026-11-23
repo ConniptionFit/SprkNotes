@@ -58,7 +58,7 @@ fn assistant_pack_installs_only_into_an_assistant_store() {
     let speech = ModelStore::new(tmp.path().join("speech"), StoreKind::User);
     assert_eq!(speech.pack_kind(), KIND_TRANSCRIPTION);
     match install(&speech, &pack) {
-        ImportOutcome::Rejected { reason } => assert!(reason.contains("assistant pack")),
+        ImportOutcome::Rejected { reason } => assert!(reason.contains("an assistant pack")),
         other => panic!("expected rejection, got {other:?}"),
     }
     assert!(speech.list().is_empty());

@@ -3,7 +3,7 @@
 
 It speaks gibberish, which is the point: it lets the real llama.cpp helper be exercised end to end
 (load, tokenize, decode, stream, stop strings, hold, cancel) without downloading a real model.
-Needs: pip install gguf numpy.   Usage: make-test-assistant-model.py <output folder>
+Needs: pip install gguf numpy.   Usage: make-test-assistant-model.py <output folder> [context tokens, default 512]
 """
 import hashlib
 import json
@@ -39,7 +39,7 @@ def vocab():
     return toks, scores, types
 
 
-def main(out_dir):
+def main(out_dir, ctx=512):
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     rng = np.random.default_rng(7)
@@ -48,7 +48,7 @@ def main(out_dir):
     path = out / "model.gguf"
     w = GGUFWriter(str(path), "llama")
     w.add_name("sprk-test-assistant")
-    w.add_context_length(512)
+    w.add_context_length(ctx)
     w.add_embedding_length(N_EMBD)
     w.add_block_count(N_LAYER)
     w.add_feed_forward_length(N_FF)
@@ -103,7 +103,7 @@ def main(out_dir):
         "assistant": {
             "tier": "titles",
             "prompt_format": "chatml",
-            "context_tokens": 512,
+            "context_tokens": ctx,
             "ram_estimate_mb": 50,
         },
         "license": "MIT",
@@ -114,6 +114,6 @@ def main(out_dir):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
+    if len(sys.argv) not in (2, 3):
         sys.exit(__doc__)
-    main(sys.argv[1])
+    main(sys.argv[1], int(sys.argv[2]) if len(sys.argv) == 3 else 512)

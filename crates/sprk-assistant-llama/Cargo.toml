@@ -9,6 +9,10 @@ license = "MIT"
 name = "sprk-assistant"
 path = "src/main.rs"
 
+[[bin]]
+name = "sprk-assistant-bench"
+path = "src/bench.rs"
+
 [dependencies]
 sprk-assistant = { path = "../sprk-assistant" }
 sprk-models = { path = "../sprk-models" }
@@ -18,3 +22,7 @@ llama-cpp-2 = { version = "=0.1.161", default-features = false }
 [lints.clippy]
 unwrap_used = "deny"
 expect_used = "deny"
+
+[target.'cfg(windows)'.dependencies]
+# Peak memory for the benchmark report.
+windows-sys = { version = "0.59", features = ["Win32_System_ProcessStatus", "Win32_Foundation", "Win32_System_Threading"] }

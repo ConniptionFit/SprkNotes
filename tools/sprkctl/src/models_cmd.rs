@@ -17,6 +17,10 @@ pub const EXIT_SMOKE: i32 = 11;
 pub const EXIT_INCOMPATIBLE: i32 = 12;
 pub const EXIT_NOT_ELEVATED: i32 = 20;
 
+/// Assistant packs name this engine (ADR-010). The helper process loads them; sprkctl only
+/// checks and installs the files.
+const ASSISTANT_ENGINE: &str = "llama-cpp";
+
 /// Engines this build can load. With the engine feature this is the live registry;
 /// otherwise a fixed list so packs can still be checked and installed on any machine.
 fn supported_engines() -> Vec<&'static str> {
@@ -25,6 +29,7 @@ fn supported_engines() -> Vec<&'static str> {
         let mut reg = sprk_asr::Registry::default();
         sprk_asr::sherpa::register(&mut reg);
         let mut engines = reg.engines();
+        engines.push(ASSISTANT_ENGINE);
         // The voice activity model is loaded by the VAD wrapper, not the transcription registry.
         if !engines.contains(&sprk_asr::sherpa::ENGINE_VAD_SILERO) {
             engines.push(sprk_asr::sherpa::ENGINE_VAD_SILERO);
@@ -37,6 +42,7 @@ fn supported_engines() -> Vec<&'static str> {
             "sherpa-onnx/offline-transducer",
             "sherpa-onnx/whisper",
             "sherpa-onnx/vad-silero",
+            ASSISTANT_ENGINE,
         ]
     }
 }
@@ -46,6 +52,10 @@ fn supported_engines() -> Vec<&'static str> {
 struct Smoke;
 impl SmokeTester for Smoke {
     fn smoke(&self, dir: &Path, manifest: &Manifest) -> Result<(), String> {
+        if manifest.kind == sprk_models::manifest::KIND_ASSISTANT {
+            // The assistant helper does its own load check at first use; here the files must match.
+            return manifest.verify_files(dir).map_err(|e| e.to_string());
+        }
         #[cfg(any(feature = "engine", feature = "engine-shared"))]
         {
             if manifest.engine == "sherpa-onnx/vad-silero" {
@@ -68,6 +78,8 @@ impl SmokeTester for Smoke {
 }
 
 struct Flags {
+    /// `--kind assistant`: work on assistant packs (their own store folder) instead of speech.
+    assistant: bool,
     scope: Option<String>,
     root: Option<PathBuf>,
     output: Option<PathBuf>,
@@ -86,6 +98,7 @@ struct Flags {
 
 fn parse(args: &[&str]) -> Result<Flags> {
     let mut f = Flags {
+        assistant: false,
         scope: None,
         root: None,
         output: None,
@@ -111,6 +124,14 @@ fn parse(args: &[&str]) -> Result<Flags> {
                         .to_string(),
                 )
             }
+            "--kind" => match *it
+                .next()
+                .context("--kind needs assistant or transcription")?
+            {
+                "assistant" => f.assistant = true,
+                "transcription" => f.assistant = false,
+                other => bail!("unknown kind {other} (use assistant or transcription)"),
+            },
             "--root" => f.root = Some(it.next().context("--root needs a folder")?.into()),
             "-o" => f.output = Some(it.next().context("-o needs a file")?.into()),
             "--no-activate" => f.no_activate = true,
@@ -179,6 +200,19 @@ fn store_for(f: &Flags) -> Result<ModelStore> {
             _ => bail!("--scope machine|user is required (or --root <folder>)"),
         }
     };
+    if f.assistant {
+        // Default folders end in `models`; assistant packs live beside them in `assistant-models`.
+        let root = if f.root.is_some() {
+            root
+        } else {
+            root.with_file_name("assistant-models")
+        };
+        return Ok(ModelStore::for_kind(
+            root,
+            kind,
+            sprk_models::manifest::KIND_ASSISTANT,
+        ));
+    }
     Ok(ModelStore::new(root, kind))
 }
 

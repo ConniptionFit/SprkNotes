@@ -70,8 +70,12 @@ pub fn import_pack(
     };
     if verified.manifest.kind != store.pack_kind() {
         let reason = format!(
-            "this is a {} pack and this store holds {} packs",
-            verified.manifest.kind,
+            "this is {} pack and this store holds {} packs",
+            if verified.manifest.kind == crate::manifest::KIND_ASSISTANT {
+                "an assistant"
+            } else {
+                "a transcription"
+            },
             store.pack_kind()
         );
         return reject(store, pack, reason, o.now);
