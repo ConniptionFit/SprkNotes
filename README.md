@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/icon-1024.png" alt="SprkNotes icon" width="96"></p>
+
 # SprkNotes
 
 On-device app for Windows (x64 and ARM64), with a native Linux build, that **transcribes your microphone and the system audio together, live**, into crash-safe Markdown files. Audio is processed in memory and never written to disk. Nothing leaves the machine. Built for a HIPAA-regulated company.
