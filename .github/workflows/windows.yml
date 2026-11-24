@@ -43,6 +43,41 @@ jobs:
           restore-keys: win-${{ matrix.name }}-
       - run: cargo test --workspace --locked
 
+  app:
+    # The app crate (Tauri shell, Windows-only tray code) is not part of `cargo test --workspace`, so
+    # compile it here on every PR. Type-checks only; the full build is the package job below.
+    name: app compiles (x64)
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            app/src-tauri/target
+          key: win-app-${{ hashFiles('app/src-tauri/Cargo.lock', 'Cargo.lock') }}
+          restore-keys: win-app-
+      - name: sherpa-onnx libraries
+        shell: pwsh
+        run: |
+          $ver = (Select-String -Path scripts/fetch-sherpa.sh -Pattern '^VER=([0-9.]+)').Matches[0].Groups[1].Value
+          $n = "sherpa-onnx-v$ver-win-x64-shared-MT-Release-lib"
+          Invoke-WebRequest "https://github.com/k2-fsa/sherpa-onnx/releases/download/v$ver/$n.tar.bz2" -OutFile "$n.tar.bz2"
+          tar -xjf "$n.tar.bz2"
+          "SHERPA_ONNX_LIB_DIR=$((Resolve-Path "$n/lib").Path)" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+      - name: Build the UI
+        working-directory: app/ui
+        run: |
+          npm ci
+          npm run build
+      - name: cargo check (app)
+        working-directory: app/src-tauri
+        run: cargo check --features engine-shared,tauri/custom-protocol
+
   package:
     name: release build (unsigned)
     # Same steps as the Windows VM: x64 host builds both architectures with scripts/release.ps1.
