@@ -4,7 +4,7 @@ Date: 2026-11-23. Decision record: [ADR-011](adr/011-app-updates.md). Built in t
 
 ## The need
 - A one-line install for a single user (no admin), with a Start menu entry.
-- Updates from a repository (Forgejo now, GitHub later), on a channel the user or admin picks (stable, beta, alpha).
+- Updates from a repository (GitHub; Forgejo also supported), on a channel the user or admin picks (stable, beta, alpha).
 - Admins can lock the channel and repository, force or disable updates, and preconfigure the app at install time or by policy.
 - Per-machine installs (outside any user profile) update unobtrusively and need no logged-in user.
 

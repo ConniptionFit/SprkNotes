@@ -7,8 +7,6 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
-# GitHub copy of .forgejo/workflows/ci.yml. Keep the two job lists in step (scripts/check-ci-parity.sh).
-# Forgejo prefers .forgejo/workflows when both exist, so the same repository can run on either host.
 jobs:
   linux:
     runs-on: ubuntu-latest
@@ -24,7 +22,6 @@ jobs:
       - run: . "$HOME/.cargo/env" && cargo test --workspace
       - run: . "$HOME/.cargo/env" && cargo test -p sprk-assistant --features fake-engine
       - run: scripts/check-terms.sh
-      - run: scripts/check-ci-parity.sh
       - run: . "$HOME/.cargo/env" && scripts/check-assistant-deps.sh
       - run: . "$HOME/.cargo/env" && scripts/bump-version.sh --check
   # The llama.cpp helper compiles C++ (slow), so it is its own job and its own workspace.

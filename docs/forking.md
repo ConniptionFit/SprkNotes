@@ -11,8 +11,7 @@ separately branded edition, is a short checklist.
 | `distribution.toml` | **The one source.** Repository address, provider, tag that carries `models-index.json`. Compiled into the app as the default update and model source. | Yes |
 | `install.ps1` | Default `-RepoUrl` (a piped script cannot read the toml). | Yes, one line |
 | `README.md`, `docs/install.md` | The one-line install command. | Yes |
-| `.forgejo/workflows/ci.yml` and `.github/workflows/ci.yml` | Same jobs for either host. Forgejo uses its own folder when both exist. `scripts/check-ci-parity.sh` keeps them identical. | No, delete the one you do not use |
-| `.forgejo/workflows/release.yml`, `cut-release.yml` | Forgejo only for now; they call the scripts in `scripts/`, which read the address from `distribution.toml`. See the GitHub note in [releasing.md](releasing.md). | Port when moving to GitHub |
+| `.github/workflows/*.yml` | CI (`ci.yml`, `windows.yml`) and releases (`release.yml`, `cut-release.yml`). They call the scripts in `scripts/`, which read the address from `distribution.toml`. | No |
 
 Everything else (updater, model download, policy, MSI switches, Intune and NinjaOne scripts) reads the
 address from the build default, a user choice, or admin policy. Admins can point any install at another
@@ -50,5 +49,5 @@ Do the steps above, then change what makes this a *different product*:
 | Icons and brand colors | `app/src-tauri/icons`, `assets`, `app/ui/src` | Branding. |
 | Licenses | `LICENSE`, `THIRD_PARTY_NOTICES.md` (`scripts/gen-notices.py`) | Keep the third-party notices (Parakeet is CC-BY-4.0 and needs attribution). |
 
-Check before the first release: `scripts/check-terms.sh`, `scripts/check-ci-parity.sh`, then
+Check before the first release: `scripts/check-terms.sh`, then
 `grep -rn "<old-host>\|<old-owner>" . --exclude-dir=.git` should only find history in `CHANGELOG.md` and ADRs.

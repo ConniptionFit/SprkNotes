@@ -87,7 +87,7 @@ Compare the version with `release-manifest.json` and check file hashes against `
 MSI or script uninstall as above; MSIX via `Remove-AppxPackage`; portable by deleting the folder. Transcripts are never deleted by uninstalling. Policy keys stay until you remove them.
 
 ## Updates, channels and locking
-SprkNotes updates from the releases of a repository (Forgejo by default, GitHub supported). Design and options: [ADR-011](adr/011-app-updates.md) and [enterprise-install-research.md](enterprise-install-research.md).
+SprkNotes updates from the releases of a repository (GitHub by default, Forgejo supported). Design and options: [ADR-011](adr/011-app-updates.md) and [enterprise-install-research.md](enterprise-install-research.md).
 
 **How a release is found.** Tags `vX.Y.Z` are stable, `vX.Y.Z-beta.N` beta, `vX.Y.Z-alpha.N` alpha. A release must carry `update-manifest.json` (and `update-manifest.json.sig` when signed). A channel includes the more stable ones, and the app never downgrades.
 

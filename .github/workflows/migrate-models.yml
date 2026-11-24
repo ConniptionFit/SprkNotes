@@ -1,0 +1,35 @@
+name: Migrate model packs
+# One-off: copies the "models" release (index plus transcription and assistant model packs) from the old
+# Forgejo server to this repository's GitHub release, rewriting the index addresses. Run it once from
+# Actions, then delete this file. Nothing is built or changed in the app.
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: 'Old release download base'
+        default: 'https://git.pwrs.dev/powers/sprknotes/releases/download/models'
+permissions:
+  contents: write
+jobs:
+  copy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Copy the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SRC: ${{ inputs.source }}
+        run: |
+          set -euo pipefail
+          mkdir pk && cd pk
+          curl -fsSL "$SRC/models-index.json" -o models-index.json
+          # Every pack file named in the old index (parts and whole packs).
+          grep -o "$SRC/[^\"]*" models-index.json | sort -u | while read -r u; do
+            echo "fetch ${u##*/}"; curl -fSL --retry 3 -o "$(basename "$u")" "$u"
+          done
+          sed -i "s#$SRC#https://github.com/${GITHUB_REPOSITORY}/releases/download/models#g" models-index.json
+          ! grep -q 'git.pwrs.dev' models-index.json || { echo "old addresses remain in the index"; exit 1; }
+          ls -l
+          gh release view models >/dev/null 2>&1 || gh release create models --prerelease --title "Model packs (default index)" \
+            --notes "Transcription model packs and models-index.json, the default source for SprkNotes' Download model button (ADR-005). Replace the assets here to publish a model update. Attribution: Parakeet TDT 0.6B v2 by NVIDIA, licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). Silero VAD is MIT licensed."
+          gh release upload models --clobber ./*
