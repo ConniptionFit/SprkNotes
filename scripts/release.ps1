@@ -149,13 +149,18 @@ foreach ($a in $arches) {
     $env:CMAKE_GENERATOR = 'Ninja'
     # A build dir configured earlier with another generator (e.g. Visual Studio) is reused and breaks
     # ("Skipping configuration step", then MSBuild cannot find install.vcxproj). Drop any that is not Ninja.
-    Get-ChildItem "crates/sprk-assistant-llama/target/$($a.Triple)/release/build" -Directory -Filter 'llama-cpp-sys-2-*' -ErrorAction SilentlyContinue | ForEach-Object {
-      $cache = Join-Path $_.FullName 'out/build/CMakeCache.txt'
-      if ((Test-Path $cache) -and -not (Select-String -Path $cache -Pattern '^CMAKE_GENERATOR:INTERNAL=Ninja$' -Quiet)) {
-        Write-Host "removing stale CMake build ($($_.Name)): configured with another generator"
-        Remove-Item $_.FullName -Recurse -Force
+    # Cargo >= 1.9x lays build dirs out as build/llama-cpp-sys-2/<hash>/, older cargo as
+    # build/llama-cpp-sys-2-<hash>/, so find the CMake caches by name instead of guessing the layout.
+    $rel = "crates/sprk-assistant-llama/target/$($a.Triple)/release"
+    Get-ChildItem "$rel/build" -Recurse -Filter CMakeCache.txt -ErrorAction SilentlyContinue |
+      Where-Object { $_.FullName -match 'llama-cpp-sys-2' -and -not (Select-String -Path $_.FullName -Pattern '^CMAKE_GENERATOR:INTERNAL=Ninja$' -Quiet) } |
+      ForEach-Object {
+        $unit = Split-Path (Split-Path $_.DirectoryName)  # <unit>/out/build/CMakeCache.txt -> <unit>
+        Write-Host "removing stale CMake build ($unit): configured with another generator"
+        Remove-Item $unit -Recurse -Force
+        # Drop the build script's fingerprint too, or cargo treats the (now empty) unit as up to date.
+        Get-ChildItem "$rel/.fingerprint" -Directory -Filter 'llama-cpp-sys-2-*' -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
       }
-    }
   }
   cargo build --release --manifest-path crates/sprk-assistant-llama/Cargo.toml --bin sprk-assistant --target $a.Triple
   Remove-Item "env:CC_$tk", "env:CXX_$tk", "env:CXXFLAGS_$tk", env:CMAKE_GENERATOR -ErrorAction SilentlyContinue
