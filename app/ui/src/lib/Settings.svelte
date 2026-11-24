@@ -67,7 +67,7 @@
 
   <AppUpdates />
 
-  <AssistantSettings />
+  <AssistantSettings {sessionActive} />
 
   <div class="panel">
     <div class="row">

@@ -7,7 +7,7 @@ SprkNotes is a lightweight, on-device Windows app that transcribes microphone an
 ## Hard rules (never break these)
 
 1. **On-device only.** Audio is captured, processed and transcribed locally. Audio samples live in memory only. Never write audio to disk (no WAV, no temp files, no debug dumps).
-2. **No network.** SprkNotes makes no outbound network connections, with two exceptions (ADR-005 models, ADR-011 app updates; see below): https GETs for **model packs only** (the model index at launch, and packs when the user presses "Download model"), verified by checksum and the normal import rules, switchable off by policy (`ModelDownload=0`). sprkctl's other exception is the admin-run `model sync`, which reads an internal file share. No Entra app, no Microsoft Graph, no external APIs. Allowed local interfaces only:
+2. **No network.** SprkNotes makes no outbound network connections, with two exceptions (ADR-005 models, ADR-011 app updates; see below): https GETs for **model packs only** (the model index at launch, and packs when the user presses "Download model", for speech or for Ask Sprk), verified by checksum and the normal import rules, switchable off by policy (`ModelDownload=0`). sprkctl's other exception is the admin-run `model sync`, which reads an internal file share. No Entra app, no Microsoft Graph, no external APIs. Allowed local interfaces only:
    - Outlook COM (classic Outlook) for the calendar.
    - The Teams local API on `localhost`, probed silently at session start; any failure is silent and falls back.
    - The AI handoff, which only launches Claude/Copilot (link or clipboard); the user sends from that app.
@@ -129,6 +129,7 @@ cargo run -p sprkctl -- model list --json
 4. Any decision not already in SPEC.md gets an ADR. Any behavior change updates SPEC.md in the same commit.
 5. Small commits, Conventional Commit messages (`feat(audio): ...`, `fix(writer): ...`).
 6. Never claim something works without running it. Report the command and its output.
+7. Fixes ship to the **alpha** channel first, never straight to stable. Add a bullet under `## Unreleased` in `CHANGELOG.md` with each change (release notes are made from it). Releasing: [docs/releasing.md](docs/releasing.md).
 
 ## Definition of done
 

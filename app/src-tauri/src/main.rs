@@ -243,6 +243,35 @@ fn model_download(app: AppHandle, state: State<AppState>) -> Result<(), String> 
     model_download::start_install(app, policy())
 }
 
+/// Ask Sprk model: which packs are on this PC, and may this PC download one? No network.
+#[tauri::command]
+fn assistant_model_status() -> model_download::AssistantModelStatus {
+    model_download::assistant_status(&policy())
+}
+
+/// Ask whether a newer Ask Sprk model exists for `tier` (network, model index only).
+#[tauri::command]
+async fn assistant_model_check(tier: String) -> Result<model_download::UpdateInfo, String> {
+    let p = policy();
+    tauri::async_runtime::spawn_blocking(move || model_download::assistant_check_now(&p, &tier))
+        .await
+        .map_err(|_| "The check was interrupted.".to_string())?
+}
+
+/// "Download Ask Sprk model" for `tier`. Progress arrives as `assistant-model-download`.
+#[tauri::command]
+fn assistant_model_download(
+    app: AppHandle,
+    state: State<AppState>,
+    tier: String,
+) -> Result<(), String> {
+    let running = state.host.lock().map(|h| h.is_some()).unwrap_or(true);
+    if running {
+        return Err("End the current session before downloading a model.".into());
+    }
+    model_download::assistant_start_install(app, policy(), tier)
+}
+
 /// Settings pane: update mode, channel and source, and which of them policy locks. No network.
 #[tauri::command]
 fn update_status() -> updater::UpdateStatus {
@@ -464,6 +493,9 @@ fn main() -> anyhow::Result<()> {
             model_status,
             model_check_update,
             model_download,
+            assistant_model_status,
+            assistant_model_check,
+            assistant_model_download,
             update_status,
             update_check,
             update_set,
