@@ -31,6 +31,9 @@ pub struct Request {
     pub folder: String,
     pub title: String,
     pub date: String,
+    /// Transcript text. Claude gets it on the clipboard, because a link cannot attach a file
+    /// reliably and the app cannot read the user's folder.
+    pub body: String,
 }
 
 impl Request {
@@ -143,51 +146,34 @@ impl HandoffTarget for Claude {
         "HandoffClaude"
     }
     fn plan(&self, r: &Request, prompt: &str) -> Plan {
-        let prompt = cap_prompt(prompt);
-        let tail = format!(
-            "&file={}&folder={}",
-            url_encode(&r.file),
-            url_encode(&r.folder)
-        );
-        // Windows hands a link to the app through the shell, which cuts links near 2,000
-        // characters. A cut link opens the app with an empty chat box, so a long prompt is
-        // swapped for a short one in the link. The full prompt is always on the clipboard.
-        let mut q = url_encode(&prompt);
-        if "claude://cowork/new?q=".len() + q.len() + tail.len() > MAX_LINK_CHARS {
-            q = url_encode(&short_prompt(r));
-        }
-        let url = format!("claude://cowork/new?q={q}{tail}");
+        // Everything Claude needs goes on the clipboard: the instructions and the transcript
+        // itself. A file link is not reliable (Claude often cannot see the file), and a link
+        // is cut near 2,000 characters on Windows, so the link carries only a one-line start.
+        let clip = if r.body.trim().is_empty() {
+            prompt.to_string()
+        } else {
+            format!("{prompt}\n\n--- Transcript ---\n\n{}", r.body)
+        };
+        let url = format!("claude://claude.ai/new?q={}", url_encode(START_LINE));
         Plan {
             steps: vec![
-                Step::CopyToClipboard(prompt.clone()),
+                Step::CopyToClipboard(clip.clone()),
                 Step::OpenUrl(url),
                 Step::Toast(
-                    "Claude opened. If the chat box is empty, press Ctrl+V: the full prompt is copied."
+                    "Claude opened. Click the chat box, press Ctrl+V to add your transcript, then send."
                         .into(),
                 ),
             ],
-            fallback: vec![
-                Step::RevealInExplorer(r.file.clone()),
-                Step::Toast(
-                    "Claude did not open. Prompt copied. Open Claude, attach the highlighted file and paste."
-                        .into(),
-                ),
-            ],
+            fallback: vec![Step::Toast(
+                "Claude did not open. Your transcript and instructions are copied. Open Claude and paste."
+                    .into(),
+            )],
         }
     }
 }
 
-/// Link length the shell passes on intact (kept under the 2,083 character limit).
-pub const MAX_LINK_CHARS: usize = 1_900;
-
-/// Short prompt for a link that would be too long with the full one.
-pub fn short_prompt(r: &Request) -> String {
-    format!(
-        "Summarize the attached meeting transcript and save it in {} as \"{} - Summary.md\". Include participants, TL;DR, topics, decisions with timestamps, action items (owner, task, due) and open questions. Use only the transcript.",
-        r.folder,
-        r.basename()
-    )
-}
+/// The one line the Claude link fills in. The pasted text follows it.
+pub const START_LINE: &str = "Please summarize this meeting transcript. It is pasted below.\n\n";
 
 /// Microsoft 365 Copilot: no file-attach link exists, so copy, open, reveal, toast.
 pub struct Copilot {
@@ -237,6 +223,7 @@ mod tests {
             folder: r"C:\Users\x\Documents\SprkNotes\Transcripts".into(),
             title: "Sync".into(),
             date: "2026-11-19".into(),
+            body: "- `09:00:01` **Me:** hello".into(),
         }
     }
 
@@ -267,9 +254,9 @@ mod tests {
         let r = req();
         assert_eq!(r.basename(), "2026-11-19 0900 Sync");
         let p = fill_template(DEFAULT_TEMPLATE, &r);
-        assert!(p.contains("\"2026-11-19 0900 Sync - Summary.md\""));
-        assert!(p.contains(&r.folder));
+        assert!(p.contains("2026-11-19 0900 Sync - Summary"));
         assert!(!p.contains("{basename}") && !p.contains("{folder}"));
+        assert!(!p.contains("save it in"));
     }
 
     #[test]
@@ -286,30 +273,19 @@ mod tests {
     }
 
     #[test]
-    fn claude_link_attaches_file_not_transcript_text() {
-        let r = req();
-        let plan = Claude.plan(&r, "hello world");
-        let Step::OpenUrl(u) = &plan.steps[1] else {
-            panic!("expected a link")
-        };
-        assert!(u.starts_with("claude://cowork/new?q=hello%20world&file=C%3A%5CUsers"));
-        assert!(u.contains("&folder="));
-        assert_eq!(plan.fallback.len(), 2);
-    }
-
-    #[test]
-    fn long_prompt_uses_short_link_and_full_clipboard() {
-        let long = "word ".repeat(1_000);
-        let plan = Claude.plan(&req(), &long);
+    fn claude_gets_the_transcript_on_the_clipboard() {
+        let plan = Claude.plan(&req(), "instructions");
         let Step::CopyToClipboard(c) = &plan.steps[0] else {
             panic!("expected a copy")
         };
-        assert!(c.starts_with("word word"));
+        assert!(c.starts_with("instructions"));
+        assert!(c.contains("**Me:** hello"));
         let Step::OpenUrl(u) = &plan.steps[1] else {
             panic!("expected a link")
         };
-        assert!(u.len() <= MAX_LINK_CHARS + 200);
-        assert!(u.contains("Summary.md"));
+        assert!(u.starts_with("claude://claude.ai/new?q="));
+        assert!(!u.contains("file=") && !u.contains("folder="));
+        assert!(u.len() < 400);
     }
 
     #[test]
@@ -326,16 +302,13 @@ mod tests {
         let plan = Claude.plan(&req(), "p");
         let mut f = Fake::default();
         run(&plan, &mut f);
-        assert_eq!(
-            f.log,
-            vec!["copy", "open claude://cowork/new", "reveal", "toast"]
-        );
+        assert_eq!(f.log, vec!["copy", "open claude://claude.ai/new", "toast"]);
         let mut ok = Fake {
             handler: true,
             ..Fake::default()
         };
         run(&plan, &mut ok);
-        assert_eq!(ok.log, vec!["copy", "open claude://cowork/new", "toast"]);
+        assert_eq!(ok.log, vec!["copy", "open claude://claude.ai/new", "toast"]);
     }
 
     #[test]

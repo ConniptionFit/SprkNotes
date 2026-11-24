@@ -305,6 +305,7 @@ pub fn summarize(
             .unwrap_or_default(),
         title: t.title,
         date: t.date,
+        body: std::fs::read_to_string(&file).unwrap_or_default(),
     };
     let prompt = sprk_handoff::fill_template(&read_template(&app, &policy), &req);
     let options = found(&policy);
