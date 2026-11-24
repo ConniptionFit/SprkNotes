@@ -210,10 +210,9 @@ impl Manifest {
         if !supported_engines.contains(&self.engine.as_str()) {
             return Err(ManifestError::UnknownEngine(self.engine.clone()));
         }
-        match (
-            parse_semver(app_version),
-            parse_semver(&self.min_app_version),
-        ) {
+        // A pre-release build (0.2.0-alpha.1, 0.2.0-beta.2, 0.2.0+build) counts as its X.Y.Z.
+        let core = app_version.split(['-', '+']).next().unwrap_or(app_version);
+        match (parse_semver(core), parse_semver(&self.min_app_version)) {
             (Some(have), Some(need)) if have >= need => Ok(()),
             _ => Err(ManifestError::AppTooOld {
                 needs: self.min_app_version.clone(),
@@ -305,8 +304,15 @@ mod tests {
             m.check_compat(&["other"], "0.0.1"),
             Err(ManifestError::UnknownEngine(_))
         ));
+        // Alpha and beta builds are not "too old" for a pack that needs their release number.
+        assert!(m.check_compat(&["test/fake"], "0.2.0-alpha.1").is_ok());
+        assert!(m.check_compat(&["test/fake"], "0.2.0-beta.3+abc").is_ok());
         let mut newer = m.clone();
         newer.min_app_version = "0.4.0".into();
+        assert!(matches!(
+            newer.check_compat(&["test/fake"], "0.4.0-alpha.1"),
+            Ok(())
+        ));
         assert!(matches!(
             newer.check_compat(&["test/fake"], "0.0.1"),
             Err(ManifestError::AppTooOld { .. })
