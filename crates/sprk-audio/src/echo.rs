@@ -32,6 +32,21 @@ const GATE_CORR: f32 = 0.75;
 const GATE_HANGOVER: u32 = 30;
 /// Envelope level (sample magnitude) below which a stream counts as silent.
 const ACTIVE: f32 = 0.002;
+/// Expected-bleed suppressor. The mic hears the speakers at a roughly steady fraction of what
+/// they play (the coupling). It is learned from the quietest-but-typical part of the recent
+/// mic-to-reference level ratios, which is the speakers alone because the user is usually
+/// quiet while a video plays. Mic sound not clearly above that expected level is the speakers.
+const SUP_WINDOW: usize = 30; // 300 ms levels
+const SUP_EVERY: u32 = 5; // decide every 50 ms
+const SUP_HISTORY: usize = 1_500; // coupling samples kept (about 15 s)
+const SUP_MIN_SAMPLES: usize = 20;
+const SUP_SETTLED: usize = 100; // 5 s of decisions
+const SUP_PERCENTILE: f32 = 0.35;
+/// Mic level must exceed expected bleed by this factor (about 8 dB) to count as the user.
+const SUP_MARGIN: f32 = 2.5;
+/// Reference level (mean magnitude) below which there is nothing to bleed.
+const SUP_REF_MIN: f32 = 0.003;
+const SUP_HANGOVER: u32 = 8;
 
 /// Mean absolute level of a frame.
 fn level(x: &[f32]) -> f32 {
@@ -102,6 +117,11 @@ pub struct EchoPath {
     gate_hold: u32,
     /// Samples the mic is held back by (the silence inserted into it).
     hold: usize,
+    /// Frames by which the mic trails the reference (kept up to date by the delay tracker).
+    lag_frames: usize,
+    /// Recent mic-to-reference level ratios while the speakers play.
+    ratios: VecDeque<f32>,
+    sup_hold: u32,
 }
 
 impl Default for EchoPath {
@@ -139,6 +159,9 @@ impl EchoPath {
             off_range: 0,
             gate_hold: 0,
             hold: (TARGET_DELAY_MS * 16) as usize,
+            lag_frames: (TARGET_DELAY_MS / FRAME_MS) as usize,
+            ratios: VecDeque::new(),
+            sup_hold: 0,
         }
     }
 
@@ -210,11 +233,15 @@ impl EchoPath {
             if self.frames.is_multiple_of(GATE_EVERY) {
                 self.update_gate();
             }
+            if self.frames.is_multiple_of(SUP_EVERY) {
+                self.update_suppressor();
+            }
             if self.frames.is_multiple_of(DELAY_EVERY) {
                 self.track_delay();
             }
-            let gated = self.gate_hold > 0;
+            let gated = self.gate_hold > 0 || self.sup_hold > 0;
             self.gate_hold = self.gate_hold.saturating_sub(1);
+            self.sup_hold = self.sup_hold.saturating_sub(1);
             for (v, inj) in clean.iter().zip(injected) {
                 if !inj {
                     self.out.push(if gated { 0.0 } else { *v });
@@ -247,6 +274,54 @@ impl EchoPath {
         }
     }
 
+    /// Mean level of the last `SUP_WINDOW` frames of the mic, and of the reference that was
+    /// playing `lag_frames` earlier.
+    fn window_levels(&self) -> Option<(f32, f32)> {
+        let (m, r) = (&self.env_mic, &self.env_ref);
+        if m.len() < SUP_WINDOW || r.len() < SUP_WINDOW + self.lag_frames {
+            return None;
+        }
+        let mic = m.iter().rev().take(SUP_WINDOW).sum::<f32>() / SUP_WINDOW as f32;
+        let refr = r
+            .iter()
+            .rev()
+            .skip(self.lag_frames)
+            .take(SUP_WINDOW)
+            .sum::<f32>()
+            / SUP_WINDOW as f32;
+        Some((mic, refr))
+    }
+
+    /// Mute the mic while it carries nothing clearly above the bleed expected from the speakers.
+    fn update_suppressor(&mut self) {
+        let Some((mic, refr)) = self.window_levels() else {
+            return;
+        };
+        if refr < SUP_REF_MIN {
+            return;
+        }
+        self.ratios.push_back(mic / refr);
+        while self.ratios.len() > SUP_HISTORY {
+            self.ratios.pop_front();
+        }
+        if self.ratios.len() < SUP_MIN_SAMPLES {
+            return;
+        }
+        let mut sorted: Vec<f32> = self.ratios.iter().copied().collect();
+        sorted.sort_by(f32::total_cmp);
+        // Early on the lowest ratios are the rising edge of a phrase, not the coupling: be more
+        // generous until a few seconds of speaker sound have been seen.
+        let pct = if sorted.len() < SUP_SETTLED {
+            0.8
+        } else {
+            SUP_PERCENTILE
+        };
+        let coupling = sorted[((sorted.len() - 1) as f32 * pct) as usize];
+        if mic <= coupling * refr * SUP_MARGIN {
+            self.sup_hold = SUP_HANGOVER;
+        }
+    }
+
     /// Keep the echo delay AEC3 sees inside the range it can lock to. The measured offset is
     /// between the (held back) mic and the reference; when it leaves the range for two checks
     /// in a row, delay the mic or the reference to put it back on the target.
@@ -265,10 +340,11 @@ impl EchoPath {
         let measured = lag * FRAME_MS;
         if DELAY_OK_MS.contains(&measured) {
             self.off_range = 0;
+            self.lag_frames = lag.max(0) as usize;
             return;
         }
         self.off_range += 1;
-        if self.off_range < 2 {
+        if self.off_range < 3 {
             return;
         }
         self.off_range = 0;
@@ -280,6 +356,7 @@ impl EchoPath {
         } else {
             self.reference.extend(zeros);
         }
+        self.lag_frames = (TARGET_DELAY_MS / FRAME_MS) as usize;
         // Old envelopes describe the old alignment.
         self.env_mic.clear();
         self.env_ref.clear();
@@ -465,5 +542,86 @@ mod tests {
         let db = 20.0 * (rms(&mic[t.clone()]) / rms(&out[t]).max(1e-9)).log10();
         eprintln!("rhythm-only residue: reduction {db:.1} dB");
         assert!(db > 15.0, "reduced by only {db:.1} dB");
+    }
+
+    /// A video through a reverberant, clipping laptop speaker with pauses between phrases: the
+    /// first seconds (before AEC3 has converged and the coupling is known) are the hard part.
+    #[test]
+    fn phrases_through_a_reverberant_room_are_kept_out() {
+        let n = 16_000 * 22;
+        let base = speechlike(n, 7);
+        let bursts: [(f32, f32); 3] = [(2.0, 4.5), (7.0, 9.5), (13.0, 18.0)];
+        let refr: Vec<f32> = (0..n)
+            .map(|i| {
+                let t = i as f32 / 16_000.0;
+                if bursts.iter().any(|(a, b)| t >= *a && t < *b) {
+                    base[i]
+                } else {
+                    0.0
+                }
+            })
+            .collect();
+        // Room: decaying noise impulse response (RT60 about 0.4 s), 120 ms direct delay.
+        let mut x = 99u32;
+        let rir: Vec<f32> = (0..6_400)
+            .map(|k| {
+                x = x.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                let w = (x >> 8) as f32 / 8_388_608.0 - 1.0;
+                w * (-(k as f32) / 1_000.0).exp() * if k < 40 { 0.5 } else { 0.25 }
+            })
+            .collect();
+        let delay = 1_900usize;
+        let mut mic: Vec<f32> = (0..n)
+            .map(|i| {
+                let acc: f32 = rir
+                    .iter()
+                    .enumerate()
+                    .step_by(4)
+                    .filter(|(k, _)| i >= delay + k)
+                    .map(|(k, h)| h * refr[i - delay - k])
+                    .sum();
+                (acc * 18.0).tanh() / 1.5
+            })
+            .collect();
+        let mut y = 5u32;
+        for v in &mut mic {
+            y = y.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            *v += ((y >> 8) as f32 / 8_388_608.0 - 1.0) * 0.002; // room noise
+        }
+        let out = run(&mic, &refr);
+        for (i, (a, b)) in bursts.iter().enumerate() {
+            let r = (a * 16_000.0) as usize..(b * 16_000.0) as usize;
+            let db = 20.0 * (rms(&mic[r.clone()]) / rms(&out[r]).max(1e-9)).log10();
+            eprintln!("phrase {i} ({a}-{b} s): reduction {db:.1} dB");
+            // The first phrase gets less: nothing is learned yet.
+            let need = if i == 0 { 12.0 } else { 20.0 };
+            assert!(db > need, "phrase {i}: reduced by only {db:.1} dB");
+        }
+    }
+
+    #[test]
+    fn headset_speech_is_kept_while_the_other_side_talks() {
+        // With a headset there is no acoustic path from the speakers to the mic at all.
+        let n = 16_000 * 30;
+        let refr = speechlike(n, 7);
+        for scale in [1.0f32, 0.4, 0.15] {
+            let me: Vec<f32> = speechlike(n, 4243).iter().map(|v| v * scale).collect();
+            let out = run(&me, &refr);
+            let t = 16_000 * 10..n;
+            let kept = rms(&out[t.clone()]) / rms(&me[t.clone()]);
+            let blocks: Vec<(f32, f32)> = me[t.clone()]
+                .chunks(1_600)
+                .zip(out[t.clone()].chunks(1_600))
+                .map(|(a, b)| (rms(a), rms(b)))
+                .filter(|(a, _)| *a > 0.02 * scale)
+                .collect();
+            let lost = blocks.iter().filter(|(a, b)| *b < 0.3 * *a).count() as f32
+                / blocks.len().max(1) as f32;
+            eprintln!("headset, user at {scale}: kept {kept:.2}, blocks lost {lost:.2}");
+            assert!(
+                kept > 0.9,
+                "kept only {kept:.2} of the user's speech at {scale}"
+            );
+        }
     }
 }

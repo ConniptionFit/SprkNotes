@@ -8,6 +8,9 @@ export interface Backend {
   end(): Promise<void>;
   rename(name: string): Promise<void>;
   setSource(source: Source, on: boolean): Promise<void>;
+  /** Devices a source can be switched to, and the pick (null: the system default). */
+  listDevices(source: Source): Promise<string[]>;
+  setDevice(source: Source, name: string | null): Promise<void>;
   modelStatus(): Promise<ModelStatus>;
   modelCheckUpdate(): Promise<UpdateInfo>;
   modelDownload(): Promise<void>;
@@ -80,6 +83,8 @@ async function tauri(): Promise<Backend> {
     end: () => invoke("end_session"),
     rename: (name) => invoke("rename_session", { name }),
     setSource: (source, on) => invoke("set_source", { source, on }),
+    listDevices: (source) => invoke("list_devices", { source }),
+    setDevice: (source, name) => invoke("set_device", { source, name }),
     modelStatus: () => invoke("model_status"),
     modelCheckUpdate: () => invoke("model_check_update"),
     modelDownload: () => invoke("model_download"),
@@ -266,6 +271,9 @@ export function mockBackend(): Backend {
     },
     rename: async () => {},
     setSource: async () => {},
+    listDevices: async (source) =>
+      source === "mic" ? ["Built-in microphone", "USB headset"] : ["Speakers", "USB headset"],
+    setDevice: async () => {},
     modelStatus: async () => ({
       ready,
       downloadEnabled: flag !== "managed",

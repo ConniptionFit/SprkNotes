@@ -13,6 +13,7 @@ mod updater;
 
 use serde::Serialize;
 use sprk_audio::cpal_backend::CpalBackend;
+use sprk_audio::live::{DeviceChoice, Preferred, SharedChoice};
 use sprk_audio::live::Backend;
 use sprk_audio::Source;
 use sprk_pipeline::commit::Config;
@@ -24,6 +25,8 @@ use tauri::{AppHandle, Emitter, Manager, State};
 #[derive(Default)]
 struct AppState {
     host: Mutex<Option<Host>>,
+    /// The microphone and output the user picked in Settings (None: the system default).
+    devices: SharedChoice,
 }
 
 /// Payload shapes the UI expects (app/ui/src/lib/types.ts).
@@ -343,6 +346,7 @@ fn start_session_blocking(app: AppHandle, name: String) -> Result<(), String> {
         return Err("A session is already running.".into());
     }
     app.state::<assistant::Assistant>().clear();
+    let devices = state.devices.clone();
     // The model is chosen now and never swapped mid-session.
     let policy = policy();
     let loaded = models::load_active(env!("CARGO_PKG_VERSION"))?;
@@ -356,7 +360,9 @@ fn start_session_blocking(app: AppHandle, name: String) -> Result<(), String> {
         },
         loaded.engine,
         loaded.make_vad,
-        Box::new(|| Box::new(CpalBackend::default()) as Box<dyn Backend>),
+        Box::new(move || {
+            Box::new(Preferred::new(CpalBackend::default(), devices)) as Box<dyn Backend>
+        }),
         Box::new(clock::LocalClock),
         Arc::new(TauriEvents(app.clone())),
         context_config(&policy),
@@ -400,6 +406,34 @@ fn set_source(state: State<AppState>, source: String, on: bool) -> Result<(), St
         _ => return Err("unknown source".into()),
     };
     with_host(&state, |h| h.set_source(s, on))
+}
+
+fn source_of(source: &str) -> Result<Source, String> {
+    match source {
+        "mic" => Ok(Source::Mic),
+        "system" => Ok(Source::System),
+        _ => Err("unknown source".into()),
+    }
+}
+
+/// Devices a source can be switched to (Settings): microphones, or speakers that are looped back.
+#[tauri::command]
+fn list_devices(source: String) -> Result<Vec<String>, String> {
+    use sprk_audio::live::Backend as _;
+    Ok(CpalBackend::default().devices(source_of(&source)?))
+}
+
+/// Pick the device for a source, or None for the system default. Takes effect within a second,
+/// also mid-session (a "Source changed" line is written then).
+#[tauri::command]
+fn set_device(state: State<AppState>, source: String, name: Option<String>) -> Result<(), String> {
+    let name = name.filter(|n| !n.is_empty());
+    let mut d = state.devices.lock().map_err(|_| "busy".to_string())?;
+    match source_of(&source)? {
+        Source::Mic => d.mic = name,
+        Source::System => d.system = name,
+    }
+    Ok(())
 }
 
 /// End the session and wait for the file to be finalized. Blocks: never call it on the main
@@ -520,6 +554,8 @@ fn main() -> anyhow::Result<()> {
             end_session,
             rename_session,
             set_source,
+            list_devices,
+            set_device,
             mini_resize,
             mini_flipped,
             set_captions,

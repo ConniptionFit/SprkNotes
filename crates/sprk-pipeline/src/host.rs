@@ -370,6 +370,7 @@ fn run(
     let now_ms = |s: &Instant| s.elapsed().as_millis() as u64;
     let mut last_tick = 0u64;
     let mut title: Option<(String, NameSource)> = None;
+    let mut last_device: [Option<String>; 2] = [None, None];
     events.status(UiStatus::Transcribing);
 
     let problem = |e: SessionError| {
@@ -422,6 +423,25 @@ fn run(
             };
             if let Err(e) = session.event(t, &text) {
                 problem(e);
+            }
+        }
+        // Say which devices are in use (the transcript is the only place names may go): a wrong
+        // headset or speaker is otherwise invisible.
+        for (s, shown) in [
+            (Source::Mic, "Microphone"),
+            (Source::System, "Others audio"),
+        ] {
+            let now = capture.device_name(s).map(device_label);
+            let slot = &mut last_device[usize::from(s == Source::System)];
+            if now.is_some() && now != *slot {
+                if let Some(n) = &now {
+                    if let Err(e) = session.event(t, &format!("{shown}: {n}")) {
+                        problem(e);
+                    }
+                }
+            }
+            if now.is_some() {
+                *slot = now;
             }
         }
         drain(&mut capture, &mut session);
@@ -600,6 +620,16 @@ fn label(s: Source) -> &'static str {
     }
 }
 
+/// A device name as shown in the transcript: the text before any platform tag, no control characters.
+fn device_label(name: &str) -> String {
+    name.split('\u{1f}')
+        .next()
+        .unwrap_or(name)
+        .chars()
+        .filter(|c| !c.is_control())
+        .collect()
+}
+
 fn drain(capture: &mut LiveCapture, session: &mut Session) {
     while let Some(f) = capture.next_frame() {
         session.feed(f.source, &f.samples);
@@ -748,6 +778,9 @@ mod tests {
         assert!(text.contains("**Me:** hello everyone welcome"));
         assert!(text.contains("Transcription paused"));
         assert!(text.contains("Transcription resumed"));
+        // The device in use is named once, so a wrong headset is visible in the transcript.
+        assert_eq!(text.matches("Microphone: mic").count(), 1);
+        assert!(!text.contains("Others audio:"), "no device, no line");
         let st = ev.statuses.lock().unwrap().clone();
         assert_eq!(st.first(), Some(&UiStatus::Transcribing));
         assert!(st.contains(&UiStatus::Paused));

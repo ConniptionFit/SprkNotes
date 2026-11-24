@@ -59,6 +59,9 @@
     const offs: Array<() => void> = [];
     backend.then(async (b) => {
       api = b;
+      // Apply the saved device picks before the first session.
+      b.setDevice("mic", prefs.micDevice).catch(() => {});
+      b.setDevice("system", prefs.systemDevice).catch(() => {});
       offs.push(
         await b.onLine((l) => {
           lines = [...lines, l];

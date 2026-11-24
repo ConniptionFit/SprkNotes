@@ -17,6 +17,54 @@ pub trait Backend {
     /// Mic is the default input; System is the default render device (loopback).
     fn default_device(&self, source: Source) -> Option<String>;
     fn open(&mut self, source: Source, device: &str) -> Result<Box<dyn PcmStream>, AudioError>;
+    /// Names of the devices that can be chosen for a source: input devices for the mic, render
+    /// devices (looped back) for the system stream. Empty when unknown.
+    fn devices(&self, _source: Source) -> Vec<String> {
+        Vec::new()
+    }
+}
+
+/// The devices the user picked (None: follow the system default), shared between the settings
+/// screen and the capture thread.
+#[derive(Debug, Default)]
+pub struct DeviceChoice {
+    pub mic: Option<String>,
+    pub system: Option<String>,
+}
+pub type SharedChoice = std::sync::Arc<std::sync::Mutex<DeviceChoice>>;
+
+/// Uses the devices the user picked instead of the system defaults. A picked device that is
+/// unplugged falls back to the default until it returns, so transcribing never stops for it.
+pub struct Preferred<B: Backend> {
+    inner: B,
+    choice: SharedChoice,
+}
+
+impl<B: Backend> Preferred<B> {
+    pub fn new(inner: B, choice: SharedChoice) -> Self {
+        Self { inner, choice }
+    }
+}
+
+impl<B: Backend> Backend for Preferred<B> {
+    fn default_device(&self, source: Source) -> Option<String> {
+        let picked = self.choice.lock().ok().and_then(|c| match source {
+            Source::Mic => c.mic.clone(),
+            Source::System => c.system.clone(),
+        });
+        if let Some(name) = picked {
+            if self.inner.devices(source).contains(&name) {
+                return Some(name);
+            }
+        }
+        self.inner.default_device(source)
+    }
+    fn open(&mut self, source: Source, device: &str) -> Result<Box<dyn PcmStream>, AudioError> {
+        self.inner.open(source, device)
+    }
+    fn devices(&self, source: Source) -> Vec<String> {
+        self.inner.devices(source)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -105,6 +153,15 @@ impl LiveCapture {
         }
         self.frames.clear();
         self.last_check_ms = None;
+    }
+
+    /// Name of the device a source is capturing from now (None while it has none). It may carry a
+    /// platform tag after a control character; callers show only the text before it.
+    pub fn device_name(&self, source: Source) -> Option<&str> {
+        self.slots[Self::idx(source)]
+            .open
+            .as_ref()
+            .map(|(d, _)| d.as_str())
     }
 
     pub fn take_events(&mut self) -> Vec<CaptureEvent> {
@@ -251,6 +308,63 @@ mod tests {
                 w: self.0.clone(),
             }))
         }
+    }
+
+    #[test]
+    fn picked_input_is_used_until_it_is_unplugged() {
+        let w: Shared = Arc::new(Mutex::new(World {
+            mic: Some("mic-a".into()),
+            sys: Some("spk-a".into()),
+            ..World::default()
+        }));
+        struct Listing(FakeBackend, Arc<Mutex<Vec<String>>>);
+        impl Backend for Listing {
+            fn default_device(&self, s: Source) -> Option<String> {
+                self.0.default_device(s)
+            }
+            fn open(&mut self, s: Source, d: &str) -> Result<Box<dyn PcmStream>, AudioError> {
+                self.0.open(s, d)
+            }
+            fn devices(&self, s: Source) -> Vec<String> {
+                match s {
+                    Source::Mic => self.1.lock().unwrap().clone(),
+                    Source::System => vec!["spk-a".into(), "spk-b".into()],
+                }
+            }
+        }
+        let present = Arc::new(Mutex::new(vec!["mic-a".to_string(), "usb".to_string()]));
+        let choice: SharedChoice = Arc::new(Mutex::new(DeviceChoice::default()));
+        let mut c = LiveCapture::new(Box::new(Preferred::new(
+            Listing(FakeBackend(w.clone()), present.clone()),
+            choice.clone(),
+        )));
+        c.poll(0);
+        assert_eq!(w.lock().unwrap().opened, vec!["mic-a", "spk-a"]);
+        // The user picks the USB mic: capture moves to it within a second.
+        choice.lock().unwrap().mic = Some("usb".into());
+        c.poll(1_000);
+        assert_eq!(w.lock().unwrap().opened.last().unwrap(), "usb");
+        assert_eq!(
+            c.take_events(),
+            vec![CaptureEvent::DeviceChanged(Source::Mic)]
+        );
+        // Unplugged: back to the system default, not silence.
+        *present.lock().unwrap() = vec!["mic-a".to_string()];
+        c.poll(2_000);
+        assert_eq!(w.lock().unwrap().opened.last().unwrap(), "mic-a");
+        // Plugged back in: the pick is used again.
+        *present.lock().unwrap() = vec!["mic-a".to_string(), "usb".to_string()];
+        c.poll(3_000);
+        assert_eq!(w.lock().unwrap().opened.last().unwrap(), "usb");
+        // Back to "System default".
+        choice.lock().unwrap().mic = None;
+        c.poll(4_000);
+        assert_eq!(w.lock().unwrap().opened.last().unwrap(), "mic-a");
+        // The system stream can be picked too, and the name is visible for the transcript.
+        choice.lock().unwrap().system = Some("spk-b".into());
+        c.poll(5_000);
+        assert_eq!(c.device_name(Source::System), Some("spk-b"));
+        assert_eq!(c.device_name(Source::Mic), Some("mic-a"));
     }
 
     /// Next frame that is not stall-fill silence.

@@ -25,6 +25,10 @@ type Prefs = {
   assistantOn: boolean;
   assistantTier: "titles" | "light" | "standard";
   assistantFeatures: string[];
+  /** Microphone picked in Settings; null follows the system default. */
+  micDevice: string | null;
+  /** Output (the sound that is looped back as Others) picked in Settings; null follows the default. */
+  systemDevice: string | null;
 };
 
 /** Caption text sizes in px for the magnifier buttons, and the step used by default. */
@@ -34,7 +38,7 @@ export const LINE_TEXT = [12, 13, 14, 15, 17, 19, 22, 26];
 export const CAPTION_LIMITS = { minW: 260, maxW: 900, minH: 64, maxH: 480 };
 
 const KEY = "sprknotes.prefs";
-const defaults: Prefs = { theme: "system", throwback: false, captionsOn: false, captionsWho: "others", captionDelay: "steady", captionW: 420, captionH: 118, captionText: 2, liveLine: true, lineText: 3, assistantOn: false, assistantTier: "light", assistantFeatures: ["title", "recap", "actions", "ask"] };
+const defaults: Prefs = { theme: "system", throwback: false, captionsOn: false, captionsWho: "others", captionDelay: "steady", captionW: 420, captionH: 118, captionText: 2, liveLine: true, lineText: 3, assistantOn: false, assistantTier: "light", assistantFeatures: ["title", "recap", "actions", "ask"], micDevice: null, systemDevice: null };
 
 const clamp = (n: unknown, lo: number, hi: number, fallback: number) =>
   typeof n === "number" && Number.isFinite(n) ? Math.min(hi, Math.max(lo, Math.round(n))) : fallback;
@@ -51,6 +55,8 @@ function load(): Prefs {
     p.lineText = clamp(p.lineText, 0, LINE_TEXT.length - 1, defaults.lineText);
     if (!["titles", "light", "standard"].includes(p.assistantTier)) p.assistantTier = defaults.assistantTier;
     if (!Array.isArray(p.assistantFeatures)) p.assistantFeatures = defaults.assistantFeatures;
+    if (typeof p.micDevice !== "string" || !p.micDevice) p.micDevice = null;
+    if (typeof p.systemDevice !== "string" || !p.systemDevice) p.systemDevice = null;
     return p;
   } catch {
     return { ...defaults };

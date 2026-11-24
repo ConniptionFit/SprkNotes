@@ -43,6 +43,20 @@ impl Backend for CpalBackend {
         if source == Source::System {
             return monitor::default_monitor();
         }
+        // Windows: the communications default first. A headset's hands-free mic and the call's
+        // audio are only on those endpoints, and the console default can be the laptop's own mic
+        // and speakers (see endpoints.rs). Falls back to the console default.
+        #[cfg(windows)]
+        {
+            let capture = source == Source::Mic;
+            if let Some(n) =
+                crate::endpoints::default_name(capture, crate::endpoints::Role::Communications)
+            {
+                if self.devices(source).contains(&n) {
+                    return Some(n);
+                }
+            }
+        }
         let d = match source {
             Source::Mic => self.host.default_input_device(),
             Source::System => self.host.default_output_device(),
@@ -59,6 +73,27 @@ impl Backend for CpalBackend {
             ));
         }
         Some(name)
+    }
+
+    fn devices(&self, source: Source) -> Vec<String> {
+        #[cfg(not(windows))]
+        if source == Source::System {
+            return Vec::new(); // Linux system audio is the default output's monitor
+        }
+        let list = match source {
+            Source::Mic => self
+                .host
+                .input_devices()
+                .map(|it| it.filter_map(|d| d.name().ok()).collect::<Vec<_>>()),
+            Source::System => self
+                .host
+                .output_devices()
+                .map(|it| it.filter_map(|d| d.name().ok()).collect::<Vec<_>>()),
+        };
+        let mut names = list.unwrap_or_default();
+        names.sort();
+        names.dedup();
+        names
     }
 
     fn open(&mut self, source: Source, name: &str) -> Result<Box<dyn PcmStream>, AudioError> {
