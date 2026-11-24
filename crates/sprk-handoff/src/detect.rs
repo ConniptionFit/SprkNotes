@@ -317,6 +317,7 @@ mod tests {
             folder: "/d/T".into(),
             title: "A".into(),
             date: "2026-11-19".into(),
+            body: String::new(),
         }
     }
 
