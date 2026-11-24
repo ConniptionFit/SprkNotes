@@ -7,7 +7,8 @@
 #
 # A <pack folder> is what scripts/make-assistant-pack-folder.py writes (model.json + model.gguf).
 # Needs: sprkctl on PATH (or SPRKCTL=...), python3, curl, git. Uploads use your stored git
-# credential for the host, and every HTTP status is checked.
+# credential for the host (or SPRK_TOKEN, an access token with write:repository, as the CI workflow
+# uses), and every HTTP status is checked.
 set -euo pipefail
 work=${1:?work dir}; shift
 [ $# -ge 1 ] || { echo "give at least one pack folder"; exit 2; }
@@ -37,15 +38,18 @@ PY
 ls -l parts | head -50
 [ -n "${DRY_RUN:-}" ] && { echo "dry run: nothing uploaded. Files are in $work"; exit 0; }
 
-cred=$(printf 'protocol=https\nhost=%s\n\n' "${H#https://}" | git credential fill)
-U=$(sed -n 's/^username=//p' <<<"$cred"); P=$(sed -n 's/^password=//p' <<<"$cred")
-rel=$(curl -fsS -u "$U:$P" "$H/api/v1/repos/$R/releases/tags/$TAG"); ID=$(python3 -c 'import json,sys;print(json.load(sys.stdin)["id"])' <<<"$rel")
+if [ -n "${SPRK_TOKEN:-}" ]; then AUTH=(-H "Authorization: token $SPRK_TOKEN")
+else
+  cred=$(printf 'protocol=https\nhost=%s\n\n' "${H#https://}" | git credential fill)
+  AUTH=(-u "$(sed -n 's/^username=//p' <<<"$cred"):$(sed -n 's/^password=//p' <<<"$cred")")
+fi
+rel=$(curl -fsS "${AUTH[@]}" "$H/api/v1/repos/$R/releases/tags/$TAG"); ID=$(python3 -c 'import json,sys;print(json.load(sys.stdin)["id"])' <<<"$rel")
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 printf '%s' "$rel" > "$tmp/rel.json"
 up() { # file, uploaded name. A file of the same name is replaced.
   old=$(python3 -c 'import json,sys;print(next((a["id"] for a in json.load(open(sys.argv[1]))["assets"] if a["name"]==sys.argv[2]), ""))' "$tmp/rel.json" "$2")
-  [ -n "$old" ] && curl -fsS -X DELETE -u "$U:$P" "$H/api/v1/repos/$R/releases/$ID/assets/$old" >/dev/null
-  code=$(curl -s -o "$tmp/out" -w '%{http_code}' -u "$U:$P" -F "attachment=@$1;filename=$2" "$H/api/v1/repos/$R/releases/$ID/assets?name=$2")
+  [ -n "$old" ] && curl -fsS -X DELETE "${AUTH[@]}" "$H/api/v1/repos/$R/releases/$ID/assets/$old" >/dev/null
+  code=$(curl -s -o "$tmp/out" -w '%{http_code}' "${AUTH[@]}" -F "attachment=@$1;filename=$2" "$H/api/v1/repos/$R/releases/$ID/assets?name=$2")
   [ "$code" = 201 ] && echo "ok   $2" || { echo "FAIL $2 (HTTP $code)"; cat "$tmp/out"; exit 1; }
 }
 for f in parts/*; do up "$f" "$(basename "$f")"; done
