@@ -316,7 +316,7 @@ fn act(app: &AppHandle, id: &str) {
             let id = id.to_string();
             std::thread::spawn(move || {
                 let r = match id.as_str() {
-                    "start" => crate::start_session(app.clone(), app.state(), String::new()),
+                    "start" => tauri::async_runtime::block_on(crate::start_session(app.clone(), String::new())),
                     "pause" => crate::pause_session(app.state()),
                     "resume" => crate::resume_session(app.state()),
                     _ => crate::end_session_blocking(&app.state::<crate::AppState>()),
