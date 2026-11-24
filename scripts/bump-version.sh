@@ -3,7 +3,7 @@
 # Root Cargo.toml [workspace.package] version is the only source. This script
 # mirrors it into the files that cannot inherit it (Tauri crate, UI package).
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "${SPRK_ROOT:-$(dirname "$0")/..}"
 src() { sed -n '/^\[workspace.package\]/,/^\[/{s/^version = "\(.*\)"/\1/p}' Cargo.toml; }
 tauri() { sed -n '0,/^version = "\(.*\)"/s//\1/p' app/src-tauri/Cargo.toml; }
 ui() { sed -n 's/.*"version": "\(.*\)".*/\1/p' app/ui/package.json | head -1; }

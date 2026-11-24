@@ -12,6 +12,7 @@ separately branded edition, is a short checklist.
 | `install.ps1` | Default `-RepoUrl` (a piped script cannot read the toml). | Yes, one line |
 | `README.md`, `docs/install.md` | The one-line install command. | Yes |
 | `.forgejo/workflows/ci.yml` and `.github/workflows/ci.yml` | Same jobs for either host. Forgejo uses its own folder when both exist. `scripts/check-ci-parity.sh` keeps them identical. | No, delete the one you do not use |
+| `.forgejo/workflows/release.yml`, `cut-release.yml` | Forgejo only for now; they call the scripts in `scripts/`, which read the address from `distribution.toml`. See the GitHub note in [releasing.md](releasing.md). | Port when moving to GitHub |
 
 Everything else (updater, model download, policy, MSI switches, Intune and NinjaOne scripts) reads the
 address from the build default, a user choice, or admin policy. Admins can point any install at another

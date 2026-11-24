@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Sync the current branch to the Windows VM and run a command there.
-# Usage: scripts/winvm.sh <test|run-app|release|check|shell> [args]
+# Usage: scripts/winvm.sh <test|run-app|release|release-tag|dist|check|shell> [args]
 # Env: SPRK_WINVM (ssh host, default sprk-winvm), SPRK_WINVM_DIR (default C:/sprknotes)
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -23,7 +23,13 @@ case "$cmd" in
   check) ssh_run "powershell -NoProfile -Command \"'reachable'; [Environment]::OSVersion.VersionString\"" ;;
   test) sync; ssh_run "powershell -NoProfile -Command \"cd '$DIR'; cargo test --workspace\"" ;;
   run-app) sync; ssh_run "powershell -NoProfile -Command \"cd '$DIR/app'; npm.cmd --prefix ui ci; .\\ui\\node_modules\\.bin\\tauri.cmd dev\"" ;;
-  release) sync; ssh_run "powershell -NoProfile -Command \"cd '$DIR'; pwsh scripts/release.ps1\"" ;;
+  release) sync; ssh_run "powershell -NoProfile -Command \"cd '$DIR'; pwsh scripts/release.ps1 $*\"" ;;
+  # Build the exact tagged commit: scripts/winvm.sh release-tag v0.2.0-alpha.1 -SherpaX64 ... (the tag's code, nothing else)
+  release-tag) tag="${1:?tag}"; shift; git rev-parse -q --verify "refs/tags/$tag" >/dev/null || { echo "no tag $tag (git fetch --tags)"; exit 1; }
+        git switch -q -C release-build "$tag"; exec "$0" release "$@" ;;
+  # Copy the finished dist folder back to ./dist-win (then: scripts/publish-release.sh all vX ./dist-win)
+  dist) rm -rf dist-win; scp -q -r -o BatchMode=yes "$HOST:${DIR#C:/}/dist" dist-win 2>/dev/null || scp -q -r -o BatchMode=yes "$HOST:$DIR/dist" dist-win
+        find dist-win -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} +; ls -l dist-win ;;
   shell) ssh -t "$HOST" ;;
-  *) echo "usage: $0 <check|test|run-app|release|shell>"; exit 2 ;;
+  *) echo "usage: $0 <check|test|run-app|release [release.ps1 args]|release-tag TAG [args]|dist|shell>"; exit 2 ;;
 esac
