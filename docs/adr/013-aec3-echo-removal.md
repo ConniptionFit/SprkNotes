@@ -63,3 +63,27 @@ Added to `EchoPath`:
 - The 250 ms hold makes Me lines stamp up to about 0.25 s early. Dedupe already allows 2 s.
 Costs a few envelope correlations per second (about 100k multiply-adds each), no allocation on the audio thread
 (the session thread, not the capture callback).
+
+## Update after alpha.4 (round 3)
+Alpha.4 still let a video playing through the speakers show up as Me fairly often. A new test with a reverberant,
+clipping speaker model and pauses between phrases showed two gaps. First, the loudness-pattern gate needs about 3 s
+of history and 2.5 s of agreement, so a short phrase was over before it engaged. Second, AEC3 takes seconds to
+settle, and the first seconds of every playback leak through it (about 10 dB of reduction instead of 60).
+
+Added: an expected-bleed suppressor in `EchoPath`. The mic hears the speakers at a roughly steady fraction of what
+they play (the coupling). Every 50 ms the mic level over the last 300 ms is compared with the reference level that
+played one echo delay earlier; the coupling is the 35th percentile of those ratios over the last 15 s of playback
+(80th percentile until 5 s have been seen, because the lowest ratios early on are the rising edge of a phrase). Mic
+sound that is not at least 2.5 times (8 dB) above `coupling x reference` is muted with an 80 ms hangover. The user's
+voice at a laptop mic is normally well above that; speech over playback is kept (84% in the test), speech that is
+quieter than the bleed is not.
+
+Decisions on the questions raised with this round:
+- **Noise gate threshold:** not added as a setting. A fixed level cannot tell bleed from quiet speech (a loud video
+  is louder than a quiet user), and the suppressor already adapts the level to the session. Fewer controls (SPEC 8).
+- **Input vs output similarity:** already used three ways (AEC3 waveform, loudness-pattern gate, text dedupe) and
+  now a fourth, the level relation. Spectral coherence was considered and left out: more CPU for little gain over
+  what the tests show.
+- **Input device picker:** added to Settings (SPEC 8.5 already lists mic device). Useful on its own and as a test
+  tool: a headset mic sits close to the user, so the user's voice is far above the bleed.
+- Known limit: the first second of the first playback in a session is not suppressed (nothing is learned yet).

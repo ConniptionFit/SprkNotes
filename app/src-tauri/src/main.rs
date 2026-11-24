@@ -13,6 +13,7 @@ mod updater;
 
 use serde::Serialize;
 use sprk_audio::cpal_backend::CpalBackend;
+use sprk_audio::live::PreferredInput;
 use sprk_audio::live::Backend;
 use sprk_audio::Source;
 use sprk_pipeline::commit::Config;
@@ -24,6 +25,8 @@ use tauri::{AppHandle, Emitter, Manager, State};
 #[derive(Default)]
 struct AppState {
     host: Mutex<Option<Host>>,
+    /// The microphone the user picked in Settings (None: the system default).
+    mic: sprk_audio::live::MicChoice,
 }
 
 /// Payload shapes the UI expects (app/ui/src/lib/types.ts).
@@ -317,6 +320,7 @@ fn start_session(app: AppHandle, state: State<AppState>, name: String) -> Result
         return Err("A session is already running.".into());
     }
     app.state::<assistant::Assistant>().clear();
+    let mic = state.mic.clone();
     // The model is chosen now and never swapped mid-session.
     let policy = policy();
     let loaded = models::load_active(env!("CARGO_PKG_VERSION"))?;
@@ -330,7 +334,9 @@ fn start_session(app: AppHandle, state: State<AppState>, name: String) -> Result
         },
         loaded.engine,
         loaded.make_vad,
-        Box::new(|| Box::new(CpalBackend::default()) as Box<dyn Backend>),
+        Box::new(move || {
+            Box::new(PreferredInput::new(CpalBackend::default(), mic)) as Box<dyn Backend>
+        }),
         Box::new(clock::LocalClock),
         Arc::new(TauriEvents(app)),
         context_config(&policy),
@@ -374,6 +380,21 @@ fn set_source(state: State<AppState>, source: String, on: bool) -> Result<(), St
         _ => return Err("unknown source".into()),
     };
     with_host(&state, |h| h.set_source(s, on))
+}
+
+/// Input devices the microphone can be switched to (Settings).
+#[tauri::command]
+fn list_inputs() -> Vec<String> {
+    use sprk_audio::live::Backend as _;
+    CpalBackend::default().input_devices()
+}
+
+/// Pick the microphone, or None for the system default. Takes effect within a second, also
+/// mid-session (a "Source changed" line is written then).
+#[tauri::command]
+fn set_input(state: State<AppState>, name: Option<String>) -> Result<(), String> {
+    *state.mic.lock().map_err(|_| "busy".to_string())? = name.filter(|n| !n.is_empty());
+    Ok(())
 }
 
 /// End the session and wait for the file to be finalized. Blocks: never call it on the main
@@ -489,6 +510,8 @@ fn main() -> anyhow::Result<()> {
             end_session,
             rename_session,
             set_source,
+            list_inputs,
+            set_input,
             mini_resize,
             mini_flipped,
             set_captions,

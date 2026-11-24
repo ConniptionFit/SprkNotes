@@ -8,6 +8,9 @@ export interface Backend {
   end(): Promise<void>;
   rename(name: string): Promise<void>;
   setSource(source: Source, on: boolean): Promise<void>;
+  /** Microphones that can be picked, and the pick (null: the system default). */
+  listInputs(): Promise<string[]>;
+  setInput(name: string | null): Promise<void>;
   modelStatus(): Promise<ModelStatus>;
   modelCheckUpdate(): Promise<UpdateInfo>;
   modelDownload(): Promise<void>;
@@ -79,6 +82,8 @@ async function tauri(): Promise<Backend> {
     end: () => invoke("end_session"),
     rename: (name) => invoke("rename_session", { name }),
     setSource: (source, on) => invoke("set_source", { source, on }),
+    listInputs: () => invoke("list_inputs"),
+    setInput: (name) => invoke("set_input", { name }),
     modelStatus: () => invoke("model_status"),
     modelCheckUpdate: () => invoke("model_check_update"),
     modelDownload: () => invoke("model_download"),
@@ -264,6 +269,8 @@ export function mockBackend(): Backend {
     },
     rename: async () => {},
     setSource: async () => {},
+    listInputs: async () => ["Built-in microphone", "USB headset"],
+    setInput: async () => {},
     modelStatus: async () => ({
       ready,
       downloadEnabled: flag !== "managed",

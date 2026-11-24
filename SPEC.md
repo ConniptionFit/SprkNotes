@@ -144,7 +144,7 @@ sprknotes/
 
 ### 4.2 Bleed removal (three layers)
 1. **Windows AEC:** open the mic stream as a communications stream; if `IAcousticEchoCancellationControl` is available, set the render endpoint being looped back as the AEC reference.
-2. **Software AEC:** run WebRTC AEC3 (pure Rust port, echo canceller only) on the mic using the loopback stream as the far-end reference (ADR-013). Both streams are kept on the wall clock: a loopback stream that delivers nothing while silent is padded with silence.
+2. **Software AEC:** run WebRTC AEC3 (pure Rust port, echo canceller only) on the mic using the loopback stream as the far-end reference (ADR-013). Both streams are kept on the wall clock: a loopback stream that delivers nothing while silent is padded with silence. Behind the canceller, mic sound that is not clearly louder (about 8 dB) than the bleed the speakers are expected to cause is muted, and sound that still follows the speakers' loudness pattern is muted too. No level setting is exposed: the expected bleed level is learned from the session.
 3. **Transcript dedupe (always on):** in the commit buffer, drop a Me segment when an Others segment overlaps it in time (±2 s) and normalized text similarity is ≥ 0.6 (token-level ratio; threshold configurable). Prefer the Others version.
 - **Headset detection:** if the render endpoint form factor is headphones/headset, layers 1 and 2 may be skipped; layer 3 stays on.
 - **Known limitation:** people speaking in the same room as the user are labeled Me.
@@ -369,7 +369,7 @@ Scheduled Teams and Zoom meetings live on the user's Outlook calendar, so one lo
 - Transcript view: rendered Markdown, **View in folder** (`explorer /select,`), **Export** (md, txt, docx, json), **Rename**, **Summarize with Claude**, **Summarize with Copilot**, **Delete** (to Recycle Bin, with confirm).
 
 ### 8.5 Settings (keep short)
-- Audio: mic device, Others on/off, filler removal, commit delay (advanced).
+- Audio: mic device (a list of the input devices; "System default" follows the headset, an unplugged pick falls back to the default), Others on/off, filler removal, commit delay (advanced).
 - Outlook: provider, context prompt behavior (Ask / Always / Never).
 - Context: detect audio sources (on/off, merge window), Teams call context (on/off, poll interval), name 1:1 speakers (on/off), excluded apps/title patterns.
 - Files: transcripts root, default export format.

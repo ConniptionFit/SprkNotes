@@ -17,6 +17,46 @@ pub trait Backend {
     /// Mic is the default input; System is the default render device (loopback).
     fn default_device(&self, source: Source) -> Option<String>;
     fn open(&mut self, source: Source, device: &str) -> Result<Box<dyn PcmStream>, AudioError>;
+    /// Names of the input devices that can be chosen for the microphone (empty when unknown).
+    fn input_devices(&self) -> Vec<String> {
+        Vec::new()
+    }
+}
+
+/// The microphone the user picked, shared between the settings screen and the capture thread.
+pub type MicChoice = std::sync::Arc<std::sync::Mutex<Option<String>>>;
+
+/// Uses the input device the user picked instead of the system default. A picked device that is
+/// unplugged falls back to the default until it returns, so transcribing never stops for it.
+pub struct PreferredInput<B: Backend> {
+    inner: B,
+    choice: MicChoice,
+}
+
+impl<B: Backend> PreferredInput<B> {
+    pub fn new(inner: B, choice: MicChoice) -> Self {
+        Self { inner, choice }
+    }
+}
+
+impl<B: Backend> Backend for PreferredInput<B> {
+    fn default_device(&self, source: Source) -> Option<String> {
+        if source == Source::Mic {
+            let picked = self.choice.lock().ok().and_then(|c| c.clone());
+            if let Some(name) = picked {
+                if self.inner.input_devices().contains(&name) {
+                    return Some(name);
+                }
+            }
+        }
+        self.inner.default_device(source)
+    }
+    fn open(&mut self, source: Source, device: &str) -> Result<Box<dyn PcmStream>, AudioError> {
+        self.inner.open(source, device)
+    }
+    fn input_devices(&self) -> Vec<String> {
+        self.inner.input_devices()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -251,6 +291,55 @@ mod tests {
                 w: self.0.clone(),
             }))
         }
+    }
+
+    #[test]
+    fn picked_input_is_used_until_it_is_unplugged() {
+        let w: Shared = Arc::new(Mutex::new(World {
+            mic: Some("mic-a".into()),
+            sys: Some("spk-a".into()),
+            ..World::default()
+        }));
+        struct Listing(FakeBackend, Arc<Mutex<Vec<String>>>);
+        impl Backend for Listing {
+            fn default_device(&self, s: Source) -> Option<String> {
+                self.0.default_device(s)
+            }
+            fn open(&mut self, s: Source, d: &str) -> Result<Box<dyn PcmStream>, AudioError> {
+                self.0.open(s, d)
+            }
+            fn input_devices(&self) -> Vec<String> {
+                self.1.lock().unwrap().clone()
+            }
+        }
+        let present = Arc::new(Mutex::new(vec!["mic-a".to_string(), "usb".to_string()]));
+        let choice: MicChoice = Arc::new(Mutex::new(None));
+        let mut c = LiveCapture::new(Box::new(PreferredInput::new(
+            Listing(FakeBackend(w.clone()), present.clone()),
+            choice.clone(),
+        )));
+        c.poll(0);
+        assert_eq!(w.lock().unwrap().opened, vec!["mic-a", "spk-a"]);
+        // The user picks the USB mic: capture moves to it within a second.
+        *choice.lock().unwrap() = Some("usb".into());
+        c.poll(1_000);
+        assert_eq!(w.lock().unwrap().opened.last().unwrap(), "usb");
+        assert_eq!(
+            c.take_events(),
+            vec![CaptureEvent::DeviceChanged(Source::Mic)]
+        );
+        // Unplugged: back to the system default, not silence.
+        *present.lock().unwrap() = vec!["mic-a".to_string()];
+        c.poll(2_000);
+        assert_eq!(w.lock().unwrap().opened.last().unwrap(), "mic-a");
+        // Plugged back in: the pick is used again.
+        *present.lock().unwrap() = vec!["mic-a".to_string(), "usb".to_string()];
+        c.poll(3_000);
+        assert_eq!(w.lock().unwrap().opened.last().unwrap(), "usb");
+        // Back to "System default".
+        *choice.lock().unwrap() = None;
+        c.poll(4_000);
+        assert_eq!(w.lock().unwrap().opened.last().unwrap(), "mic-a");
     }
 
     /// Next frame that is not stall-fill silence.

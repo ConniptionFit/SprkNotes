@@ -61,6 +61,17 @@ impl Backend for CpalBackend {
         Some(name)
     }
 
+    fn input_devices(&self) -> Vec<String> {
+        let mut names: Vec<String> = self
+            .host
+            .input_devices()
+            .map(|it| it.filter_map(|d| d.name().ok()).collect())
+            .unwrap_or_default();
+        names.sort();
+        names.dedup();
+        names
+    }
+
     fn open(&mut self, source: Source, name: &str) -> Result<Box<dyn PcmStream>, AudioError> {
         #[cfg(not(windows))]
         if source == Source::System {
