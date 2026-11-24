@@ -11,8 +11,12 @@
 # Needs: the release token in ~/.config/sprknotes/forgejo-token (see docs/releasing.md), ssh access
 # to sprk-winvm (SPRK_WINVM), and your git credentials for pushing the tag. Stops on the first error.
 set -euo pipefail
-cd "$(dirname "$0")/.."
-REPO=$PWD
+# Works from a copy anywhere (for example ~/ship-alpha.sh): it finds the checkout itself.
+here=$(cd "$(dirname "$0")" && pwd)
+if [ -x "$here/cut-release.sh" ]; then REPO=$(cd "$here/.." && pwd)
+else REPO=${SPRK_REPO_DIR:-/home/powers/sprknotes-work/sprknotes}; fi
+[ -x "$REPO/scripts/cut-release.sh" ] || { echo "No checkout at $REPO (set SPRK_REPO_DIR). main needs PR 81 (release tooling) merged." >&2; exit 1; }
+cd "$REPO"
 API=https://git.pwrs.dev/api/v1/repos/powers/sprknotes
 VM=${SPRK_WINVM:-sprk-winvm}
 base=""; tag=""; waitpr=""
