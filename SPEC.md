@@ -390,10 +390,10 @@ SprkNotes itself makes no network call here: it only opens the Claude or Copilot
 Summarize looks for installed clients by asking the OS which app handles each link scheme (`claude:`, `ms-officeapp:`, also `ms-copilot:`) and, on Windows, whether the Store package is installed (Store apps register links through the package); it never starts or scans the apps. Exactly one found (and not hidden by policy): use it. Both: the user chooses. None: copy the prompt, reveal the file (the file manager's folder on Linux) and show the toast "No Claude or Copilot app found. Prompt copied and the file is highlighted. Open your assistant, attach the file and paste." Copilot has no Linux client, so on Linux only Claude can be found. An https `CopilotTarget` counts as present.
 
 ### 9.1 Claude
-- Build a Claude Desktop link: `claude://cowork/new?q=<prompt>&file=<transcript path>&folder=<transcript folder>` (all values URL-encoded).
-- The transcript is attached as a file, not pasted into `q` (prompt text is capped at about 14,000 characters).
-- The user reviews and sends in Claude. Claude saves the summary into the same folder (Claude asks for folder confirmation).
-- If `claude://` is not registered: copy the prompt to the clipboard, reveal the file in Explorer, show a toast with instructions.
+- Open Claude Desktop with `claude://claude.ai/new?q=<one line>` (URL-encoded). The link carries only a short start line, because Windows cuts links near 2,000 characters and a link cannot reliably attach a local file (Claude reported it could not see the file).
+- The clipboard holds the prompt followed by the transcript text. A toast says: click the chat box, press Ctrl+V, send. The user reviews and sends in Claude.
+- The prompt asks for the summary in the reply, not a file saved to a folder (Claude cannot write to the user's folders).
+- If `claude://` is not registered: copy the same text, show a toast with instructions.
 
 ### 9.2 Microsoft 365 Copilot
 - No documented link that attaches a local file. Flow: copy the prompt to the clipboard, open the configured Copilot target (default: Microsoft 365 Copilot app or `https://m365.cloud.microsoft/chat`; verify in M8), reveal the transcript in Explorer, toast: "Prompt copied. Attach the highlighted file and paste."
@@ -412,7 +412,7 @@ Lines starting with ">" are events: pauses, people joining or leaving, and audio
 The front matter and the Meeting context, Participants and Audio sources sections give extra context. Invitees are not proof someone attended. During a group-call period, other participants were not identified.
 Speech recognition can mishear words. Fix obvious errors from context, but never invent content.
 
-Create a meeting summary and save it in {folder} as "{basename} - Summary.md" (also save a .docx with the same name if you can).
+Create a meeting summary and write it in your reply, headed "{basename} - Summary". Offer a .docx version if you can make one.
 
 Structure:
 1. Title, date, time, who actually participated (Participants section; fall back to invitees and say so) and any media played (Audio sources)

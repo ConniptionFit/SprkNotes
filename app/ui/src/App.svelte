@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { backend, type Backend } from "./lib/api";
-  import type { AssistantStatus, Caption, DownloadProgress, HandoffTarget, LibraryEntry, Line, ModelStatus, Source, Status, Summarized } from "./lib/types";
+  import type { AssistantStatus, Caption, DownloadProgress, HandoffTarget, LibraryEntry, Line, ModelStatus, Phase, Source, Status, Summarized } from "./lib/types";
   import TopBar from "./lib/TopBar.svelte";
   import Controls from "./lib/Controls.svelte";
   import LivePane from "./lib/LivePane.svelte";
@@ -16,6 +16,7 @@
   let api = $state.raw<Backend | undefined>();
   let name = $state("");
   let status = $state<Status>("ready");
+  let phase = $state<Phase>({ phase: "idle" });
   let mic = $state(true);
   let system = $state(true);
   let lines = $state<Line[]>([]);
@@ -80,6 +81,7 @@
         }),
       );
       offs.push(await b.onStatus((s) => (status = s)));
+      offs.push(await b.onPhase((p) => (phase = p)));
       offs.push(await b.onProblem((kind) => say(problemText(kind))));
       b.recoveryScan()
         .then((r) => (recovered = r))
@@ -213,10 +215,24 @@
 
   async function start() {
     lines = [];
+    phase = { phase: "loading" }; // instant feedback; the backend adds the model's name
     try {
       await api?.start(name);
     } catch (e) {
       say(String(e));
+    } finally {
+      phase = { phase: "idle" };
+    }
+  }
+
+  async function end() {
+    phase = { phase: "ending" };
+    try {
+      await api?.end();
+    } catch (e) {
+      say(String(e));
+    } finally {
+      phase = { phase: "idle" };
     }
   }
 
@@ -321,7 +337,8 @@
       onstart={start}
       onpause={() => api?.pause()}
       onresume={() => api?.resume()}
-      onend={() => api?.end()}
+      onend={end}
+      {phase}
     />
   </div>
   {#if askOpen && assistant?.enabled && view === "main"}

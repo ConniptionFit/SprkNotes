@@ -41,6 +41,22 @@ fn stores() -> (Option<ModelStore>, Option<ModelStore>, Option<ModelStore>) {
     (bundled, machine, user)
 }
 
+/// Friendly name of the model the next session will use (no loading, no hashing), for the
+/// "Loading model" message. None when nothing is installed.
+pub fn active_display_name() -> Option<String> {
+    use sprk_models::resolver::{resolve, Policy, Stores};
+    use sprk_models::Manifest;
+    let (b, m, u) = stores();
+    let st = Stores {
+        bundled: b.as_ref(),
+        machine: m.as_ref(),
+        user: u.as_ref(),
+    };
+    let r = resolve(&Policy::default(), &st, &|_| Ok(())).ok()?;
+    let text = std::fs::read_to_string(r.chosen.dir.join("model.json")).ok()?;
+    Some(Manifest::from_json(&text).ok()?.display_name)
+}
+
 #[cfg(any(feature = "engine", feature = "engine-shared"))]
 pub fn load_active(app_version: &str) -> Result<Loaded, String> {
     use sprk_models::resolver::{resolve, Policy, Stores};

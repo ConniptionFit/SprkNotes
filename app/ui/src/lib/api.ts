@@ -1,4 +1,4 @@
-import type { AppUpdateInfo, AppUpdateStatus, AssistantRequest, AssistantModelStatus, AssistantResponse, AssistantStatus, Caption, DownloadProgress, ExportFormat, LibraryEntry, Line, ModelStatus, Source, Status, Summarized, TranscriptView, UpdateInfo } from "./types";
+import type { AppUpdateInfo, AppUpdateStatus, AssistantRequest, AssistantModelStatus, AssistantResponse, AssistantStatus, Caption, DownloadProgress, ExportFormat, LibraryEntry, Line, ModelStatus, Phase, Source, Status, Summarized, TranscriptView, UpdateInfo } from "./types";
 
 /** Typed surface between the UI and the Rust side. Every command has a matching Tauri command. */
 export interface Backend {
@@ -68,6 +68,7 @@ export interface Backend {
   onAssistantModelUpdate(cb: (u: UpdateInfo) => void): Promise<() => void>;
   onLine(cb: (l: Line) => void): Promise<() => void>;
   onStatus(cb: (s: Status) => void): Promise<() => void>;
+  onPhase(cb: (p: Phase) => void): Promise<() => void>;
 }
 
 const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -120,6 +121,7 @@ async function tauri(): Promise<Backend> {
     onAssistantModelUpdate: (cb) => listen<UpdateInfo>("assistant-model-update", (e) => cb(e.payload)),
     onLine: (cb) => listen<Line>("transcript-line", (e) => cb(e.payload)),
     onStatus: (cb) => listen<Status>("session-status", (e) => cb(e.payload)),
+    onPhase: (cb) => listen<Phase>("session-phase", (e) => cb(e.payload)),
   };
 }
 
@@ -358,6 +360,7 @@ export function mockBackend(): Backend {
     ...mockAssistant(),
     onLine: async (cb) => ((lineCb = cb), () => {}),
     onStatus: async (cb) => ((statusCb = cb), () => {}),
+    onPhase: async () => () => {},
   };
 }
 

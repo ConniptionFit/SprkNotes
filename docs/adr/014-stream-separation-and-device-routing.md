@@ -20,7 +20,7 @@ whenever both sides talk, and would change nothing about attribution, which is a
 parallel is viable on a big machine but not worth it on the target laptops.
 
 **Likely cause of the report.** We opened the *console* default devices (cpal's default). A Bluetooth headset appears as two
-endpoints (stereo for music, hands-free for calls) and a call app plays and records on the *communications* defaults.
+endpoints (stereo for music, hands-free for calls) and a call app plays and captures on the *communications* defaults.
 Windows does not always make the headset's hands-free mic the console default input, so we kept transcribing the laptop mic
 and looped back an endpoint the call never used. SPEC 4.1 already said "default communications device" for the mic; the
 code did not do that.

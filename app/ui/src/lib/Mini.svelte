@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { backend, type Backend } from "./api";
-  import type { AssistantStatus, Caption, Status } from "./types";
+  import type { AssistantStatus, Caption, Phase, Status } from "./types";
   import { prefs, setPref, captionFlags, CAPTION_TEXT, CAPTION_LIMITS } from "./prefs.svelte";
   import Light from "./Light.svelte";
   import IconButton from "./IconButton.svelte";
@@ -11,6 +11,7 @@
 
   let api: Backend | undefined;
   let status = $state<Status>("ready");
+  let phase = $state<Phase>({ phase: "idle" });
   let seconds = $state(0);
   // Real elapsed time while transcribing. Counting timer ticks drifts: a hidden or throttled
   // webview fires them late, and the clock ran at half speed.
@@ -73,10 +74,15 @@
     return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
   });
 
+  function loadingText(p: Phase): string {
+    return p.model ? `Loading model: ${p.model}` : "Loading model";
+  }
+
   onMount(() => {
     const offs: Array<() => void> = [];
     backend.then(async (b) => {
       api = b;
+      offs.push(await b.onPhase((p) => (phase = p)));
       offs.push(
         await b.onStatus((s) => {
           if (s === "transcribing" && status === "ready") {
@@ -256,8 +262,12 @@
             </IconButton>
           {/if}
           {#if status === "ready"}
-            <IconButton label="Start" primary onclick={() => api?.start("")}>
-              <svg viewBox="0 0 20 20" aria-hidden="true"><path class="solid" d="M6.5 4.5l9 5.5-9 5.5z" /></svg>
+            <IconButton label={phase.phase === "loading" ? loadingText(phase) : "Start"} primary disabled={phase.phase !== "idle"} onclick={() => api?.start("").catch(() => {})}>
+              {#if phase.phase === "loading"}
+                <span class="spin" aria-hidden="true"></span>
+              {:else}
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path class="solid" d="M6.5 4.5l9 5.5-9 5.5z" /></svg>
+              {/if}
             </IconButton>
           {:else}
             {#if status === "paused"}
@@ -269,8 +279,12 @@
                 <svg viewBox="0 0 20 20" aria-hidden="true"><path class="solid" d="M6 4.5h2.8v11H6zM11.2 4.5H14v11h-2.8z" /></svg>
               </IconButton>
             {/if}
-            <IconButton label="Stop" onclick={() => api?.end()}>
-              <svg viewBox="0 0 20 20" aria-hidden="true"><rect class="solid" x="5.5" y="5.5" width="9" height="9" rx="2" /></svg>
+            <IconButton label={phase.phase === "ending" ? "Saving transcript" : "Stop"} disabled={phase.phase === "ending"} onclick={() => api?.end().catch(() => {})}>
+              {#if phase.phase === "ending"}
+                <span class="spin" aria-hidden="true"></span>
+              {:else}
+                <svg viewBox="0 0 20 20" aria-hidden="true"><rect class="solid" x="5.5" y="5.5" width="9" height="9" rx="2" /></svg>
+              {/if}
             </IconButton>
           {/if}
           <IconButton label="Open SprkNotes" onclick={() => api?.openApp()}>
@@ -334,6 +348,16 @@
 </main>
 
 <style>
+  .spin {
+    width: 1rem;
+    height: 1rem;
+    border-radius: 50%;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spin { animation-duration: 3s; } }
   .frame { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 6px; user-select: none; }
   /* Drawer above the pill: the pill keeps its place and the window grows upward (see resize_mini). */
   .frame.flipped { flex-direction: column-reverse; }

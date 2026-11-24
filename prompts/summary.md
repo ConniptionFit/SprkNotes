@@ -1,4 +1,4 @@
-The attached file is a meeting transcript from SprkNotes (format sprknotes-transcript/1).
+The transcript below (or attached as a file) is a meeting transcript from SprkNotes (format sprknotes-transcript/1).
 Each statement is one line: - `HH:MM:SS` **Speaker:** text
 "Me" is the person who ran SprkNotes. A named speaker (e.g. "Sam Sample") is the only other person on a 1:1 call.
 "Others" means one or more remote people when the call had 3+ people or nobody could be identified; do not guess who said an "Others" line.
@@ -6,7 +6,7 @@ Lines starting with ">" are events: pauses, people joining or leaving, and audio
 The front matter and the Meeting context, Participants and Audio sources sections give extra context. Invitees are not proof someone attended. During a group-call period, other participants were not identified.
 Speech recognition can mishear words. Fix obvious errors from context, but never invent content.
 
-Create a meeting summary and save it in {folder} as "{basename} - Summary.md" (also save a .docx with the same name if you can).
+Create a meeting summary and write it in your reply, headed "{basename} - Summary". Offer a .docx version if you can make one.
 
 Structure:
 1. Title, date, time, who actually participated (Participants section; fall back to invitees and say so) and any media played (Audio sources)

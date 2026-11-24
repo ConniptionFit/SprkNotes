@@ -313,8 +313,34 @@ async fn update_install() -> Result<Option<String>, String> {
     Ok(v)
 }
 
+/// What the window is busy doing while it works: `loading` (with the model's name) at Start,
+/// `ending` while the transcript is closed off, `idle` otherwise.
+#[derive(Serialize, Clone)]
+struct Phase {
+    phase: &'static str,
+    model: Option<String>,
+}
+
+fn emit_phase(app: &AppHandle, phase: &'static str, model: Option<String>) {
+    let _ = app.emit("session-phase", Phase { phase, model });
+}
+
+/// Async so Tauri runs it off the main thread: loading the model takes a moment and must not
+/// freeze the window. The phase event lets the UI say what is happening.
 #[tauri::command]
-fn start_session(app: AppHandle, state: State<AppState>, name: String) -> Result<(), String> {
+async fn start_session(app: AppHandle, name: String) -> Result<(), String> {
+    emit_phase(&app, "loading", models::active_display_name());
+    let a = app.clone();
+    let r = tauri::async_runtime::spawn_blocking(move || start_session_blocking(a, name))
+        .await
+        .map_err(|e| e.to_string())
+        .and_then(|r| r);
+    emit_phase(&app, "idle", None);
+    r
+}
+
+fn start_session_blocking(app: AppHandle, name: String) -> Result<(), String> {
+    let state = app.state::<AppState>();
     let mut slot = state.host.lock().map_err(|_| "busy".to_string())?;
     if slot.is_some() {
         return Err("A session is already running.".into());
@@ -338,7 +364,7 @@ fn start_session(app: AppHandle, state: State<AppState>, name: String) -> Result
             Box::new(Preferred::new(CpalBackend::default(), devices)) as Box<dyn Backend>
         }),
         Box::new(clock::LocalClock),
-        Arc::new(TauriEvents(app)),
+        Arc::new(TauriEvents(app.clone())),
         context_config(&policy),
     )
     .map_err(|e| e.to_string())?;
@@ -424,9 +450,14 @@ fn end_session_blocking(state: &AppState) -> Result<(), String> {
 /// Async so Tauri runs it off the main thread; the join happens on a blocking-pool thread.
 #[tauri::command]
 async fn end_session(app: AppHandle) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || end_session_blocking(&app.state::<AppState>()))
+    emit_phase(&app, "ending", None);
+    let a = app.clone();
+    let r = tauri::async_runtime::spawn_blocking(move || end_session_blocking(&a.state::<AppState>()))
         .await
-        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())
+        .and_then(|r| r);
+    emit_phase(&app, "idle", None);
+    r
 }
 
 /// The overlay sizes its window to its content (logical pixels). `flipped` says the caption
