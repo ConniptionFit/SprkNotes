@@ -1,22 +1,26 @@
 <script lang="ts">
   import IconButton from "./IconButton.svelte";
   let {
+    onhome,
     onlibrary,
     onsettings,
     onsummarize,
     onask,
     askOpen = false,
+    homeOpen = true,
     libraryOpen = false,
     settingsOpen = false,
     canSummarize = false,
     summarizeHint = "",
   }: {
+    onhome: () => void;
     onlibrary: () => void;
     onsettings: () => void;
     onsummarize: () => void;
     /** Only given when Ask Sprk is on and ready. */
     onask?: () => void;
     askOpen?: boolean;
+    homeOpen?: boolean;
     libraryOpen?: boolean;
     settingsOpen?: boolean;
     canSummarize?: boolean;
@@ -26,6 +30,9 @@
 </script>
 
 <nav aria-label="More">
+  <IconButton label="Home" onclick={onhome} pressed={homeOpen}>
+    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 9.5L10 4l6.5 5.5M5 8.5V16h10V8.5M8.5 16v-4.5h3V16" /></svg>
+  </IconButton>
   <IconButton label="Library" onclick={onlibrary} pressed={libraryOpen}>
     <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 4.5h12M4 10h12M4 15.5h8" /></svg>
   </IconButton>

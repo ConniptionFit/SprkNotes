@@ -144,16 +144,29 @@ impl HandoffTarget for Claude {
     }
     fn plan(&self, r: &Request, prompt: &str) -> Plan {
         let prompt = cap_prompt(prompt);
-        let url = format!(
-            "claude://cowork/new?q={}&file={}&folder={}",
-            url_encode(&prompt),
+        let tail = format!(
+            "&file={}&folder={}",
             url_encode(&r.file),
             url_encode(&r.folder)
         );
+        // Windows hands a link to the app through the shell, which cuts links near 2,000
+        // characters. A cut link opens the app with an empty chat box, so a long prompt is
+        // swapped for a short one in the link. The full prompt is always on the clipboard.
+        let mut q = url_encode(&prompt);
+        if "claude://cowork/new?q=".len() + q.len() + tail.len() > MAX_LINK_CHARS {
+            q = url_encode(&short_prompt(r));
+        }
+        let url = format!("claude://cowork/new?q={q}{tail}");
         Plan {
-            steps: vec![Step::OpenUrl(url)],
+            steps: vec![
+                Step::CopyToClipboard(prompt.clone()),
+                Step::OpenUrl(url),
+                Step::Toast(
+                    "Claude opened. If the chat box is empty, press Ctrl+V: the full prompt is copied."
+                        .into(),
+                ),
+            ],
             fallback: vec![
-                Step::CopyToClipboard(prompt),
                 Step::RevealInExplorer(r.file.clone()),
                 Step::Toast(
                     "Claude did not open. Prompt copied. Open Claude, attach the highlighted file and paste."
@@ -162,6 +175,18 @@ impl HandoffTarget for Claude {
             ],
         }
     }
+}
+
+/// Link length the shell passes on intact (kept under the 2,083 character limit).
+pub const MAX_LINK_CHARS: usize = 1_900;
+
+/// Short prompt for a link that would be too long with the full one.
+pub fn short_prompt(r: &Request) -> String {
+    format!(
+        "Summarize the attached meeting transcript and save it in {} as \"{} - Summary.md\". Include participants, TL;DR, topics, decisions with timestamps, action items (owner, task, due) and open questions. Use only the transcript.",
+        r.folder,
+        r.basename()
+    )
 }
 
 /// Microsoft 365 Copilot: no file-attach link exists, so copy, open, reveal, toast.
@@ -264,12 +289,27 @@ mod tests {
     fn claude_link_attaches_file_not_transcript_text() {
         let r = req();
         let plan = Claude.plan(&r, "hello world");
-        let Step::OpenUrl(u) = &plan.steps[0] else {
+        let Step::OpenUrl(u) = &plan.steps[1] else {
             panic!("expected a link")
         };
         assert!(u.starts_with("claude://cowork/new?q=hello%20world&file=C%3A%5CUsers"));
         assert!(u.contains("&folder="));
-        assert_eq!(plan.fallback.len(), 3);
+        assert_eq!(plan.fallback.len(), 2);
+    }
+
+    #[test]
+    fn long_prompt_uses_short_link_and_full_clipboard() {
+        let long = "word ".repeat(1_000);
+        let plan = Claude.plan(&req(), &long);
+        let Step::CopyToClipboard(c) = &plan.steps[0] else {
+            panic!("expected a copy")
+        };
+        assert!(c.starts_with("word word"));
+        let Step::OpenUrl(u) = &plan.steps[1] else {
+            panic!("expected a link")
+        };
+        assert!(u.len() <= MAX_LINK_CHARS + 200);
+        assert!(u.contains("Summary.md"));
     }
 
     #[test]
@@ -288,14 +328,14 @@ mod tests {
         run(&plan, &mut f);
         assert_eq!(
             f.log,
-            vec!["open claude://cowork/new", "copy", "reveal", "toast"]
+            vec!["copy", "open claude://cowork/new", "reveal", "toast"]
         );
         let mut ok = Fake {
             handler: true,
             ..Fake::default()
         };
         run(&plan, &mut ok);
-        assert_eq!(ok.log, vec!["open claude://cowork/new"]);
+        assert_eq!(ok.log, vec!["copy", "open claude://cowork/new", "toast"]);
     }
 
     #[test]
