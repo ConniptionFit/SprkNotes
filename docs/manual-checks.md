@@ -59,7 +59,7 @@ Once the Windows-only code lands, one pass in `sprk-winvm` covers it:
 - [ ] `capture-check` with a real mic signal: route a host virtual source (for example a PipeWire null-sink monitor) into the VM's SPICE input. Loopback was verified; the VM mic read silence (no input signal available).
 - [ ] Full Start to End flow in the app with the engine build (`--features engine-shared` plus `SHERPA_ONNX_LIB_DIR`), a bundled `models` folder next to the exe holding the transcription pack and the voice activity pack, and synthetic speech played on the VM's output. Confirm the `.md` and `.jsonl` appear under `Documents\SprkNotes\Transcripts`, lines appear live, Pause and Resume write events, End finalizes.
 - [ ] Device change test (M2): switch the VM's default output mid-session and confirm a `Source changed` event.
-- [ ] Bleed test on the Snapdragon laptop with speakers on (M4, ADR-012): play a video through the speakers while silent, then while talking; expect no Me lines from the video and your own speech kept. Check CPU stays within the 13.3 gate.
+- [ ] Bleed test on the Snapdragon laptop with speakers on (M4, ADR-013): play a video through the speakers while silent, then while talking; expect no Me lines from the video and your own speech kept. Check CPU stays within the 13.3 gate.
 
 ## Decisions for John
 - [ ] Parakeet needs a CC-BY-4.0 attribution notice: approve the wording for the About screen and README.
