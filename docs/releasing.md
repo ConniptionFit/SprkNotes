@@ -42,9 +42,9 @@ Do these once. Claude cannot do them for you because they involve your account.
 
 1. **Make a release token.** Forgejo, your avatar, Settings, Applications, new token. Name `sprknotes-release`,
    scope **write:repository** only (nothing else).
-2. **Give it to CI.** Repository, Settings, Actions, Secrets, add `RELEASE_TOKEN` with that value. The workflows below use it to push tags and create releases.
-3. **Give it to the machine that uploads Windows files** (the RX9070): save it as the first line of
-   `~/.config/sprknotes/forgejo-token`, then `chmod 600` that file. The upload script reads it from there. Never put it in the repo.
+2. **Give it to CI** (only needed for the Cut release and Release workflows). Repository, Settings, Actions, Secrets, add `RELEASE_TOKEN` with that value. The workflows below use it to push tags and create releases.
+3. **Uploads from the RX9070** need nothing extra: `publish-release.sh` and `ship-alpha.sh` use your git login (the one `git push` uses) when you run them yourself.
+   To use a token instead, save it as the first line of `~/.config/sprknotes/forgejo-token` (`chmod 600`). Never put it in the repo.
 4. **Optional, only when you start signing updates:** Forgejo refuses `.sig` attachments, and the app looks for
    `update-manifest.json.sig` by that exact name. Add `.sig` to `ALLOWED_TYPES` under `[attachment]` in the server's `app.ini`.
    Unsigned manifests are fine for pilot builds.
@@ -58,7 +58,14 @@ Alpha is cheap on purpose. Do it as often as you want testers to have something 
    It picks the next number (`0.2.0-alpha.3`), bumps the version, commits `chore(release): v0.2.0-alpha.3`, tags, and pushes.
 2. **CI makes the draft.** The **Release** workflow checks the tag, runs the tests on that exact commit, and creates a draft
    release with notes (the CHANGELOG bullets added since the last release, plus the commit list).
-3. **Build Windows** (VM) from the tag, then upload (RX9070):
+3. **Build Windows and publish**, in one command on the RX9070 (from any shell, fish included):
+   ```bash
+   bash scripts/ship-alpha.sh --base 0.2.0 --wait-pr 80     # first alpha of 0.2.0, after PR 80 merges
+   bash scripts/ship-alpha.sh                               # later alphas: next number from main
+   bash scripts/ship-alpha.sh --tag v0.2.0-alpha.1          # resume a build or upload that stopped
+   ```
+   It checks the token file, updates `main`, cuts the tag, copies the sherpa libraries to the VM, builds that exact tag, copies `dist` back,
+   uploads and publishes. Set `LIGHT_PACK_DIR=<pack folder>` to also publish the Ask Sprk model pack. The same steps by hand:
    ```bash
    git fetch --tags
    scripts/winvm.sh release-tag v0.2.0-alpha.3 -SherpaX64 <dir> -SherpaArm64 <dir>   # builds that exact tag
