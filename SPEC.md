@@ -144,7 +144,7 @@ sprknotes/
 
 ### 4.2 Bleed removal (three layers)
 1. **Windows AEC:** open the mic stream as a communications stream; if `IAcousticEchoCancellationControl` is available, set the render endpoint being looped back as the AEC reference.
-2. **Software AEC:** run WebRTC AEC3 (pure Rust port, echo canceller only) on the mic using the loopback stream as the far-end reference (ADR-012). Both streams are kept on the wall clock: a loopback stream that delivers nothing while silent is padded with silence.
+2. **Software AEC:** run WebRTC AEC3 (pure Rust port, echo canceller only) on the mic using the loopback stream as the far-end reference (ADR-013). Both streams are kept on the wall clock: a loopback stream that delivers nothing while silent is padded with silence.
 3. **Transcript dedupe (always on):** in the commit buffer, drop a Me segment when an Others segment overlaps it in time (±2 s) and normalized text similarity is ≥ 0.6 (token-level ratio; threshold configurable). Prefer the Others version.
 - **Headset detection:** if the render endpoint form factor is headphones/headset, layers 1 and 2 may be skipped; layer 3 stays on.
 - **Known limitation:** people speaking in the same room as the user are labeled Me.
