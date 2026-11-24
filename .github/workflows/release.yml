@@ -52,7 +52,9 @@ jobs:
       - name: Build tools (LLVM, Ninja, CMake, WiX v5)
         shell: pwsh
         run: |
-          choco install llvm ninja cmake --no-progress -y
+          # The runner's Visual Studio STL needs Clang 22+; the preinstalled LLVM is older, so upgrade it.
+          choco upgrade llvm ninja cmake --no-progress -y
+          & "$env:ProgramFiles\LLVM\bin\clang-cl.exe" --version
           dotnet tool install --global wix --version 5.*
           "$env:ProgramFiles\LLVM\bin", "$env:USERPROFILE\.dotnet\tools", "$env:ProgramFiles\CMake\bin" |
             Out-File -Append -Encoding utf8 $env:GITHUB_PATH
