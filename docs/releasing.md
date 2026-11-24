@@ -142,5 +142,5 @@ The current installers are well under that; a bundled-model build is not hosted 
   service account first, and update-manifest signing needs the 1Password agent, which is not available to a headless runner.
 - **Linux package in CI.** The Linux tarball is still built by hand; a CI job needs the Tauri system libraries on the runner.
 - **Signed manifests.** Required from 1.0 (hard rule 14 and ADR-011).
-- **GitHub.** `.github/workflows/ci.yml` mirrors only the checks. If the repository moves to GitHub, port `release.yml` and `cut-release.yml`
+- **GitHub.** `.github/workflows/ci.yml` mirrors the Linux checks and `.github/workflows/windows.yml` (GitHub only) runs the tests on native Windows x64 and ARM64 and an unsigned `release.ps1` build. Forgejo stays the source and publishes releases; GitHub is a push mirror (Settings, Push mirrors). If the repository moves to GitHub, port `release.yml` and `cut-release.yml`
   (same steps; use `GITHUB_TOKEN` with `contents: write`).
