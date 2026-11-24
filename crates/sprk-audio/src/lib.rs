@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 pub mod aec;
 #[cfg(feature = "cpal-backend")]
 pub mod cpal_backend;
+pub mod echo;
 pub mod live;
 
 /// Which stream a frame came from.

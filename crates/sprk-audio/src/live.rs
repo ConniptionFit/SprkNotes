@@ -34,7 +34,18 @@ struct Slot {
     enabled: bool,
     open: Option<(String, Box<dyn PcmStream>)>,
     was_unavailable: bool,
+    /// Wall-clock ms when the current stream was opened, and the 16 kHz samples it has
+    /// delivered since (including silence filled in by [`LiveCapture::poll`]).
+    clock: Option<(u64, u64)>,
 }
+
+/// A stream that is this far behind the wall clock is treated as having heard silence.
+/// WASAPI loopback delivers no packets while nothing is playing, so without this the system
+/// timeline would run behind the microphone's (and bleed dedupe would compare lines that are
+/// minutes apart in "stream time").
+pub const STALL_FILL_AFTER_MS: u64 = 400;
+/// How far behind the wall clock a filled stream is left, so late real audio does not push it ahead.
+const STALL_FILL_MARGIN_MS: u64 = 200;
 
 pub struct LiveCapture {
     backend: Box<dyn Backend>,
@@ -54,6 +65,7 @@ impl LiveCapture {
             enabled: true,
             open: None,
             was_unavailable: false,
+            clock: None,
         };
         LiveCapture {
             backend,
@@ -76,6 +88,7 @@ impl LiveCapture {
         s.enabled = on;
         if !on {
             s.open = None; // closing the stream stops capture for that source
+            s.clock = None;
             s.was_unavailable = false;
         }
     }
@@ -88,6 +101,7 @@ impl LiveCapture {
     pub fn restart(&mut self) {
         for s in &mut self.slots {
             s.open = None;
+            s.clock = None;
         }
         self.frames.clear();
         self.last_check_ms = None;
@@ -105,13 +119,27 @@ impl LiveCapture {
         if due {
             self.last_check_ms = Some(now_ms);
             for i in 0..self.slots.len() {
-                self.refresh(i);
+                self.refresh(i, now_ms);
             }
         }
         for s in &mut self.slots {
             if let Some((_, stream)) = s.open.as_mut() {
                 let mut buf = Vec::new();
                 stream.read(&mut buf);
+                if let Some((opened, delivered)) = s.clock.as_mut() {
+                    // Silence the platform did not deliver: fill it in ahead of the real audio.
+                    let expected = now_ms.saturating_sub(*opened) * 16;
+                    let lag = expected.saturating_sub(*delivered + buf.len() as u64);
+                    if lag > STALL_FILL_AFTER_MS * 16 {
+                        let fill = (lag - STALL_FILL_MARGIN_MS * 16) as usize;
+                        *delivered += fill as u64;
+                        self.frames.push_back(Frame {
+                            source: s.source,
+                            samples: vec![0.0; fill],
+                        });
+                    }
+                    *delivered += buf.len() as u64;
+                }
                 if !buf.is_empty() {
                     self.frames.push_back(Frame {
                         source: s.source,
@@ -122,7 +150,7 @@ impl LiveCapture {
         }
     }
 
-    fn refresh(&mut self, i: usize) {
+    fn refresh(&mut self, i: usize, now_ms: u64) {
         let source = self.slots[i].source;
         if !self.slots[i].enabled {
             return;
@@ -133,6 +161,7 @@ impl LiveCapture {
             (None, None) => {}
             (None, Some(_)) => {
                 self.slots[i].open = None;
+                self.slots[i].clock = None;
                 self.slots[i].was_unavailable = true;
                 self.events.push(CaptureEvent::Unavailable(source));
             }
@@ -142,6 +171,7 @@ impl LiveCapture {
                     let slot = &mut self.slots[i];
                     let restored = slot.was_unavailable;
                     slot.open = Some((w, stream));
+                    slot.clock = Some((now_ms, 0));
                     slot.was_unavailable = false;
                     if restored {
                         self.events.push(CaptureEvent::Restored(source));
@@ -223,6 +253,16 @@ mod tests {
         }
     }
 
+    /// Next frame that is not stall-fill silence.
+    fn real(c: &mut LiveCapture) -> Option<Frame> {
+        while let Some(f) = c.next_frame() {
+            if f.samples.iter().any(|x| *x != 0.0) {
+                return Some(f);
+            }
+        }
+        None
+    }
+
     fn setup() -> (LiveCapture, Shared) {
         let w: Shared = Arc::new(Mutex::new(World {
             mic: Some("mic-a".into()),
@@ -259,7 +299,7 @@ mod tests {
         );
         w.lock().unwrap().pending = vec![("headset".into(), vec![0.3])];
         c.poll(1_100);
-        assert_eq!(c.next_frame().unwrap().samples, vec![0.3]);
+        assert_eq!(real(&mut c).unwrap().samples, vec![0.3]);
     }
 
     #[test]
@@ -310,7 +350,7 @@ mod tests {
         assert!(c.take_events().is_empty());
         w.lock().unwrap().pending = vec![("mic-a".into(), vec![0.4])];
         c.poll(1_100);
-        assert_eq!(c.next_frame().unwrap().samples, vec![0.4]);
+        assert_eq!(real(&mut c).unwrap().samples, vec![0.4]);
         w.lock().unwrap().fail_open = false;
         c.poll(2_100);
         assert_eq!(
@@ -326,9 +366,53 @@ mod tests {
         c.set_enabled(Source::System, false);
         w.lock().unwrap().pending = vec![("spk-a".into(), vec![0.9])];
         c.poll(1_000);
-        assert!(c.next_frame().is_none());
+        while let Some(f) = c.next_frame() {
+            assert_eq!(f.source, Source::Mic);
+        }
         c.set_enabled(Source::System, true);
+        w.lock().unwrap().pending = vec![("spk-a".into(), vec![0.9])];
         c.poll(2_000);
-        assert_eq!(c.next_frame().unwrap().source, Source::System);
+        assert_eq!(real(&mut c).unwrap().source, Source::System);
+    }
+
+    #[test]
+    fn a_silent_stream_keeps_pace_with_the_wall_clock() {
+        // Loopback delivers nothing while nothing plays: its timeline must still advance.
+        let (mut c, w) = setup();
+        c.poll(0);
+        let mut sys = 0usize;
+        for t in (100..=10_000).step_by(100) {
+            c.poll(t);
+            while let Some(f) = c.next_frame() {
+                if f.source == Source::System {
+                    sys += f.samples.len();
+                }
+            }
+        }
+        let ms = sys as u64 / 16;
+        assert!((9_500..=10_000).contains(&ms), "system timeline {ms} ms");
+        // Then real audio arrives: it follows the filled silence, not a minute-long skew.
+        w.lock().unwrap().pending = vec![("spk-a".into(), vec![0.5; 1_600])];
+        c.poll(10_100);
+        let f = real(&mut c).unwrap();
+        assert_eq!(f.samples.len(), 1_600);
+    }
+
+    #[test]
+    fn a_steady_stream_is_never_padded() {
+        let (mut c, w) = setup();
+        c.poll(0);
+        let mut total = 0usize;
+        for t in (20..=5_000).step_by(20) {
+            w.lock().unwrap().pending = vec![("mic-a".into(), vec![0.1; 320])];
+            c.poll(t);
+            while let Some(f) = c.next_frame() {
+                if f.source == Source::Mic {
+                    assert!(f.samples.iter().all(|x| *x == 0.1));
+                    total += f.samples.len();
+                }
+            }
+        }
+        assert_eq!(total, 250 * 320);
     }
 }
