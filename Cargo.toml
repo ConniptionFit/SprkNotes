@@ -10,7 +10,7 @@ exclude = ["app/src-tauri", "crates/sprk-assistant-llama"]
 
 [workspace.package]
 # The ONLY version source. scripts/bump-version.sh keeps app/src-tauri in step.
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 edition = "2021"
 license = "MIT"
 
