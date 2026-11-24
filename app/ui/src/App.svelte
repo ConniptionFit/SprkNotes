@@ -228,6 +228,8 @@
   }
 </script>
 
+<svelte:window onkeydown={(e) => { if (e.key === "Escape" && choose) choose = null; }} />
+
 <main>
   <h1 class="sr-only">SprkNotes</h1>
   {#if recovered.length > 0 && view === "main" && status === "ready"}
@@ -295,6 +297,11 @@
   {/if}
   <div class="dock">
     <Footer
+      onhome={() => {
+        view = "main";
+        choose = null;
+      }}
+      homeOpen={view === "main"}
       onlibrary={() => (view = view === "library" ? "main" : "library")}
       libraryOpen={view === "library"}
       onsettings={() => (view = view === "settings" ? "main" : "settings")}
@@ -325,6 +332,7 @@
     />
   {/if}
   {#if choose}
+    <button class="scrim" aria-label="Close menu" tabindex="-1" onclick={() => (choose = null)}></button>
     <div class="choose" role="dialog" aria-label="Choose an app">
       <p>Summarize with</p>
       {#each choose.targets as t (t.id)}
@@ -340,6 +348,7 @@
 
 <style>
   main { position: relative; }
+  .scrim { position: fixed; inset: 0; z-index: 9; border: 0; background: transparent; padding: 0; cursor: default; }
   .choose {
     position: absolute; left: clamp(1.5rem, 4vw, 4rem); bottom: 4.5rem; z-index: 10; display: grid; gap: 0.35rem; min-width: 14rem;
     padding: 0.75rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow);
