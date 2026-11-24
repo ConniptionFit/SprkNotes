@@ -1,5 +1,8 @@
 export type Status = "ready" | "transcribing" | "paused";
 
+/** What the app is busy doing: loading the model at Start, closing the transcript at End. */
+export type Phase = { phase: "idle" | "loading" | "ending"; model?: string | null };
+
 /** One line of the live pane, matching the transcript grammar (SPEC 5.1). */
 export type Line =
   | { kind: "statement"; id: number; t: string; speaker: string; text: string }
