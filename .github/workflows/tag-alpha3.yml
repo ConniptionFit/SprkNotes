@@ -1,0 +1,20 @@
+name: Tag alpha.3 (one-off)
+# The v0.2.0-alpha.3 tag was cut on the old Forgejo server and cannot be pushed from outside GitHub.
+# Run once so the next alpha is numbered alpha.4, then delete this file.
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: |
+          set -euo pipefail
+          sha=$(git log --format=%H --grep='^chore(release): v0.2.0-alpha.3$' -n1)
+          [ -n "$sha" ] || { echo "version commit not found"; exit 1; }
+          git -c user.email=noreply@pwrs.dev -c user.name="SprkNotes release" tag -a v0.2.0-alpha.3 -m "SprkNotes 0.2.0-alpha.3" "$sha"
+          git push origin v0.2.0-alpha.3
