@@ -1,4 +1,4 @@
-# ADR-012: WebRTC AEC3 on the microphone, and a loopback clock that keeps time
+# ADR-013: WebRTC AEC3 on the microphone, and a loopback clock that keeps time
 
 Status: **accepted** (alpha). Supersedes the software canceller part of ADR-004.
 
