@@ -1,5 +1,12 @@
 name: CI
-on: [push, pull_request]
+on:
+  pull_request:
+  push:
+    branches: [main]
+# A new push to a branch or PR cancels its still-running older run, so stale runs never queue up.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 # GitHub copy of .forgejo/workflows/ci.yml. Keep the two job lists in step (scripts/check-ci-parity.sh).
 # Forgejo prefers .forgejo/workflows when both exist, so the same repository can run on either host.
 jobs:
