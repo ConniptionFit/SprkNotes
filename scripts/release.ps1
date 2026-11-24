@@ -21,8 +21,8 @@
   ssh-keygen and your ssh-agent (1Password), so no private key is read here. Without it the
   manifest is written unsigned, which only pilot builds accept.
 .PARAMETER UploadSuffix
-  Appended to the MSI file name in the update manifest. Forgejo only accepts some file types as
-  release attachments, so MSIs are uploaded as `<name>.msi.zip` (default). Use '' for GitHub.
+  Appended to the MSI file name in the update manifest. Default '' (GitHub takes any file name).
+  A Forgejo release only accepts some file types, so use '.zip' there: MSIs are uploaded as `<name>.msi.zip`.
 .PARAMETER TimestampUrl
   Optional RFC 3161 timestamp server used by signtool on the build host.
 #>
@@ -36,7 +36,7 @@ param(
   [string]$Publisher = 'CN=SprkNotes Dev',
   [string]$TimestampUrl,
   [string]$UpdateSigningKey,
-  [string]$UploadSuffix = '.zip',
+  [string]$UploadSuffix = '',
   [switch]$SkipMsix,
   [switch]$SkipMsi
 )

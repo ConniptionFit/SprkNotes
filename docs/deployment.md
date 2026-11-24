@@ -96,7 +96,7 @@ SprkNotes updates from the releases of a repository (Forgejo by default, GitHub 
 |---|---|---|
 | `UpdateMode` | string | `off` (no update traffic), `notify` (default for one user), `auto` (install quietly when the app is not in use), `force` (like auto; users cannot change it) |
 | `UpdateChannel` | string | `stable`, `beta` or `alpha`. Locks the Settings control |
-| `UpdateRepoUrl` | string | https address of the repository (for example `https://git.pwrs.dev/powers/sprknotes`). Locks the control |
+| `UpdateRepoUrl` | string | https address of the repository (for example `https://github.com/ConniptionFit/SprkNotes`). Locks the control |
 | `UpdateProvider` | string | `forgejo` or `github`; only needed when the address does not make it obvious (GitHub Enterprise) |
 | `UpdatePublicKeys` | string or multi-string | OpenSSH `ssh-ed25519 ...` keys allowed to sign update manifests. When set, unsigned updates are refused |
 | `UpdateCheckHours` | dword | Hours between checks (default 24) |
@@ -106,7 +106,7 @@ A value set by policy wins and its control shows as managed. Order: policy, the 
 ### Install switches (MSI)
 ```powershell
 msiexec /i SprkNotes_<ver>_x64.msi ALLUSERS=1 /qn /norestart `
-  UPDATE_CHANNEL=beta UPDATE_REPO_URL="https://git.pwrs.dev/powers/sprknotes" UPDATE_MODE=auto LOCK_UPDATES=1
+  UPDATE_CHANNEL=beta UPDATE_REPO_URL="https://github.com/ConniptionFit/SprkNotes" UPDATE_MODE=auto LOCK_UPDATES=1
 ```
 | Switch | Effect |
 |---|---|
@@ -117,7 +117,7 @@ msiexec /i SprkNotes_<ver>_x64.msi ALLUSERS=1 /qn /norestart `
 `Install-SprkNotes.ps1` and `install.ps1` take the same options as parameters.
 
 ### Per-machine installs update themselves
-A per-machine MSI registers the scheduled task `SprkNotes\Update` (runs as SYSTEM every 6 hours, no window). It runs `SprkNotes.exe --update`: check on the `UpdateCheckHours` interval, download, verify the SHA-256 and signature, and install only when nobody has SprkNotes open. If it is open, the verified installer waits for the next run. Per-machine installs start in `auto` mode; set `UpdateMode=off` or `UPDATE_TASK=0` to manage versions yourself. Check it: `schtasks /Query /TN "SprkNotes\Update" /V`. Install logs: `%LocalAppData%\SprkNotes\updates\install.log` (the SYSTEM profile for the task). Firewalls need the release host (`git.pwrs.dev`, or `github.com` and `api.github.com`).
+A per-machine MSI registers the scheduled task `SprkNotes\Update` (runs as SYSTEM every 6 hours, no window). It runs `SprkNotes.exe --update`: check on the `UpdateCheckHours` interval, download, verify the SHA-256 and signature, and install only when nobody has SprkNotes open. If it is open, the verified installer waits for the next run. Per-machine installs start in `auto` mode; set `UpdateMode=off` or `UPDATE_TASK=0` to manage versions yourself. Check it: `schtasks /Query /TN "SprkNotes\Update" /V`. Install logs: `%LocalAppData%\SprkNotes\updates\install.log` (the SYSTEM profile for the task). Firewalls need `github.com`, `api.github.com` and `objects.githubusercontent.com` (or the host of your own release repository).
 
 ### Upgrades keep your settings
 An upgrade (including the updater's own plain `msiexec /i new.msi /qn`) reads the existing `UPDATE_*` values and `LOCK_UPDATES` back, so policy written by the installer survives. Passing new `UPDATE_*` values on an upgrade changes them. A locked install stays locked: the MSI cannot lift `LOCK_UPDATES` on upgrade. To unlock, uninstall and install again without `LOCK_UPDATES=1`, or remove the values under `HKLM\Software\Policies\SprkNotes` yourself.

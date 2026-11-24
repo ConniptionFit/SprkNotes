@@ -1,0 +1,98 @@
+name: Release
+# Runs when a release tag is pushed (scripts/cut-release.sh, or the "Cut release" workflow, pushes it).
+# It checks the tag, re-runs the tests on exactly that commit, builds every Windows artifact natively
+# (scripts/release.ps1, unsigned for now), and publishes the GitHub release with the update manifest.
+# Nothing is visible to the app's update check until the release is published at the end.
+on:
+  push:
+    tags: ['v[0-9]*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to (re)build and publish, for example v0.2.0-alpha.3'
+        required: true
+permissions:
+  contents: write
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+          fetch-depth: 0
+      - name: Rust toolchain
+        run: curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+      - name: Tag matches the code
+        run: scripts/release-version.sh verify-tag "$TAG"
+      - name: Tag is on main or a release branch
+        run: |
+          git fetch -q origin '+refs/heads/*:refs/remotes/origin/*'
+          git branch -r --contains "$(git rev-parse HEAD)" | grep -E 'origin/(main|release/)' >/dev/null \
+            || { echo "tag $TAG is not on main or a release/* branch"; exit 1; }
+      - name: Promotion is the tested build plus a version bump
+        run: scripts/release-version.sh guard "$TAG"
+      - run: . "$HOME/.cargo/env" && cargo test --workspace --locked
+      - run: scripts/check-terms.sh
+
+  windows:
+    needs: verify
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Rust targets
+        run: rustup target add x86_64-pc-windows-msvc aarch64-pc-windows-msvc
+      - name: Build tools (LLVM, Ninja, CMake, WiX v5)
+        shell: pwsh
+        run: |
+          choco install llvm ninja cmake --no-progress -y
+          dotnet tool install --global wix --version 5.*
+          "$env:ProgramFiles\LLVM\bin", "$env:USERPROFILE\.dotnet\tools", "$env:ProgramFiles\CMake\bin" |
+            Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+      - name: sherpa-onnx libraries
+        shell: pwsh
+        run: |
+          $ver = (Select-String -Path scripts/fetch-sherpa.sh -Pattern '^VER=([0-9.]+)').Matches[0].Groups[1].Value
+          foreach ($a in 'x64', 'arm64') {
+            $n = "sherpa-onnx-v$ver-win-$a-shared-MT-Release-lib"
+            Invoke-WebRequest "https://github.com/k2-fsa/sherpa-onnx/releases/download/v$ver/$n.tar.bz2" -OutFile "$n.tar.bz2"
+            tar -xjf "$n.tar.bz2"
+            "SHERPA_$($a.ToUpper())=$((Resolve-Path "$n/lib").Path)" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          }
+      - name: Build everything
+        shell: pwsh
+        run: ./scripts/release.ps1 -SherpaX64 $env:SHERPA_X64 -SherpaArm64 $env:SHERPA_ARM64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: |
+            dist/*
+            !dist/stage/**
+          if-no-files-found: error
+
+  publish:
+    needs: windows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          scripts/release-notes.sh "$TAG" > notes.md
+          scripts/publish-release.sh draft "$TAG" --notes notes.md
+          scripts/publish-release.sh all "$TAG" dist --publish

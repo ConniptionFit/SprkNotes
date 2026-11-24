@@ -7,7 +7,7 @@
 # See docs/forking.md.
 
 # https address of the repository that publishes releases (https://host/owner/repo).
-repo_url = "https://git.pwrs.dev/powers/sprknotes"
+repo_url = "https://github.com/ConniptionFit/SprkNotes"
 
 # "forgejo" or "github". Leave empty to infer from the address (github.com means GitHub).
 # Set it for GitHub Enterprise Server or a self-hosted Forgejo/Gitea on an unusual host.

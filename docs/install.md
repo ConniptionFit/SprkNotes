@@ -14,11 +14,11 @@ For fleets see [deployment.md](deployment.md).
 
 ## Quick install (one line, per user)
 ```powershell
-irm https://git.pwrs.dev/powers/sprknotes/raw/branch/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/ConniptionFit/SprkNotes/main/install.ps1 | iex
 ```
 Needs no admin rights. It finds the newest release on your channel, checks the download's SHA-256, and installs the matching MSI for this user with a Start menu entry. Options (wrap the script so it can take parameters):
 ```powershell
-& ([scriptblock]::Create((irm https://git.pwrs.dev/powers/sprknotes/raw/branch/main/install.ps1))) -Channel beta
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/ConniptionFit/SprkNotes/main/install.ps1))) -Channel beta
 ```
 `-Channel stable|beta|alpha`, `-RepoUrl <https address>`, `-Mode off|notify|auto|force`, `-Machine` (all users, elevated), `-Lock`, `-PublicKey`, `-NoUpdateTask`, `-Uninstall`. The same values can come from the environment variables `SPRK_CHANNEL`, `SPRK_REPO_URL` and `SPRK_MODE`. The script is short and readable: open it before you run it if you like.
 

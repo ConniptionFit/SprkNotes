@@ -3,10 +3,10 @@
   One-line SprkNotes installer. Installs for the current user (no admin), adds a Start menu entry.
 .DESCRIPTION
   Quick install:
-    irm https://git.pwrs.dev/powers/sprknotes/raw/branch/main/install.ps1 | iex
+    irm https://raw.githubusercontent.com/ConniptionFit/SprkNotes/main/install.ps1 | iex
 
   With options (a piped script cannot take parameters, so wrap it):
-    & ([scriptblock]::Create((irm https://git.pwrs.dev/powers/sprknotes/raw/branch/main/install.ps1))) -Channel beta
+    & ([scriptblock]::Create((irm https://raw.githubusercontent.com/ConniptionFit/SprkNotes/main/install.ps1))) -Channel beta
 
   The script finds the newest release on the channel, downloads the MSI for this PC (x64 or ARM64),
   checks its SHA-256 against the release's update-manifest.json, and runs msiexec. Existing
@@ -16,7 +16,7 @@
 .PARAMETER Channel
   stable (default), beta or alpha. Beta includes stable releases, alpha includes both.
 .PARAMETER RepoUrl
-  Where releases come from. Default: the SprkNotes repository on git.pwrs.dev (keep this default in step with distribution.toml). GitHub addresses work too.
+  Where releases come from. Default: the SprkNotes repository on GitHub (keep this default in step with distribution.toml). GitHub addresses work too.
 .PARAMETER Mode
   off, notify (default for one user), auto or force: how updates are applied after install.
 .PARAMETER Machine
@@ -35,7 +35,7 @@
 [CmdletBinding()]
 param(
   [ValidateSet('stable', 'beta', 'alpha')][string]$Channel = $(if ($env:SPRK_CHANNEL) { $env:SPRK_CHANNEL } else { 'stable' }),
-  [string]$RepoUrl = $(if ($env:SPRK_REPO_URL) { $env:SPRK_REPO_URL } else { 'https://git.pwrs.dev/powers/sprknotes' }),
+  [string]$RepoUrl = $(if ($env:SPRK_REPO_URL) { $env:SPRK_REPO_URL } else { 'https://github.com/ConniptionFit/SprkNotes' }),
   [ValidateSet('', 'off', 'notify', 'auto', 'force')][string]$Mode = $(if ($env:SPRK_MODE) { $env:SPRK_MODE } else { '' }),
   [switch]$Machine,
   [switch]$Lock,
