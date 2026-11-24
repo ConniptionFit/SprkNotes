@@ -147,6 +147,15 @@ foreach ($a in $arches) {
       throw 'arm64 assistant helper needs Ninja so that CMake uses clang-cl instead of cl.exe: winget install Ninja-build.Ninja (then run again).'
     }
     $env:CMAKE_GENERATOR = 'Ninja'
+    # A build dir configured earlier with another generator (e.g. Visual Studio) is reused and breaks
+    # ("Skipping configuration step", then MSBuild cannot find install.vcxproj). Drop any that is not Ninja.
+    Get-ChildItem "crates/sprk-assistant-llama/target/$($a.Triple)/release/build" -Directory -Filter 'llama-cpp-sys-2-*' -ErrorAction SilentlyContinue | ForEach-Object {
+      $cache = Join-Path $_.FullName 'out/build/CMakeCache.txt'
+      if ((Test-Path $cache) -and -not (Select-String -Path $cache -Pattern '^CMAKE_GENERATOR:INTERNAL=Ninja$' -Quiet)) {
+        Write-Host "removing stale CMake build ($($_.Name)): configured with another generator"
+        Remove-Item $_.FullName -Recurse -Force
+      }
+    }
   }
   cargo build --release --manifest-path crates/sprk-assistant-llama/Cargo.toml --bin sprk-assistant --target $a.Triple
   Remove-Item "env:CC_$tk", "env:CXX_$tk", "env:CXXFLAGS_$tk", env:CMAKE_GENERATOR -ErrorAction SilentlyContinue
