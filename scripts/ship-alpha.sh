@@ -35,10 +35,11 @@ fi
 echo "== 2. Update the checkout"
 git fetch -q --tags origin
 # Only the Cargo.lock files may be dirty; anything else stops here so no work is lost.
-other=$(git status --porcelain | grep -vE '^( M|M | MM|MM) (app/src-tauri/)?Cargo\.lock$' || true)
+other=$(git status --porcelain | grep -vE '^( M|M | MM|MM) (app/src-tauri/|crates/[^/]+/)?Cargo\.lock$' || true)
 [ -z "$other" ] || { echo "Uncommitted changes besides Cargo.lock, not touching them:" >&2; echo "$other" >&2; exit 1; }
-if ! git diff --quiet -- Cargo.lock app/src-tauri/Cargo.lock; then
-  git stash push -m "cargo.lock before alpha $(date +%F)" -- Cargo.lock app/src-tauri/Cargo.lock
+locks=(Cargo.lock app/src-tauri/Cargo.lock crates/sprk-assistant-llama/Cargo.lock)
+if ! git diff --quiet -- "${locks[@]}"; then
+  git stash push -m "cargo.lock before alpha $(date +%F)" -- "${locks[@]}"
   echo "(Cargo.lock changes saved: see git stash list)"
 fi
 git switch -q main
