@@ -84,6 +84,11 @@ $vsRoots = @($env:ProgramFiles, ${env:ProgramFiles(x86)}) | Where-Object { $_ } 
 $vsCmake = foreach ($r in $vsRoots) { Get-ChildItem "$r\*\*\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin" -Directory -ErrorAction SilentlyContinue }
 Find-Tool 'cmake' (@("$env:ProgramFiles\CMake\bin", "${env:ProgramFiles(x86)}\CMake\bin", "$env:LOCALAPPDATA\Programs\CMake\bin") + @($vsCmake | ForEach-Object { $_.FullName }))
 Find-Tool 'cargo' @("$env:USERPROFILE\.cargo\bin")
+# arm64 helper: clang-cl (LLVM) and Ninja. winget puts Ninja under a Links or Packages folder.
+$wg = "$env:LOCALAPPDATA\Microsoft\WinGet"
+$ninjaDirs = @("$wg\Links", "$env:ProgramFiles\Ninja") + @(Get-ChildItem "$wg\Packages\Ninja-build.Ninja*" -Directory -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
+Find-Tool 'ninja' $ninjaDirs
+Find-Tool 'clang-cl' @("$env:ProgramFiles\LLVM\bin")
 Find-Tool 'npm' @("$env:ProgramFiles\nodejs")
 if (-not $SkipMsi) { Find-Tool 'wix' @("$env:USERPROFILE\.dotnet\tools") }
 
@@ -126,17 +131,22 @@ foreach ($a in $arches) {
   # The assistant helper (ADR-009): a separate low-priority program with no network code. It builds
   # on its own because it compiles llama.cpp. Always shipped; the assistant stays off until turned on.
   # llama.cpp refuses MSVC (cl) on ARM64 ("MSVC on ARM requires GGML_NATIVE=ON, use clang"), so the
-  # arm64 helper is compiled with clang-cl from LLVM (winget install LLVM.LLVM; needs clang-cl and
-  # ninja or the VS Build Tools cmake on PATH). x64 keeps the default MSVC toolchain.
+  # arm64 helper is compiled with clang-cl from LLVM (winget install LLVM.LLVM) through Ninja
+  # (winget install Ninja-build.Ninja). x64 keeps the default MSVC toolchain.
   $tk = $a.Triple.Replace('-', '_')
   if ($a.Name -eq 'arm64') {
     $llvm = Join-Path $env:ProgramFiles 'LLVM\bin'
     if (Test-Path $llvm) { $env:PATH = "$llvm;$env:PATH"; $env:LIBCLANG_PATH = $llvm }
-    if (-not (Get-Command clang-cl -ErrorAction SilentlyContinue)) { throw 'arm64 assistant helper needs clang-cl (install LLVM)' }
+    if (-not (Get-Command clang-cl -ErrorAction SilentlyContinue)) { throw 'arm64 assistant helper needs clang-cl: winget install LLVM.LLVM' }
     Set-Item "env:CC_$tk" 'clang-cl'; Set-Item "env:CXX_$tk" 'clang-cl'
     # clang-cl does not enable C++ exceptions by default; llama.cpp uses try/catch.
     Set-Item "env:CXXFLAGS_$tk" '/EHsc'
-    if (Get-Command ninja -ErrorAction SilentlyContinue) { $env:CMAKE_GENERATOR = 'Ninja' }
+    # The Visual Studio generator ignores CC/CXX and picks cl.exe, which llama.cpp refuses on ARM64.
+    # Ninja uses the clang-cl set above, so it is required here (winget install Ninja-build.Ninja).
+    if (-not (Get-Command ninja -ErrorAction SilentlyContinue)) {
+      throw 'arm64 assistant helper needs Ninja so that CMake uses clang-cl instead of cl.exe: winget install Ninja-build.Ninja (then run again).'
+    }
+    $env:CMAKE_GENERATOR = 'Ninja'
   }
   cargo build --release --manifest-path crates/sprk-assistant-llama/Cargo.toml --bin sprk-assistant --target $a.Triple
   Remove-Item "env:CC_$tk", "env:CXX_$tk", "env:CXXFLAGS_$tk", env:CMAKE_GENERATOR -ErrorAction SilentlyContinue
