@@ -376,6 +376,11 @@ pub fn install_pending(quiet_ui: bool, wait: bool) -> bool {
         .args([ui, "/norestart", "/l*v"])
         .arg(log)
         .creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    // Without this a SYSTEM run treats the package as per-user, skips the per-machine product when
+    // looking for the version to replace, and installs a second copy next to it.
+    if machine_install() {
+        cmd.arg("ALLUSERS=1");
+    }
     if wait {
         cmd.status()
             .is_ok_and(|s| s.success() || s.code() == Some(3010))
