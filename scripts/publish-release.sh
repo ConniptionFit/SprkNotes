@@ -8,7 +8,8 @@
 #   publish-release.sh yank    <tag>                    published -> draft: new installs and update checks stop seeing it
 #   publish-release.sh status  <tag>                    state and asset list
 #
-# Token: FORGEJO_TOKEN, or the first line of ~/.config/sprknotes/forgejo-token. Create it in Forgejo
+# Login: FORGEJO_TOKEN, or the first line of ~/.config/sprknotes/forgejo-token, or else your own git
+# credential for the host (what `git push` uses). A token is best for CI. Create one in Forgejo
 # (Settings, Applications) with only the "write:repository" scope. Repository: distribution.toml,
 # or SPRK_REPO_URL. Forgejo takes only some file types as attachments (.zip, .json, .txt, .gz, .md and a few
 # more), at most 5 per request and 2 GB each, and Cloudflare in front rejects bodies over about
@@ -21,12 +22,20 @@ repo_url="${SPRK_REPO_URL:-$(sed -n 's/^repo_url *= *"\(.*\)"/\1/p' distribution
 host="${repo_url%/*/*}"; slug="${repo_url#"$host"/}"
 api="$host/api/v1/repos/$slug"
 token="${FORGEJO_TOKEN:-}"
-[ -n "$token" ] || { f="$HOME/.config/sprknotes/forgejo-token"; [ -r "$f" ] && token=$(head -1 "$f"); }
-[ -n "$token" ] || { echo "no token: set FORGEJO_TOKEN or put it in ~/.config/sprknotes/forgejo-token" >&2; exit 1; }
+[ -n "$token" ] || { f="$HOME/.config/sprknotes/forgejo-token"; [ -r "$f" ] && token=$(head -1 "$f") || true; }
+# No token: use your own git login (the same one `git push` uses) when you run this yourself.
+auth=()
+if [ -n "$token" ]; then auth=(-H "Authorization: token $token")
+else
+  cred=$(printf 'protocol=%s\nhost=%s\n\n' "${host%%://*}" "${host#*://}" | git credential fill 2>/dev/null) || cred=""
+  gu=$(sed -n 's/^username=//p' <<<"$cred"); gp=$(sed -n 's/^password=//p' <<<"$cred")
+  [ -n "$gu" ] && [ -n "$gp" ] || { echo "no login: set FORGEJO_TOKEN, or put a token in ~/.config/sprknotes/forgejo-token, or log in with git for $host" >&2; exit 1; }
+  auth=(-u "$gu:$gp")
+fi
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
-curl_api() { curl -sS -H "Authorization: token $token" "$@"; }       # body to stdout
+curl_api() { curl -sS "${auth[@]}" "$@"; }       # body to stdout
 pyj() { local c="$1"; shift; python3 -I -c "import json,sys; d=json.load(sys.stdin); $c" "$@"; }
-code() { curl -sS -o "$tmp/out" -w '%{http_code}' -H "Authorization: token $token" "$@"; }
+code() { curl -sS -o "$tmp/out" -w '%{http_code}' "${auth[@]}" "$@"; }
 
 release_id() { # by tag, drafts included (the tag endpoint does not list drafts)
   curl_api "$api/releases?limit=50&draft=true" | pyj "

@@ -8,7 +8,7 @@
 #   bash scripts/ship-alpha.sh --tag v0.2.0-alpha.1  resume: build and upload an existing tag
 #   LIGHT_PACK_DIR=/path/to/pack-folder bash scripts/ship-alpha.sh ...   also publish the Ask Sprk model pack
 #
-# Needs: the release token in ~/.config/sprknotes/forgejo-token (see docs/releasing.md), ssh access
+# Needs: a Forgejo login for uploads (your git login works; a token file is optional), ssh access
 # to sprk-winvm (SPRK_WINVM), and your git credentials for pushing the tag. Stops on the first error.
 set -euo pipefail
 # Works from a copy anywhere (for example ~/ship-alpha.sh): it finds the checkout itself.
@@ -24,14 +24,13 @@ while [ $# -gt 0 ]; do
   case "$1" in --base) base="$2"; shift 2 ;; --tag) tag="$2"; shift 2 ;; --wait-pr) waitpr="$2"; shift 2 ;; *) echo "unknown option $1" >&2; exit 2 ;; esac
 done
 
-echo "== 1. Token"
-[ -r "$HOME/.config/sprknotes/forgejo-token" ] || { cat >&2 <<'MSG'
-Missing ~/.config/sprknotes/forgejo-token. One time:
-  Forgejo > avatar > Settings > Applications > new token, name sprknotes-release, scope write:repository only.
-  mkdir -p ~/.config/sprknotes && printf '%s\n' 'PASTE_TOKEN_HERE' > ~/.config/sprknotes/forgejo-token && chmod 600 ~/.config/sprknotes/forgejo-token
-Then run this again.
-MSG
-exit 1; }
+echo "== 1. Login"
+# Uploads use FORGEJO_TOKEN, ~/.config/sprknotes/forgejo-token, or your git login (what git push uses).
+if [ -z "${FORGEJO_TOKEN:-}" ] && [ ! -r "$HOME/.config/sprknotes/forgejo-token" ]; then
+  printf 'protocol=https\nhost=git.pwrs.dev\n\n' | git credential fill >/dev/null 2>&1 \
+    || { echo "No Forgejo login found. Log in once with git (git push asks), or put a token in ~/.config/sprknotes/forgejo-token." >&2; exit 1; }
+  echo "using your git login"
+fi
 
 echo "== 2. Update the checkout"
 git fetch -q --tags origin
