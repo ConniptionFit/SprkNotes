@@ -226,6 +226,15 @@ fn copilot_scheme(target: &Option<String>) -> String {
     }
 }
 
+/// The Copilot link to open: the admin's, or the first default link that has a handler (the
+/// Microsoft 365 Copilot app registers more than one across versions).
+fn copilot_target(policy: &sprk_config::AppPolicy) -> Option<String> {
+    policy
+        .copilot_target
+        .clone()
+        .or_else(|| Some(detect::default_copilot_link(&SystemProbe)))
+}
+
 /// Installed, not-hidden clients. A custom https Copilot target has nothing to detect, so an
 /// admin who set one gets Copilot offered (unless they hid it).
 fn found(policy: &sprk_config::AppPolicy) -> Vec<TargetInfo> {
@@ -305,12 +314,12 @@ pub fn summarize(
             if !options.iter().any(|o| o.id == id) {
                 return Err("That app is not available on this computer.".into());
             }
-            detect::plan_for(id, policy.copilot_target.as_deref(), &req, &prompt)
+            detect::plan_for(id, copilot_target(&policy).as_deref(), &req, &prompt)
                 .ok_or("Unknown app.")?
         }
         None => match detect::decide(&options) {
             Decision::Run(one) => {
-                detect::plan_for(one.id, policy.copilot_target.as_deref(), &req, &prompt)
+                detect::plan_for(one.id, copilot_target(&policy).as_deref(), &req, &prompt)
                     .ok_or("Unknown app.")?
             }
             Decision::Ask(many) => {
