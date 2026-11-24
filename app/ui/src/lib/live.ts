@@ -102,3 +102,50 @@ export function commonPrefix(a: string, b: string): number {
   while (i < a.length && i < b.length && a[i] === b[i]) i++;
   return i;
 }
+
+/** A shorter hypothesis must persist this long before shown words are taken back. */
+export const SHRINK_HOLD_MS = 600;
+
+/**
+ * What the live row shows, given what it showed a moment ago. Calmer than the raw gate:
+ * - a visible word is swapped in place only once its new wording has stood for `gateMs`;
+ * - a word that flips never hides the words after it (no shrink then regrow);
+ * - the row shrinks only if a shorter hypothesis persists for SHRINK_HOLD_MS;
+ * - new words are appended once they pass the gate, contiguously.
+ */
+export function hold(
+  prevShown: string[],
+  next: GateWord[],
+  stable: number,
+  now: number,
+  gateMs: number,
+  shorterSince: number | null,
+): { shown: string[]; shorterSince: number | null } {
+  const ready = (i: number) => i < stable || now - next[i].since >= gateMs;
+  const n = prevShown.length;
+  const shown: string[] = [];
+  for (let i = 0; i < Math.min(n, next.length); i++) shown.push(ready(i) ? next[i].word : prevShown[i]);
+  if (next.length < n) {
+    const since = shorterSince ?? now;
+    if (now - since < SHRINK_HOLD_MS) for (let i = next.length; i < n; i++) shown.push(prevShown[i]);
+    return { shown, shorterSince: since };
+  }
+  let i = n;
+  while (i < next.length && ready(i)) shown.push(next[i++].word);
+  return { shown, shorterSince: null };
+}
+
+/**
+ * Words that locked and left the live row (they are rows now): how many leading shown words
+ * to drop so the rest lines up with the new hypothesis. 0 when nothing moved.
+ */
+export function droppedLead(prevShown: string[], next: string[]): number {
+  if (prevShown.length === 0 || next.length === 0 || prevShown[0] === next[0]) return 0;
+  const m = Math.min(2, next.length);
+  for (let k = 1; k + m <= prevShown.length; k++) {
+    let ok = true;
+    for (let j = 0; j < m; j++) if (prevShown[k + j] !== next[j]) ok = false;
+    if (ok) return k;
+  }
+  return 0;
+}
