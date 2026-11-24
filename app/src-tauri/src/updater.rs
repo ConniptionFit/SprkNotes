@@ -307,7 +307,20 @@ fn prune_pending() {
     if !newer {
         let _ = std::fs::remove_file(dir.join("pending.msi"));
         let _ = std::fs::remove_file(dir.join("pending.version"));
+        let _ = std::fs::remove_file(dir.join("pending.install"));
     }
+}
+
+/// The user pressed "Update when I close the app": install the verified installer at exit even
+/// in `notify` mode (auto and force modes install without being asked).
+pub fn request_install() {
+    if let Some(dir) = pending_dir() {
+        let _ = std::fs::write(dir.join("pending.install"), b"1");
+    }
+}
+
+fn install_requested() -> bool {
+    pending_dir().is_some_and(|d| d.join("pending.install").is_file())
 }
 
 /// Is the next check due? Spacing comes from policy `UpdateCheckHours` (default 24).
@@ -376,8 +389,8 @@ pub fn install_pending(quiet_ui: bool, wait: bool) -> bool {
         .args([ui, "/norestart", "/l*v"])
         .arg(log)
         .creation_flags(0x0800_0000); // CREATE_NO_WINDOW
-    // Without this a SYSTEM run treats the package as per-user, skips the per-machine product when
-    // looking for the version to replace, and installs a second copy next to it.
+                                      // Without this a SYSTEM run treats the package as per-user, skips the per-machine product when
+                                      // looking for the version to replace, and installs a second copy next to it.
     if machine_install() {
         cmd.arg("ALLUSERS=1");
     }
@@ -399,7 +412,8 @@ pub fn install_pending(_quiet_ui: bool, _wait: bool) -> bool {
 pub fn on_exit(p: &AppPolicy) {
     let e = effective(p);
     prune_pending();
-    if matches!(e.mode.as_str(), "auto" | "force") && !machine_install() {
+    let wanted = matches!(e.mode.as_str(), "auto" | "force") || install_requested();
+    if wanted && e.mode != "off" && !machine_install() {
         install_pending(true, false);
     }
 }

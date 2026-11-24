@@ -301,9 +301,13 @@ fn update_set(
 #[tauri::command]
 async fn update_install() -> Result<Option<String>, String> {
     let p = policy();
-    tauri::async_runtime::spawn_blocking(move || updater::fetch_update(&p))
+    let v = tauri::async_runtime::spawn_blocking(move || updater::fetch_update(&p))
         .await
-        .map_err(|_| "The update was interrupted.".to_string())?
+        .map_err(|_| "The update was interrupted.".to_string())??;
+    if v.is_some() {
+        updater::request_install();
+    }
+    Ok(v)
 }
 
 #[tauri::command]
