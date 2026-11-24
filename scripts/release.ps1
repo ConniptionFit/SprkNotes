@@ -68,6 +68,25 @@ $msix4 = if ($ver4 -match '^\d+\.\d+\.\d+$') { "$ver4.0" } else { $ver4 }
 $channel = if ($ver -like '*-alpha.*') { 'alpha' } elseif ($ver -like '*-beta.*') { 'beta' } else { 'stable' }
 Write-Host "SprkNotes release $ver"
 
+# --- Preflight: tools the build needs but an ssh session may not have on PATH ---
+# The Windows OpenSSH service keeps the PATH it started with, so a tool installed later (winget) is
+# invisible over ssh until the service restarts. Look in the usual places and add what we find.
+function Find-Tool($name, $dirs) {
+  if (Get-Command $name -ErrorAction SilentlyContinue) { return }
+  foreach ($d in $dirs) {
+    foreach ($hit in (Get-Item (Join-Path $d "$name.exe") -ErrorAction SilentlyContinue)) {
+      $env:PATH = "$($hit.DirectoryName);$env:PATH"; Write-Host "using $name from $($hit.DirectoryName)"; return
+    }
+  }
+  throw "$name was not found. Install it on the VM (for CMake: winget install Kitware.CMake), then run this again. It need not be on PATH: this script also looks in Program Files and in Visual Studio's own copy."
+}
+$vsRoots = @($env:ProgramFiles, ${env:ProgramFiles(x86)}) | Where-Object { $_ } | ForEach-Object { Join-Path $_ 'Microsoft Visual Studio' }
+$vsCmake = foreach ($r in $vsRoots) { Get-ChildItem "$r\*\*\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin" -Directory -ErrorAction SilentlyContinue }
+Find-Tool 'cmake' (@("$env:ProgramFiles\CMake\bin", "${env:ProgramFiles(x86)}\CMake\bin", "$env:LOCALAPPDATA\Programs\CMake\bin") + @($vsCmake | ForEach-Object { $_.FullName }))
+Find-Tool 'cargo' @("$env:USERPROFILE\.cargo\bin")
+Find-Tool 'npm' @("$env:ProgramFiles\nodejs")
+if (-not $SkipMsi) { Find-Tool 'wix' @("$env:USERPROFILE\.dotnet\tools") }
+
 $arches = @(
   @{ Name = 'x64';   Triple = 'x86_64-pc-windows-msvc';  Sherpa = $SherpaX64 },
   @{ Name = 'arm64'; Triple = 'aarch64-pc-windows-msvc'; Sherpa = $SherpaArm64 }

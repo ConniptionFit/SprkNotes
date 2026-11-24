@@ -23,7 +23,9 @@ case "$cmd" in
   check) ssh_run "powershell -NoProfile -Command \"'reachable'; [Environment]::OSVersion.VersionString\"" ;;
   test) sync; ssh_run "powershell -NoProfile -Command \"cd '$DIR'; cargo test --workspace\"" ;;
   run-app) sync; ssh_run "powershell -NoProfile -Command \"cd '$DIR/app'; npm.cmd --prefix ui ci; .\\ui\\node_modules\\.bin\\tauri.cmd dev\"" ;;
-  release) sync; ssh_run "powershell -NoProfile -Command \"cd '$DIR'; pwsh scripts/release.ps1 $*\"" ;;
+  # The ssh service keeps the PATH it started with, so tools installed later (CMake, LLVM, wix) are
+  # invisible over ssh until it restarts. Re-read PATH from the registry first.
+  release) sync; ssh_run "powershell -NoProfile -Command \"\$env:PATH = ([Environment]::GetEnvironmentVariable('PATH','Machine') + ';' + [Environment]::GetEnvironmentVariable('PATH','User') + ';' + \$env:PATH); cd '$DIR'; pwsh scripts/release.ps1 $*\"" ;;
   # Build the exact tagged commit: scripts/winvm.sh release-tag v0.2.0-alpha.1 -SherpaX64 ... (the tag's code, nothing else)
   release-tag) tag="${1:?tag}"; shift; git rev-parse -q --verify "refs/tags/$tag" >/dev/null || { echo "no tag $tag (git fetch --tags)"; exit 1; }
         git switch -q -C release-build "$tag"; exec "$0" release "$@" ;;
