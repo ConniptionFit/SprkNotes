@@ -132,6 +132,7 @@ Then open SprkNotes, press Start, speak, and confirm lines appear. Press End and
 | Models, per user | `%AppData%\SprkNotes\models` |
 | Models, all users | `%ProgramData%\SprkNotes\models` |
 | Models bundled with the app | `models\` next to `SprkNotes.exe` |
+| Update download and log, per user | `%AppData%\SprkNotes\updates\` (`pending.part` while downloading, `pending.msi` once verified, `install.log` from msiexec) |
 | Install log (helper script) | `%ProgramData%\SprkNotes\install.log` |
 
 SprkNotes stores no audio and sends nothing about you or your transcripts anywhere. Its only network use is fetching transcription model packs (see Models).
