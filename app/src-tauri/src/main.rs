@@ -13,7 +13,7 @@ mod updater;
 
 use serde::Serialize;
 use sprk_audio::cpal_backend::CpalBackend;
-use sprk_audio::live::PreferredInput;
+use sprk_audio::live::{DeviceChoice, Preferred, SharedChoice};
 use sprk_audio::live::Backend;
 use sprk_audio::Source;
 use sprk_pipeline::commit::Config;
@@ -25,8 +25,8 @@ use tauri::{AppHandle, Emitter, Manager, State};
 #[derive(Default)]
 struct AppState {
     host: Mutex<Option<Host>>,
-    /// The microphone the user picked in Settings (None: the system default).
-    mic: sprk_audio::live::MicChoice,
+    /// The microphone and output the user picked in Settings (None: the system default).
+    devices: SharedChoice,
 }
 
 /// Payload shapes the UI expects (app/ui/src/lib/types.ts).
@@ -320,7 +320,7 @@ fn start_session(app: AppHandle, state: State<AppState>, name: String) -> Result
         return Err("A session is already running.".into());
     }
     app.state::<assistant::Assistant>().clear();
-    let mic = state.mic.clone();
+    let devices = state.devices.clone();
     // The model is chosen now and never swapped mid-session.
     let policy = policy();
     let loaded = models::load_active(env!("CARGO_PKG_VERSION"))?;
@@ -335,7 +335,7 @@ fn start_session(app: AppHandle, state: State<AppState>, name: String) -> Result
         loaded.engine,
         loaded.make_vad,
         Box::new(move || {
-            Box::new(PreferredInput::new(CpalBackend::default(), mic)) as Box<dyn Backend>
+            Box::new(Preferred::new(CpalBackend::default(), devices)) as Box<dyn Backend>
         }),
         Box::new(clock::LocalClock),
         Arc::new(TauriEvents(app)),
@@ -382,18 +382,31 @@ fn set_source(state: State<AppState>, source: String, on: bool) -> Result<(), St
     with_host(&state, |h| h.set_source(s, on))
 }
 
-/// Input devices the microphone can be switched to (Settings).
-#[tauri::command]
-fn list_inputs() -> Vec<String> {
-    use sprk_audio::live::Backend as _;
-    CpalBackend::default().input_devices()
+fn source_of(source: &str) -> Result<Source, String> {
+    match source {
+        "mic" => Ok(Source::Mic),
+        "system" => Ok(Source::System),
+        _ => Err("unknown source".into()),
+    }
 }
 
-/// Pick the microphone, or None for the system default. Takes effect within a second, also
-/// mid-session (a "Source changed" line is written then).
+/// Devices a source can be switched to (Settings): microphones, or speakers that are looped back.
 #[tauri::command]
-fn set_input(state: State<AppState>, name: Option<String>) -> Result<(), String> {
-    *state.mic.lock().map_err(|_| "busy".to_string())? = name.filter(|n| !n.is_empty());
+fn list_devices(source: String) -> Result<Vec<String>, String> {
+    use sprk_audio::live::Backend as _;
+    Ok(CpalBackend::default().devices(source_of(&source)?))
+}
+
+/// Pick the device for a source, or None for the system default. Takes effect within a second,
+/// also mid-session (a "Source changed" line is written then).
+#[tauri::command]
+fn set_device(state: State<AppState>, source: String, name: Option<String>) -> Result<(), String> {
+    let name = name.filter(|n| !n.is_empty());
+    let mut d = state.devices.lock().map_err(|_| "busy".to_string())?;
+    match source_of(&source)? {
+        Source::Mic => d.mic = name,
+        Source::System => d.system = name,
+    }
     Ok(())
 }
 
@@ -510,8 +523,8 @@ fn main() -> anyhow::Result<()> {
             end_session,
             rename_session,
             set_source,
-            list_inputs,
-            set_input,
+            list_devices,
+            set_device,
             mini_resize,
             mini_flipped,
             set_captions,

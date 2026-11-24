@@ -137,9 +137,10 @@ sprknotes/
 ## 4. Audio and transcription pipeline
 
 ### 4.1 Capture
-- **Mic:** WASAPI shared-mode capture on the user-selected input (default: system default communications device).
-- **System:** WASAPI loopback on the default render device. Follow default-device changes (headset plugged in, Bluetooth connects) without stopping the session.
+- **Mic:** WASAPI shared-mode capture on the user-selected input (default: system default communications device, else the console default).
+- **System:** WASAPI loopback on the user-selected output (default: the default *communications* render device, where call audio plays, else the console default). Follow default-device changes (headset plugged in, Bluetooth connects) without stopping the session.
 - Either source can be toggled off. Labels: mic = **Me**, loopback = **Others**, or the remote person's name on a confirmed 1:1 call (section 19).
+- The two streams are never mixed: each has its own VAD and utterance queue, and the label comes from the stream. The devices in use are written to the transcript as event lines ("Microphone: ...", "Others audio: ...") at the start and whenever they change (ADR-014).
 - Convert to 16 kHz mono f32 in the pipeline. Audio stays in in-memory ring buffers only.
 
 ### 4.2 Bleed removal (three layers)
@@ -369,7 +370,7 @@ Scheduled Teams and Zoom meetings live on the user's Outlook calendar, so one lo
 - Transcript view: rendered Markdown, **View in folder** (`explorer /select,`), **Export** (md, txt, docx, json), **Rename**, **Summarize with Claude**, **Summarize with Copilot**, **Delete** (to Recycle Bin, with confirm).
 
 ### 8.5 Settings (keep short)
-- Audio: mic device (a list of the input devices; "System default" follows the headset, an unplugged pick falls back to the default), Others on/off, filler removal, commit delay (advanced).
+- Audio: mic device and output device (lists of devices; "System default" follows the headset, an unplugged pick falls back to the default), Others on/off, filler removal, commit delay (advanced).
 - Outlook: provider, context prompt behavior (Ask / Always / Never).
 - Context: detect audio sources (on/off, merge window), Teams call context (on/off, poll interval), name 1:1 speakers (on/off), excluded apps/title patterns.
 - Files: transcripts root, default export format.

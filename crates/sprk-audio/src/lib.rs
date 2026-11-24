@@ -5,6 +5,8 @@ pub mod aec;
 #[cfg(feature = "cpal-backend")]
 pub mod cpal_backend;
 pub mod echo;
+#[cfg(windows)]
+pub mod endpoints;
 pub mod live;
 
 /// Which stream a frame came from.

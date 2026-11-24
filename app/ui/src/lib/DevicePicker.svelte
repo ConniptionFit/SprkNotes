@@ -2,32 +2,42 @@
   import { onMount } from "svelte";
   import { backend, type Backend } from "./api";
   import { prefs, setPref } from "./prefs.svelte";
+  import type { Source } from "./types";
+
+  let { source }: { source: Source } = $props();
 
   let api = $state.raw<Backend | undefined>();
-  let inputs = $state<string[]>([]);
+  let found = $state<string[]>([]);
+
+  const key = $derived(source === "mic" ? "micDevice" : "systemDevice");
+  const picked = $derived(prefs[key]);
+  const title = $derived(source === "mic" ? "Microphone" : "Speakers and headset (Others)");
+  const help = $derived(
+    source === "mic"
+      ? "Which microphone is transcribed as Me. The system default uses your Windows communications device, so a headset used for calls is picked up. A microphone that is unplugged falls back to the default until it returns."
+      : "Which output is transcribed as Others. The system default uses your Windows communications device, where call audio plays. Pick one here if the transcript shows the wrong device.",
+  );
 
   onMount(() => {
     backend.then(async (b) => {
       api = b;
       try {
-        inputs = await b.listInputs();
+        found = await b.listDevices(source);
       } catch {
-        inputs = [];
+        found = [];
       }
     });
   });
 
   // A pick that is not plugged in now stays in the list so the choice is not lost silently.
-  const options = $derived(
-    prefs.micDevice && !inputs.includes(prefs.micDevice) ? [...inputs, prefs.micDevice] : inputs,
-  );
+  const options = $derived(picked && !found.includes(picked) ? [...found, picked] : found);
 
   async function pick(e: Event) {
     const v = (e.currentTarget as HTMLSelectElement).value;
     const name = v === "" ? null : v;
-    setPref("micDevice", name);
+    setPref(key, name);
     try {
-      await api?.setInput(name);
+      await api?.setDevice(source, name);
     } catch {
       /* the next session start applies the saved pick */
     }
@@ -37,13 +47,10 @@
 <div class="panel">
   <div class="row">
     <div class="what">
-      <h3>Microphone</h3>
-      <p class="help">
-        Which microphone is transcribed as Me. The system default follows your headset or laptop.
-        A microphone that is unplugged falls back to the default until it returns.
-      </p>
+      <h3>{title}</h3>
+      <p class="help">{help}</p>
     </div>
-    <select aria-label="Microphone" value={prefs.micDevice ?? ""} onchange={pick}>
+    <select aria-label={title} value={picked ?? ""} onchange={pick}>
       <option value="">System default</option>
       {#each options as name (name)}
         <option value={name}>{name}</option>

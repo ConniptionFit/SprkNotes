@@ -598,4 +598,30 @@ mod tests {
             assert!(db > need, "phrase {i}: reduced by only {db:.1} dB");
         }
     }
+
+    #[test]
+    fn headset_speech_is_kept_while_the_other_side_talks() {
+        // With a headset there is no acoustic path from the speakers to the mic at all.
+        let n = 16_000 * 30;
+        let refr = speechlike(n, 7);
+        for scale in [1.0f32, 0.4, 0.15] {
+            let me: Vec<f32> = speechlike(n, 4243).iter().map(|v| v * scale).collect();
+            let out = run(&me, &refr);
+            let t = 16_000 * 10..n;
+            let kept = rms(&out[t.clone()]) / rms(&me[t.clone()]);
+            let blocks: Vec<(f32, f32)> = me[t.clone()]
+                .chunks(1_600)
+                .zip(out[t.clone()].chunks(1_600))
+                .map(|(a, b)| (rms(a), rms(b)))
+                .filter(|(a, _)| *a > 0.02 * scale)
+                .collect();
+            let lost = blocks.iter().filter(|(a, b)| *b < 0.3 * *a).count() as f32
+                / blocks.len().max(1) as f32;
+            eprintln!("headset, user at {scale}: kept {kept:.2}, blocks lost {lost:.2}");
+            assert!(
+                kept > 0.9,
+                "kept only {kept:.2} of the user's speech at {scale}"
+            );
+        }
+    }
 }
