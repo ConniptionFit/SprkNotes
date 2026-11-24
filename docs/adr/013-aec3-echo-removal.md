@@ -1,4 +1,4 @@
-# ADR-012: WebRTC AEC3 on the microphone, and a loopback clock that keeps time
+# ADR-013: WebRTC AEC3 on the microphone, and a loopback clock that keeps time
 
 Status: **accepted** (alpha). Supersedes the software canceller part of ADR-004.
 
@@ -46,3 +46,20 @@ A work laptop on speakers transcribed a YouTube video as "Me". Two causes were f
 - Real-room performance is unproven until the bleed test (SPEC 13.2) runs on laptops.
 - A tab or app that plays through a different output than the one looped back is not heard by the reference and is
   still caught only by dedupe.
+
+## Update after alpha.2 (same day)
+Alpha.2 still sent a video played through the speakers to Me. Measuring AEC3 on synthetic audio showed why: it
+removes echo only when the echo arrives between about 50 and 450 ms after the reference (0.7 dB reduction outside
+that range, 43 to 67 dB inside). Our two streams are paired by sample count, and their real offset depends on
+device buffering and on silence the loopback never delivered, so in real use the echo fell outside what AEC3 can lock to.
+
+Added to `EchoPath`:
+- The mic is held back 250 ms so the reference leads it, and a delay tracker (envelope cross-correlation, every 0.5 s,
+  -0.8 to +1.2 s) re-centers the offset on 250 ms when it leaves 80 to 450 ms (delay the mic or the reference).
+  Measured reduction is 65 dB for offsets from -400 to +1000 ms (it was 0.7 dB outside the AEC3 range).
+- A backstop gate on the canceller's output: if what is left still follows the loudness pattern of the speakers
+  (correlation of 0.75 or more over 2.5 s at a 80 to 450 ms delay) it is muted, with a 300 ms hangover. A talker with their own
+  rhythm does not trigger it (85% of speech kept when talking over playback in the test).
+- The 250 ms hold makes Me lines stamp up to about 0.25 s early. Dedupe already allows 2 s.
+Costs a few envelope correlations per second (about 100k multiply-adds each), no allocation on the audio thread
+(the session thread, not the capture callback).

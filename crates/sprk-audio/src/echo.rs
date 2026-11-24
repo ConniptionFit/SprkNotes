@@ -11,11 +11,97 @@ const FRAME: usize = 160;
 /// Mic audio waits at most this long for its reference before it is processed without one.
 const MAX_WAIT: usize = 16_000 * 3 / 10;
 
+/// 10 ms frames: the envelope rate used for delay tracking and the bleed gate.
+const FRAME_MS: i32 = 10;
+/// Echo delay AEC3 is kept at. It only works for roughly 50 to 450 ms (measured), and the loopback
+/// and microphone streams reach us with unknown offsets, so the mic is held back this long
+/// and the delay is re-centered on this value when it drifts out of range.
+const TARGET_DELAY_MS: i32 = 250;
+const DELAY_OK_MS: std::ops::RangeInclusive<i32> = 80..=450;
+/// Envelope history kept, in frames (6 s).
+const HISTORY: usize = 520;
+/// Delay search window in frames (-0.8 s to +1.2 s) and correlation window (4 s).
+const SEARCH_FRAMES: std::ops::RangeInclusive<i32> = -80..=120;
+const DELAY_WINDOW: usize = 300;
+const DELAY_EVERY: u32 = 50;
+/// Bleed gate: look at the last second, every 100 ms, over delays of 0 to 0.8 s.
+const GATE_WINDOW: usize = 250;
+const GATE_EVERY: u32 = 10;
+const GATE_LAGS: std::ops::RangeInclusive<i32> = 8..=45;
+const GATE_CORR: f32 = 0.75;
+const GATE_HANGOVER: u32 = 30;
+/// Envelope level (sample magnitude) below which a stream counts as silent.
+const ACTIVE: f32 = 0.002;
+
+/// Mean absolute level of a frame.
+fn level(x: &[f32]) -> f32 {
+    x.iter().map(|v| v.abs()).sum::<f32>() / x.len().max(1) as f32
+}
+
+/// Best normalized correlation between `x[t]` and `y[t - lag]` over the last `window` frames,
+/// for lags in `lags`. None when the history is too short or either side is flat.
+fn best_corr(
+    x: &VecDeque<f32>,
+    y: &VecDeque<f32>,
+    window: usize,
+    lags: std::ops::RangeInclusive<i32>,
+) -> Option<(i32, f32)> {
+    let max_back = (*lags.start()).min(0).unsigned_abs() as usize;
+    let max_lag = (*lags.end()).max(0) as usize;
+    let n = x.len().min(y.len());
+    if n < window + max_lag + max_back {
+        return None;
+    }
+    let xs: Vec<f32> = x.iter().rev().take(window).copied().collect(); // newest first
+    let mean = |v: &[f32]| v.iter().sum::<f32>() / v.len() as f32;
+    let mx = mean(&xs);
+    let vx: f32 = xs.iter().map(|a| (a - mx) * (a - mx)).sum();
+    if vx < 1e-9 {
+        return None;
+    }
+    let ys: Vec<f32> = y.iter().rev().copied().collect(); // newest first
+    let mut best: Option<(i32, f32)> = None;
+    for lag in lags {
+        let off = lag as isize;
+        let seg: Vec<f32> = (0..window as isize)
+            .map(|t| ys.get((t + off).max(0) as usize).copied().unwrap_or(0.0))
+            .collect();
+        let my = mean(&seg);
+        let vy: f32 = seg.iter().map(|a| (a - my) * (a - my)).sum();
+        if vy < 1e-9 {
+            continue;
+        }
+        let cov: f32 = xs.iter().zip(&seg).map(|(a, b)| (a - mx) * (b - my)).sum();
+        let c = cov / (vx * vy).sqrt();
+        if best.is_none_or(|(_, b)| c > b) {
+            best = Some((lag, c));
+        }
+    }
+    best
+}
+
+fn push_env(q: &mut VecDeque<f32>, v: f32) {
+    q.push_back(v);
+    while q.len() > HISTORY {
+        q.pop_front();
+    }
+}
+
 pub struct EchoPath {
     apm: AudioProcessing,
-    mic: VecDeque<f32>,
+    /// Mic samples; the flag marks silence we inserted to hold the mic back (never emitted).
+    mic: VecDeque<(f32, bool)>,
     reference: VecDeque<f32>,
     out: Vec<f32>,
+    // Envelopes (one value per frame) of what AEC3 was given and what it returned.
+    env_mic: VecDeque<f32>,
+    env_ref: VecDeque<f32>,
+    env_clean: VecDeque<f32>,
+    frames: u32,
+    off_range: u32,
+    gate_hold: u32,
+    /// Samples the mic is held back by (the silence inserted into it).
+    hold: usize,
 }
 
 impl Default for EchoPath {
@@ -35,11 +121,24 @@ impl EchoPath {
             .capture_config(StreamConfig::new(16_000, 1))
             .render_config(StreamConfig::new(16_000, 1))
             .build();
+        let mut mic = VecDeque::new();
+        // Hold the mic back so the reference always leads it.
+        mic.extend(std::iter::repeat_n(
+            (0.0, true),
+            (TARGET_DELAY_MS * 16) as usize,
+        ));
         Self {
             apm,
-            mic: VecDeque::new(),
+            mic,
             reference: VecDeque::new(),
             out: Vec::new(),
+            env_mic: VecDeque::new(),
+            env_ref: VecDeque::new(),
+            env_clean: VecDeque::new(),
+            frames: 0,
+            off_range: 0,
+            gate_hold: 0,
+            hold: (TARGET_DELAY_MS * 16) as usize,
         }
     }
 
@@ -51,7 +150,7 @@ impl EchoPath {
 
     /// 16 kHz mono microphone samples.
     pub fn push_mic(&mut self, samples: &[f32]) {
-        self.mic.extend(samples);
+        self.mic.extend(samples.iter().map(|s| (*s, false)));
         self.pump();
     }
 
@@ -63,7 +162,8 @@ impl EchoPath {
     /// Everything still waiting, unprocessed (pause or end). A partial last frame is kept as is.
     pub fn flush(&mut self) -> Vec<f32> {
         self.pump_with(true);
-        self.out.extend(self.mic.drain(..));
+        self.out
+            .extend(self.mic.drain(..).filter(|(_, inj)| !inj).map(|(v, _)| v));
         self.reference.clear();
         self.take()
     }
@@ -73,10 +173,10 @@ impl EchoPath {
     }
 
     fn pump_with(&mut self, force: bool) {
-        let silence = [0.0f32; FRAME];
         while self.mic.len() >= FRAME {
             let have_ref = self.reference.len() >= FRAME;
-            if !have_ref && !force && self.mic.len() < MAX_WAIT {
+            // The mic is deliberately held back by `hold`; only waiting beyond that counts.
+            if !have_ref && !force && self.mic.len() < self.hold + MAX_WAIT {
                 break;
             }
             let mut r = [0.0f32; FRAME];
@@ -84,12 +184,12 @@ impl EchoPath {
                 for (d, s) in r.iter_mut().zip(self.reference.drain(..FRAME)) {
                     *d = s;
                 }
-            } else {
-                r = silence;
             }
             let mut m = [0.0f32; FRAME];
-            for (d, s) in m.iter_mut().zip(self.mic.drain(..FRAME)) {
+            let mut injected = [false; FRAME];
+            for ((d, inj), (s, i)) in m.iter_mut().zip(&mut injected).zip(self.mic.drain(..FRAME)) {
                 *d = s;
+                *inj = i;
             }
             let mut render_out = [0.0f32; FRAME];
             let mut clean = [0.0f32; FRAME];
@@ -103,8 +203,87 @@ impl EchoPath {
             {
                 clean = m; // never lose the user's speech to a processing error
             }
-            self.out.extend_from_slice(&clean);
+            push_env(&mut self.env_mic, level(&m));
+            push_env(&mut self.env_ref, level(&r));
+            push_env(&mut self.env_clean, level(&clean));
+            self.frames = self.frames.wrapping_add(1);
+            if self.frames.is_multiple_of(GATE_EVERY) {
+                self.update_gate();
+            }
+            if self.frames.is_multiple_of(DELAY_EVERY) {
+                self.track_delay();
+            }
+            let gated = self.gate_hold > 0;
+            self.gate_hold = self.gate_hold.saturating_sub(1);
+            for (v, inj) in clean.iter().zip(injected) {
+                if !inj {
+                    self.out.push(if gated { 0.0 } else { *v });
+                }
+            }
         }
+    }
+
+    fn ref_active(&self, frames: usize) -> bool {
+        let n = self.env_ref.len().min(frames);
+        n > 0 && self.env_ref.iter().rev().take(n).sum::<f32>() / n as f32 > ACTIVE
+    }
+
+    /// Bleed gate: speech that still correlates with what the speakers played, after the
+    /// canceller, is the speakers and not the user. Near speech has its own rhythm and does not.
+    fn update_gate(&mut self) {
+        if !self.ref_active(GATE_WINDOW) {
+            return;
+        }
+        let clean_active = self.env_clean.iter().rev().take(GATE_WINDOW).sum::<f32>()
+            / GATE_WINDOW.min(self.env_clean.len()).max(1) as f32
+            > ACTIVE;
+        if !clean_active {
+            return;
+        }
+        if let Some((_, c)) = best_corr(&self.env_clean, &self.env_ref, GATE_WINDOW, GATE_LAGS) {
+            if c >= GATE_CORR {
+                self.gate_hold = GATE_HANGOVER;
+            }
+        }
+    }
+
+    /// Keep the echo delay AEC3 sees inside the range it can lock to. The measured offset is
+    /// between the (held back) mic and the reference; when it leaves the range for two checks
+    /// in a row, delay the mic or the reference to put it back on the target.
+    fn track_delay(&mut self) {
+        if !self.ref_active(DELAY_WINDOW) {
+            self.off_range = 0;
+            return;
+        }
+        let Some((lag, c)) = best_corr(&self.env_mic, &self.env_ref, DELAY_WINDOW, SEARCH_FRAMES)
+        else {
+            return;
+        };
+        if c < 0.35 {
+            return;
+        }
+        let measured = lag * FRAME_MS;
+        if DELAY_OK_MS.contains(&measured) {
+            self.off_range = 0;
+            return;
+        }
+        self.off_range += 1;
+        if self.off_range < 2 {
+            return;
+        }
+        self.off_range = 0;
+        let delta = (TARGET_DELAY_MS - measured) * 16;
+        let zeros = std::iter::repeat_n(0.0f32, delta.unsigned_abs() as usize);
+        if delta > 0 {
+            self.mic.extend(zeros.map(|z| (z, true))); // more delay: hold the mic back further
+            self.hold += delta as usize;
+        } else {
+            self.reference.extend(zeros);
+        }
+        // Old envelopes describe the old alignment.
+        self.env_mic.clear();
+        self.env_ref.clear();
+        self.env_clean.clear();
     }
 }
 
@@ -122,7 +301,16 @@ mod tests {
                 let white = (x >> 8) as f32 / 8_388_608.0 - 1.0;
                 lp = 0.6 * lp + 0.4 * white;
                 let t = i as f32 / 16_000.0;
-                let env = (0.5 + 0.5 * (2.0 * std::f32::consts::PI * 4.0 * t).sin()).powi(2);
+                // Each talker has their own syllable rate, phrasing and pauses.
+                let rate = 3.0 + (seed % 7) as f32 * 0.37;
+                let phrase = 0.5
+                    + 0.5
+                        * (2.0 * std::f32::consts::PI * (0.23 + (seed % 5) as f32 * 0.07) * t
+                            + seed as f32)
+                            .sin();
+                let env = (0.5 + 0.5 * (2.0 * std::f32::consts::PI * rate * t + seed as f32).sin())
+                    .powi(2)
+                    * phrase.powi(2);
                 lp * env * 0.6
             })
             .collect()
@@ -181,7 +369,7 @@ mod tests {
         let n = 16_000 * 12;
         let refr = speechlike(n, 7);
         let echo = through_the_room(&refr, 1_600, 0.3);
-        let me = speechlike(n, 4242);
+        let me = speechlike(n, 4243);
         // The user speaks only in the last third.
         let start = n * 2 / 3;
         let mic: Vec<f32> = (0..n)
@@ -200,7 +388,82 @@ mod tests {
         e.push_mic(&mic);
         // No reference ever arrives: audio is released once the wait limit passes.
         let first = e.take().len();
-        assert!(first >= 16_000 - MAX_WAIT - FRAME, "only {first} released");
+        assert!(
+            first >= 16_000 - (TARGET_DELAY_MS * 16) as usize - MAX_WAIT - FRAME,
+            "only {first} released"
+        );
         assert_eq!(first + e.flush().len(), 16_000);
+    }
+
+    /// Mic that hears the reference `ms` later (negative: the mic runs ahead of the reference),
+    /// through a distorting speaker.
+    fn echo_with_offset(refr: &[f32], ms: i32, gain: f32, drive: f32) -> Vec<f32> {
+        let n = refr.len() as i32;
+        let d = ms * 16;
+        (0..n)
+            .map(|i| {
+                let g = |k: i32| {
+                    let j = i - k;
+                    if j >= 0 && j < n {
+                        refr[j as usize]
+                    } else {
+                        0.0
+                    }
+                };
+                let lin = gain * (g(d) + 0.4 * g(d + 23) + 0.2 * g(d + 61));
+                (lin * drive).tanh() / drive
+            })
+            .collect()
+    }
+
+    #[test]
+    fn echo_is_removed_whatever_the_stream_offset() {
+        // AEC3 alone only works for echo delays of roughly 50 to 450 ms (measured); the mic
+        // and loopback streams arrive with arbitrary offsets, so the path re-centers them.
+        let n = 16_000 * 30;
+        let refr = speechlike(n, 7);
+        for ms in [-400, 20, 700, 1_000] {
+            let mic = echo_with_offset(&refr, ms, 0.5, 2.0);
+            let out = run(&mic, &refr);
+            let t = n - 16_000 * 6..n;
+            let db = 20.0 * (rms(&mic[t.clone()]) / rms(&out[t]).max(1e-9)).log10();
+            eprintln!("offset {ms:>5} ms: reduction {db:5.1} dB");
+            assert!(db > 20.0, "offset {ms} ms: reduced by only {db:.1} dB");
+        }
+    }
+
+    #[test]
+    fn loud_distorted_playback_is_still_removed() {
+        // A small laptop speaker driven hard: heavy clipping that a linear canceller cannot model.
+        let n = 16_000 * 30;
+        let refr = speechlike(n, 7);
+        let mic = echo_with_offset(&refr, 120, 1.5, 8.0);
+        let out = run(&mic, &refr);
+        let t = n - 16_000 * 6..n;
+        let db = 20.0 * (rms(&mic[t.clone()]) / rms(&out[t]).max(1e-9)).log10();
+        eprintln!("hard clipping: reduction {db:.1} dB");
+        assert!(db > 20.0, "reduced by only {db:.1} dB");
+    }
+
+    #[test]
+    fn speech_that_follows_the_playback_rhythm_but_cannot_be_cancelled_is_gated() {
+        // Residual a linear canceller cannot model (different waveform, same loudness pattern).
+        let n = 16_000 * 30;
+        let refr = speechlike(n, 7);
+        let mut x = 12_345u32;
+        let mic: Vec<f32> = (0..n)
+            .map(|i| {
+                let a = i.saturating_sub(80);
+                let b = (i + 80).min(n);
+                let env = level(&refr[a..b]);
+                x = x.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                env * ((x >> 8) as f32 / 8_388_608.0 - 1.0)
+            })
+            .collect();
+        let out = run(&mic, &refr);
+        let t = n - 16_000 * 10..n;
+        let db = 20.0 * (rms(&mic[t.clone()]) / rms(&out[t]).max(1e-9)).log10();
+        eprintln!("rhythm-only residue: reduction {db:.1} dB");
+        assert!(db > 15.0, "reduced by only {db:.1} dB");
     }
 }

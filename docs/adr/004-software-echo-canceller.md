@@ -1,6 +1,6 @@
 # ADR-004: Software echo canceller fallback
 
-Status: **superseded by ADR-012** (the NLMS canceller was never wired into the live path; AEC3 replaces it). Revisit before 1.0 if the bleed test (SPEC 13.2) fails on the Snapdragon laptop.
+Status: **superseded by ADR-013** (the NLMS canceller was never wired into the live path; AEC3 replaces it). Revisit before 1.0 if the bleed test (SPEC 13.2) fails on the Snapdragon laptop.
 
 ## Context
 SPEC 4.2 layer 2 names WebRTC Audio Processing (AEC3) as the fallback when the render endpoint has no
