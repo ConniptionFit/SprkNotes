@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Rows, commonPrefix, gate, sentences, typed } from "./live";
+import { Rows, commonPrefix, droppedLead, gate, hold, sentences, typed, type GateWord } from "./live";
 
 const cap = (o: Partial<Parameters<Rows["caption"]>[0]>) => ({ speaker: "Others", text: "", stable: 0, final: false, ...o });
 
@@ -78,5 +78,30 @@ describe("typing", () => {
   });
   it("finds where a correction starts", () => {
     expect(commonPrefix("they might add", "they might ask")).toBe(12);
+  });
+});
+
+describe("calm live row", () => {
+  const gw = (words: string[], since = 0): GateWord[] => words.map((word) => ({ word, since }));
+  it("a flipping word keeps its old wording until the new one settles, and the tail stays", () => {
+    const next = [...gw(["we", "went", "to"]), { word: "town", since: 1000 }, ...gw(["today"], 0)];
+    const r = hold(["we", "went", "to", "tone", "today"], next, 0, 1100, 400, null);
+    expect(r.shown).toEqual(["we", "went", "to", "tone", "today"]);
+    expect(hold(r.shown, next, 0, 1500, 400, null).shown[3]).toBe("town");
+  });
+  it("shrinks only after a shorter hypothesis persists", () => {
+    const next = gw(["we", "went"]);
+    const a = hold(["we", "went", "to", "town"], next, 0, 1000, 400, null);
+    expect(a.shown).toHaveLength(4);
+    expect(hold(a.shown, next, 0, 1700, 400, a.shorterSince).shown).toHaveLength(2);
+  });
+  it("new words append only once past the gate", () => {
+    const next = [...gw(["a", "b"]), { word: "c", since: 900 }];
+    expect(hold(["a", "b"], next, 0, 1000, 400, null).shown).toEqual(["a", "b"]);
+    expect(hold(["a", "b"], next, 0, 1400, 400, null).shown).toEqual(["a", "b", "c"]);
+  });
+  it("finds words that locked out of the live row", () => {
+    expect(droppedLead(["so", "see", "what", "sox", "wants"], ["sox", "wants", "to"])).toBe(3);
+    expect(droppedLead(["so", "see"], ["so", "see", "what"])).toBe(0);
   });
 });

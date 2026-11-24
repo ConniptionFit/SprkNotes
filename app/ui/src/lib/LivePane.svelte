@@ -3,7 +3,7 @@
   import type { Caption, Line, Status } from "./types";
   import { prefs, setPref, LINE_TEXT, DELAY_MS } from "./prefs.svelte";
   import { isNearBottom, initialFollow, onScroll, onLines, returnToLive, UP_KEYS, USER_INPUT_WINDOW_MS } from "./follow";
-  import { gate, typed, commonPrefix, type GateWord, type Row } from "./live";
+  import { gate, hold, droppedLead, typed, type GateWord, type Row } from "./live";
 
   let {
     lines,
@@ -23,12 +23,19 @@
   const bump = (d: number) => setPref("lineText", Math.min(LINE_TEXT.length - 1, Math.max(0, prefs.lineText + d)));
 
   // What is visible of the live row right now: gated words, typed a few characters at a time.
-  let shownWords = $state<{ w: string; soft: boolean }[]>([]);
+  // Corrections swap a word in place (with a short fade); they never delete and retype the tail.
+  type Shown = { w: string; soft: boolean; hide: string };
+  let shownWords = $state<Shown[]>([]);
   let gateState: GateWord[] = [];
+  let held: string[] = [];
+  let shorterSince: number | null = null;
   let typedChars = 0;
-  let lastText = "";
   let lastFrame = 0;
   let lastKey = "";
+  let lastUtt: number | undefined;
+  let lastLive = 0;
+  // Keep the live row in place briefly when it empties, so the transcript does not drop and rise a line.
+  let recent = $state(false);
   const reduce = typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   function frame(now: number) {
@@ -36,20 +43,54 @@
     lastFrame = now;
     const c = liveOn ? partial : null;
     const words = c ? c.text.split(/\s+/).filter(Boolean) : [];
-    const g = gate(gateState, words, c?.stable ?? 0, now, DELAY_MS[prefs.captionDelay]);
-    gateState = g.next;
-    const text = words.slice(0, g.visible).join(" ");
-    // A correction deletes only what changed; the rest stays typed.
-    typedChars = Math.min(typedChars, commonPrefix(lastText, text));
-    lastText = text;
-    typedChars = reduce ? text.length : typed(typedChars, text.length, dt);
-    const part = text.slice(0, Math.floor(typedChars));
+    if (c && c.utt !== lastUtt) {
+      // A new utterance starts a fresh row.
+      lastUtt = c.utt;
+      held = [];
+      gateState = [];
+      typedChars = 0;
+    }
+    if (!c) {
+      held = [];
+      gateState = [];
+      typedChars = 0;
+      shorterSince = null;
+    }
+    // Sentences that locked left the live row: drop them from what is shown, keep the rest typed.
+    const k = droppedLead(held, words);
+    if (k > 0) {
+      typedChars = Math.max(0, typedChars - held.slice(0, k).join(" ").length - 1);
+      held = held.slice(k);
+      gateState = gateState.slice(k);
+    }
     const stable = c?.stable ?? 0;
-    const key = part + "|" + stable;
+    const g = gate(gateState, words, stable, now, DELAY_MS[prefs.captionDelay]);
+    gateState = g.next;
+    const h = hold(held, g.next, stable, now, DELAY_MS[prefs.captionDelay], shorterSince);
+    shorterSince = h.shorterSince;
+    const text = h.shown.join(" ");
+    held = h.shown;
+    typedChars = Math.min(typedChars, text.length);
+    typedChars = reduce ? text.length : typed(typedChars, text.length, dt);
+    const upto = Math.floor(typedChars);
+    // Layout reserves the whole word being typed, so a word never jumps to the next line mid-way.
+    const out: Shown[] = [];
+    let pos = 0;
+    for (let i = 0; i < h.shown.length; i++) {
+      const w = h.shown[i];
+      if (pos >= upto) break;
+      const n = Math.min(w.length, upto - pos);
+      out.push({ w: w.slice(0, n), hide: w.slice(n), soft: i >= stable });
+      pos += w.length + 1;
+    }
+    const key = out.map((o) => o.w + "\u0001" + o.hide + (o.soft ? "s" : "")).join("|");
     if (key !== lastKey) {
       lastKey = key;
-      shownWords = part ? part.split(" ").map((w, i) => ({ w, soft: i >= stable })) : [];
+      shownWords = out;
     }
+    if (out.length > 0) lastLive = now;
+    const r = !!c && now - lastLive < 1200;
+    if (r !== recent) recent = r;
   }
 
   onMount(() => {
@@ -61,8 +102,16 @@
     raf = requestAnimationFrame(loop);
     // Whatever changes the height of the transcript keeps the end in view while following.
     const ro = new ResizeObserver(() => {
-      if (fs.follow) pin();
-      else lastHeight = box.scrollHeight;
+      if (!fs.follow) {
+        lastHeight = box.scrollHeight;
+        lastClient = box.clientHeight;
+        return;
+      }
+      const before = lastHeight;
+      const resized = box.clientHeight !== lastClient;
+      lastClient = box.clientHeight;
+      pin();
+      glide(box.scrollHeight - before, resized);
     });
     ro.observe(stack);
     ro.observe(box);
@@ -81,6 +130,22 @@
   let pressed = false;
   let lastTop = 0;
   let lastHeight = 0;
+
+  let lastClient = 0;
+
+  /**
+   * The end is pinned instantly (an animation would race against text that keeps growing), so a
+   * new line would snap the content up. Slide it instead: start where it was and ease to rest.
+   * Slides add up, so several in a row stay smooth.
+   */
+  function glide(delta: number, resized: boolean) {
+    if (reduce || resized || !stack || delta === 0 || Math.abs(delta) > 300 || !stack.animate) return;
+    stack.animate([{ transform: `translateY(${delta}px)` }, { transform: "translateY(0)" }], {
+      duration: 220,
+      easing: "cubic-bezier(0.22, 0.61, 0.36, 1)",
+      composite: "add",
+    });
+  }
 
   /** Jump to the end. Instant: an animation would race against text that keeps growing. */
   function pin() {
@@ -186,10 +251,10 @@
         <time></time><strong>{r.speaker}</strong><span class="text">{r.text}</span>
       </p>
     {/each}
-    {#if liveOn && partial && shownWords.length > 0}
+    {#if liveOn && partial && (shownWords.length > 0 || recent)}
       <p class="line live" class:me={partial.speaker === "Me"} class:others={partial.speaker !== "Me"}>
         <time>live</time><strong>{partial.speaker}</strong>
-        <span class="text">{#each shownWords as w, i (i)}<span class:soft={w.soft}>{w.w}{" "}</span>{/each}<i class="caret"></i></span>
+        <span class="text">{#each shownWords as w, i (i + ":" + w.w + w.hide)}<span class="w" class:soft={w.soft}>{w.w}<span class="rest">{w.hide}</span>{" "}</span>{/each}<i class="caret"></i></span>
       </p>
     {/if}
     </div>
@@ -278,16 +343,22 @@
   .event .text { grid-column: 2 / -1; }
   .live { content-visibility: visible; background: color-mix(in srgb, var(--accent) 7%, transparent); }
   .live time { color: var(--error-text); font-weight: 600; }
+  .live { min-height: 1.5em; }
+  /* Words ease between soft and settled, and fade in, so nothing pops. */
+  .w { transition: opacity 0.3s ease; animation: wordin 0.2s ease-out; }
   .soft { opacity: 0.6; }
+  .rest { visibility: hidden; }
+  @keyframes wordin { from { opacity: 0.25; } }
   .caret { display: inline-block; width: 2px; height: 1.05em; margin-left: 1px; vertical-align: text-bottom; background: var(--live); animation: blink 1s steps(2, start) infinite; }
   .row { animation: rowin 0.15s ease-out; }
   @keyframes rowin { from { opacity: 0.4; } }
   @keyframes blink { to { visibility: hidden; } }
   @media (prefers-reduced-motion: reduce) {
-    .row, .caret { animation: none; }
+    .row, .caret, .w { animation: none; transition: none; }
   }
   @media (forced-colors: active) {
     .soft { opacity: 1; text-decoration: underline dotted; }
+    .rest { visibility: hidden; }
     .caret { background: CanvasText; }
   }
   .empty {
