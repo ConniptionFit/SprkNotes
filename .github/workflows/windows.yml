@@ -1,0 +1,86 @@
+name: Windows
+# GitHub only. The Forgejo runner has no Windows machines, so these jobs run natively here:
+# tests on Windows x64 and Windows ARM64, then the full unsigned release build (scripts/release.ps1).
+# .github/workflows/ci.yml (Linux) stays identical to the Forgejo copy; this file is not mirrored there.
+on:
+  push:
+    branches: [main]
+    tags: ['v[0-9]*']
+  pull_request:
+  workflow_dispatch:
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  CARGO_TERM_COLOR: always
+jobs:
+  test:
+    name: test (${{ matrix.name }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: x64, runner: windows-latest }
+          - { name: arm64, runner: windows-11-arm }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rust toolchain
+        shell: pwsh
+        run: |
+          if (-not (Get-Command rustup -ErrorAction SilentlyContinue)) {
+            $arch = if ('${{ matrix.name }}' -eq 'arm64') { 'aarch64' } else { 'x86_64' }
+            Invoke-WebRequest "https://static.rust-lang.org/rustup/dist/$arch-pc-windows-msvc/rustup-init.exe" -OutFile rustup-init.exe
+            ./rustup-init.exe -y --profile minimal --default-toolchain stable
+            "$env:USERPROFILE\.cargo\bin" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+          } else { rustup toolchain install stable --profile minimal }
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: win-${{ matrix.name }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: win-${{ matrix.name }}-
+      - run: cargo test --workspace --locked
+
+  package:
+    name: release build (unsigned)
+    # Same steps as the Windows VM: x64 host builds both architectures with scripts/release.ps1.
+    if: github.event_name != 'pull_request'
+    needs: test
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Rust targets
+        run: rustup target add x86_64-pc-windows-msvc aarch64-pc-windows-msvc
+      - name: Build tools (LLVM, Ninja, CMake, WiX v5)
+        shell: pwsh
+        run: |
+          choco install llvm ninja cmake --no-progress -y
+          dotnet tool install --global wix --version 5.*
+          "$env:ProgramFiles\LLVM\bin", "$env:USERPROFILE\.dotnet\tools", "$env:ProgramFiles\CMake\bin" |
+            Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+      - name: sherpa-onnx libraries
+        shell: pwsh
+        run: |
+          $ver = (Select-String -Path scripts/fetch-sherpa.sh -Pattern '^VER=([0-9.]+)').Matches[0].Groups[1].Value
+          foreach ($a in 'x64', 'arm64') {
+            $n = "sherpa-onnx-v$ver-win-$a-shared-MT-Release-lib"
+            Invoke-WebRequest "https://github.com/k2-fsa/sherpa-onnx/releases/download/v$ver/$n.tar.bz2" -OutFile "$n.tar.bz2"
+            tar -xjf "$n.tar.bz2"
+            "SHERPA_$($a.ToUpper())=$((Resolve-Path "$n/lib").Path)" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          }
+      - name: Build everything
+        shell: pwsh
+        run: ./scripts/release.ps1 -SherpaX64 $env:SHERPA_X64 -SherpaArm64 $env:SHERPA_ARM64 -UploadSuffix ''
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sprknotes-windows-unsigned
+          path: |
+            dist/*
+            !dist/stage/**
+          retention-days: 14
