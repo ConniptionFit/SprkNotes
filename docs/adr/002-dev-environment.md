@@ -9,7 +9,7 @@ Development happens on a CachyOS (x86_64) host. Windows behavior must still be t
 - **Dev host (CachyOS):** edit, build and test all portable crates natively; cross-compile both Windows targets with `cargo-xwin`.
 - **`sprk-winvm`:** Windows 11 x64 KVM guest reached over SSH for WASAPI, AEC, COM, Tauri UI and packaging tests. `scripts/winvm.sh` syncs the branch (git bundle) and runs commands there.
 - **Snapdragon and Intel laptops:** only place performance gates (13.3) are measured and ARM64 ever runs. No ARM64 emulation, no Wine.
-- **CI:** Linux, Windows x64 and Windows ARM64 jobs (`.github/workflows/ci.yml`, also read by Forgejo Actions).
+- **CI:** Linux, Windows x64 and Windows ARM64 jobs (`.github/workflows/ci.yml` and `windows.yml`).
 - **Workspace split:** `app/src-tauri` is excluded from the root workspace so `cargo test --workspace` works on Linux without WebView2 or webkit libraries. Its version is mirrored from the root `Cargo.toml` by `scripts/bump-version.sh`, and `--check` runs in CI.
 
 ## Alternatives

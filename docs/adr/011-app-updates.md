@@ -11,7 +11,7 @@ the app at install time, and keep per-machine installs current without prompts.
 ## Decision
 1. **Installer stays MSI (WiX).** One MSI per architecture, per-user or per-machine, with public install
    switches. MSIX and the portable zip are unchanged. No new installer technology.
-2. **Release source abstraction.** `sprk-update` knows two providers, Forgejo (default, `git.pwrs.dev`) and
+2. **Release source abstraction.** `sprk-update` knows two providers, GitHub (default) and Forgejo and
    GitHub (github.com or GitHub Enterprise). Both return the same release fields, so one parser serves both; only the
    list-releases address differs. Adding another host means adding an address builder.
 3. **Channels from the tag.** `vX.Y.Z` is stable, `vX.Y.Z-beta.N` is beta, `vX.Y.Z-alpha.N` is alpha. Stable
@@ -26,7 +26,7 @@ the app at install time, and keep per-machine installs current without prompts.
    `UpdateRepoUrl`, `UpdateProvider`, `UpdatePublicKeys`, `UpdateCheckHours`. A key set by policy locks the matching Settings control.
    The MSI writes them from `UPDATE_*` switches: as **Defaults** (`HKMU\Software\SprkNotes\Defaults`, user may change) or, with
    `LOCK_UPDATES=1`, as **policy** (`HKMU\Software\Policies\SprkNotes`, locked). Per-machine installs write HKLM, which standard users cannot change.
-   Precedence: policy, then the user's choice, then installer defaults, then built-in defaults (stable, notify, git.pwrs.dev).
+   Precedence: policy, then the user's choice, then installer defaults, then built-in defaults (stable, notify, github.com).
 6. **Per-user installs update from the app.** At launch (spaced by `UpdateCheckHours`, default 24) the app checks. `notify`
    shows the version and lets the user choose "Update when I close the app". `auto` and `force` download and verify in the
    background and install silently when the app closes. Never mid-session.
@@ -46,7 +46,7 @@ the app at install time, and keep per-machine installs current without prompts.
 
 ## Consequences
 - CLAUDE.md rule 2, SPEC 7 (network row), the admin guide privacy text and the SPEC checklist change: outbound traffic is allowed for the model index and packs (ADR-005) **and** the update check and installer (this ADR). Telemetry, analytics and crash upload stay forbidden.
-- Firewalls need the release host (`git.pwrs.dev`, or `github.com` and `api.github.com`) allowed, or `UpdateMode=off`.
+- Firewalls need `github.com`, `api.github.com` and `objects.githubusercontent.com` allowed, or `UpdateMode=off`.
 - Version rule: the workspace version may carry `-beta.N` or `-alpha.N`. `release.ps1` maps it to MSI and MSIX numbers.
 - Windows Installer orders upgrades by the first three version fields only, so the MSI allows same-version upgrades and the updater, not the MSI, decides what is newer.
 - Open: a code-signing certificate for Authenticode (SmartScreen), an ADMX template tested in Intune, and a private WinGet source are separate follow-ups.

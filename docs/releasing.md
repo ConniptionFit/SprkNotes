@@ -38,42 +38,25 @@ A channel includes the more stable ones, and the app never downgrades. Pick a ch
 
 ## One-time setup
 
-Do these once. Claude cannot do them for you because they involve your account.
+Nothing to create: releases are built and published by GitHub Actions with the built-in `GITHUB_TOKEN`.
 
-1. **Make a release token.** Forgejo, your avatar, Settings, Applications, new token. Name `sprknotes-release`,
-   scope **write:repository** only (nothing else).
-2. **Give it to CI** (only needed for the Cut release and Release workflows). Repository, Settings, Actions, Secrets, add `RELEASE_TOKEN` with that value. The workflows below use it to push tags and create releases.
-3. **Uploads from the RX9070** need nothing extra: `publish-release.sh` and `ship-alpha.sh` use your git login (the one `git push` uses) when you run them yourself.
-   To use a token instead, save it as the first line of `~/.config/sprknotes/forgejo-token` (`chmod 600`). Never put it in the repo.
-4. **Optional, only when you start signing updates:** Forgejo refuses `.sig` attachments, and the app looks for
-   `update-manifest.json.sig` by that exact name. Add `.sig` to `ALLOWED_TYPES` under `[attachment]` in the server's `app.ini`.
-   Unsigned manifests are fine for pilot builds.
-5. **Set your work laptop to the alpha channel:** Settings, Updates, Release channel, Alpha.
+1. **Allow Actions to write.** Repository, Settings, Actions, General, Workflow permissions: **Read and write permissions**.
+2. **Set your work laptop to the alpha channel:** Settings, Updates, Release channel, Alpha.
+3. **Optional, only when you start signing updates:** the signing key lives in your 1Password agent, which a hosted runner cannot reach, so
+   until then manifests are unsigned (fine for pilot builds). Signing is a 1.0 gate (hard rule 14).
 
 ## Ship an alpha (every fix or feature batch)
 
 Alpha is cheap on purpose. Do it as often as you want testers to have something new.
 
-1. **Cut it.** Forgejo, Actions, **Cut release**, Run workflow, kind **alpha**. (Or `scripts/cut-release.sh alpha --push`.)
-   It picks the next number (`0.2.0-alpha.3`), bumps the version, commits `chore(release): v0.2.0-alpha.3`, tags, and pushes.
-2. **CI makes the draft.** The **Release** workflow checks the tag, runs the tests on that exact commit, and creates a draft
-   release with notes (the CHANGELOG bullets added since the last release, plus the commit list).
-3. **Build Windows and publish**, in one command on the RX9070 (from any shell, fish included):
-   ```bash
-   bash scripts/ship-alpha.sh --base 0.2.0 --wait-pr 80     # first alpha of 0.2.0, after PR 80 merges
-   bash scripts/ship-alpha.sh                               # later alphas: next number from main
-   bash scripts/ship-alpha.sh --tag v0.2.0-alpha.1          # resume a build or upload that stopped
-   ```
-   It checks the token file, updates `main`, cuts the tag, copies the sherpa libraries to the VM, builds that exact tag, copies `dist` back,
-   uploads and publishes. Set `LIGHT_PACK_DIR=<pack folder>` to also publish the Ask Sprk model pack. The same steps by hand:
-   ```bash
-   git fetch --tags
-   scripts/winvm.sh release-tag v0.2.0-alpha.3 -SherpaX64 <dir> -SherpaArm64 <dir>   # builds that exact tag
-   scripts/winvm.sh dist                                                              # copies the dist folder to ./dist-win
-   scripts/publish-release.sh all v0.2.0-alpha.3 ./dist-win --publish                 # one file per request, size-checked
-   ```
-   `publish` refuses to go live unless `update-manifest.json` and `SHA256SUMS.txt` are attached.
-4. **Test.** Your laptop updates itself (Settings, Check for updates), or run `install.ps1 -Channel alpha`. Work through the
+1. **Cut it.** GitHub, Actions, **Cut release**, Run workflow, kind **alpha**. (Or `scripts/cut-release.sh alpha --push`, which also starts the
+   Release workflow because the tag push does.) It picks the next number (`0.2.0-alpha.3`), bumps the version, commits
+   `chore(release): v0.2.0-alpha.3`, tags, and pushes.
+2. **CI does the rest.** The **Release** workflow checks the tag, runs the tests on that exact commit, builds the x64 and ARM64 apps, MSIs, MSIX
+   bundle, portable zip and update manifest natively on Windows runners (`scripts/release.ps1`), creates a draft release with notes (the
+   CHANGELOG bullets added since the last release, plus the commit list) and publishes it. `publish` refuses to go live unless
+   `update-manifest.json` and `SHA256SUMS.txt` are attached. A failed run can be re-run, or started again from Actions, **Release**, with the tag.
+3. **Test.** Your laptop updates itself (Settings, Check for updates), or run `install.ps1 -Channel alpha`. Work through the
    checks in [manual-checks.md](manual-checks.md) that the change touches.
 
 Add a CHANGELOG bullet under `## Unreleased` in the same PR as the change. That is what the release notes are made from.
@@ -95,7 +78,7 @@ same locked dependencies, one version-bump commit is the closest real-world equi
    one version commit is added, and the new tag is pushed. Skipping beta is fine: promote straight to stable.
 2. CI checks that the new tag equals the tested tag plus version files only, then drafts the release with notes covering everything since the last
    release of that channel (stable notes cover everything since the previous stable, so people who skip pre-releases see it all).
-3. Build, upload and publish the Windows files exactly as in alpha step 3, using the new tag.
+3. The Release workflow builds and publishes the Windows files exactly as for an alpha.
 4. Smoke test the published stable build on a clean user profile: install, start, one short transcript, Settings, Updates shows "up to date".
 
 New work keeps landing on `main` and ships as `0.2.1-alpha.1` and so on while 0.2.0 settles.
@@ -105,14 +88,14 @@ New work keeps landing on `main` and ships as `0.2.1-alpha.1` and so on while 0.
 1. `git switch -c release/0.1 v0.1.0`, push it, open a PR **into `release/0.1`** with the minimal fix (also fix it on `main`).
 2. Cut it from that branch: `scripts/cut-release.sh stable --ref release/0.1 --base 0.1.1 --push` (the new tag is the tip of that branch plus the version commit).
    The Release workflow's guard is skipped for hotfixes (there is no earlier pre-release of 0.1.1), so the PR review is the gate.
-3. Build, upload, publish as above. Users on stable get it at their next update check.
+3. The Release workflow builds and publishes it. Users on stable get it at their next update check.
 
 ## Rollback
 
 Installed copies are never downgraded, so rollback has two parts:
 
 1. **Stop offering the bad build.** `scripts/publish-release.sh yank v0.2.0` turns it back into a draft. New installs and update checks no longer see it, and
-   clients fall back to the previous release on their channel. (Same effect from the Forgejo release page: edit, tick Draft.)
+   clients fall back to the previous release on their channel. (Same effect from the GitHub release page: edit the release and choose "Save draft".)
 2. **Ship a fix.** People who already updated stay on the bad build until a higher version exists, so publish `0.2.1` (hotfix) or the next alpha
    as soon as the fix is ready. A revert commit is a normal fix.
 
@@ -126,21 +109,14 @@ Never delete a tag or re-upload files to a published version: checksums in `upda
 | Version rules, next number, promotion guard | `scripts/release-version.sh` |
 | Bump, commit, tag, push | `scripts/cut-release.sh` (the "Cut release" workflow runs it) |
 | Release notes | `scripts/release-notes.sh <tag>` |
-| Draft, upload, publish, yank | `scripts/publish-release.sh` (token from `RELEASE_TOKEN` or `~/.config/sprknotes/forgejo-token`) |
-| Verify and draft on tag push | `.forgejo/workflows/release.yml` |
-| Windows build | `scripts/release.ps1` via `scripts/winvm.sh release-tag` |
+| Draft, upload, publish, yank | `scripts/publish-release.sh` (GitHub: the `gh` CLI, `GH_TOKEN` in CI; Forgejo: the same script) |
+| Verify and draft on tag push | `.github/workflows/release.yml` |
+| Windows build | `scripts/release.ps1`, run by the Release workflow (or by hand on a Windows PC) |
 | Update manifest, channels | `docs/deployment.md`, ADR-011 |
 
-Forgejo limits to remember: 2 GB per file, 5 files per request (the script sends one per request), only some file types
-(others get a `.zip` suffix, which the update manifest records), and Cloudflare rejects a single upload over about 100 MB.
-The current installers are well under that; a bundled-model build is not hosted (use the Download model button).
+GitHub limits to remember: 2 GB per file. File names are published as they are (no suffix tricks).
 
 ## Later, when you want less hand work
 
-- **Windows builds in CI.** Install the Forgejo runner on `sprk-winvm` with the label `windows`, then add a job to `release.yml` that runs
-  `scripts/release.ps1` and uploads with `publish-release.sh`. Not done now because the VM needs the sherpa libraries, LLVM and WiX set up as a
-  service account first, and update-manifest signing needs the 1Password agent, which is not available to a headless runner.
 - **Linux package in CI.** The Linux tarball is still built by hand; a CI job needs the Tauri system libraries on the runner.
-- **Signed manifests.** Required from 1.0 (hard rule 14 and ADR-011).
-- **GitHub.** `.github/workflows/ci.yml` mirrors the Linux checks and `.github/workflows/windows.yml` (GitHub only) runs the tests on native Windows x64 and ARM64 and an unsigned `release.ps1` build. Forgejo stays the source and publishes releases; GitHub is a push mirror (Settings, Push mirrors). If the repository moves to GitHub, port `release.yml` and `cut-release.yml`
-  (same steps; use `GITHUB_TOKEN` with `contents: write`).
+- **Signed manifests.** Required from 1.0 (hard rule 14 and ADR-011); needs a signing step that does not depend on the 1Password agent on a laptop.

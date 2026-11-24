@@ -18,7 +18,7 @@
       <string id="Channel_Beta">Beta</string>
       <string id="Channel_Alpha">Alpha</string>
       <string id="UpdateRepoUrl">Update source (https repository address)</string>
-      <string id="UpdateRepoUrl_Explain">For example https://git.pwrs.dev/powers/sprknotes or a GitHub repository. Setting this locks the source.</string>
+      <string id="UpdateRepoUrl_Explain">For example https://github.com/ConniptionFit/SprkNotes or a GitHub repository. Setting this locks the source.</string>
       <string id="UpdatePublicKeys">Trusted update signing key</string>
       <string id="UpdatePublicKeys_Explain">An OpenSSH ssh-ed25519 public key line. When set, updates must carry a signature from this key.</string>
     </stringTable>

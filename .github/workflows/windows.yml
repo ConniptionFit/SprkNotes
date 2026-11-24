@@ -1,7 +1,6 @@
 name: Windows
-# GitHub only. The Forgejo runner has no Windows machines, so these jobs run natively here:
-# tests on Windows x64 and Windows ARM64, then the full unsigned release build (scripts/release.ps1).
-# .github/workflows/ci.yml (Linux) stays identical to the Forgejo copy; this file is not mirrored there.
+# Native Windows runners: tests on Windows x64 and Windows ARM64, then the full unsigned release build
+# (scripts/release.ps1). The Linux checks are in ci.yml.
 on:
   push:
     branches: [main]

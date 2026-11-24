@@ -276,7 +276,7 @@ export function mockBackend(): Backend {
       installed: "0.0.1",
       mode: "notify",
       channel: upd.channel,
-      repoUrl: "https://git.pwrs.dev/powers/sprknotes",
+      repoUrl: "https://github.com/ConniptionFit/SprkNotes",
       modeLocked: flag === "managed",
       channelLocked: flag === "managed",
       repoLocked: flag === "managed",

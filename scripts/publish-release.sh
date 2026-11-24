@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Create, fill and publish a Forgejo release with a scoped token. Never prints the token.
+# Create, fill and publish a release (GitHub: via publish-release-github.sh; Forgejo: this file) with a scoped token. Never prints the token.
 #
 #   publish-release.sh draft   <tag> [--notes FILE]     create (or update) the draft; pre-release flag from the tag
 #   publish-release.sh upload  <tag> <file>...          one request per file; replaces a same-named asset; checks size
@@ -20,6 +20,8 @@ cd "$(dirname "$0")/.."
 cmd="${1:-}"; shift || true
 repo_url="${SPRK_REPO_URL:-$(sed -n 's/^repo_url *= *"\(.*\)"/\1/p' distribution.toml)}"
 host="${repo_url%/*/*}"; slug="${repo_url#"$host"/}"
+# GitHub releases go through the gh CLI (GH_TOKEN in CI, `gh auth login` on a laptop).
+case "$host" in *://github.com) exec "$(dirname "$0")/publish-release-github.sh" "$cmd" "$@" ;; esac
 api="$host/api/v1/repos/$slug"
 token="${FORGEJO_TOKEN:-}"
 [ -n "$token" ] || { f="$HOME/.config/sprknotes/forgejo-token"; [ -r "$f" ] && token=$(head -1 "$f") || true; }

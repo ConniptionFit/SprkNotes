@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/icon-1024.png" alt="SprkNotes icon" width="96"></p>
+
 # SprkNotes
 
 On-device app for Windows (x64 and ARM64), with a native Linux build, that **transcribes your microphone and the system audio together, live**, into crash-safe Markdown files. Audio is processed in memory and never written to disk. Nothing leaves the machine. Built for a HIPAA-regulated company.
@@ -21,12 +23,12 @@ More in [Features and usage](docs/features.md) and the [user guide](docs/user-gu
 ## Install (Windows)
 Open PowerShell (no admin needed) and run:
 ```powershell
-irm https://git.pwrs.dev/powers/sprknotes/raw/branch/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/ConniptionFit/SprkNotes/main/install.ps1 | iex
 ```
 It installs for you only, in `%LocalAppData%\Programs\SprkNotes`, adds **SprkNotes** to the Start menu, and picks the right build for x64 or ARM64. Then open it and press **Download model** in Settings. Remove it any time with Settings, Apps (transcripts are kept).
 
 - **Updates:** SprkNotes checks the repository's releases and tells you when a newer build exists. Settings lets you pick the channel: **Stable** (default), **Beta** or **Alpha** for early builds.
-- **Early builds:** `& ([scriptblock]::Create((irm https://git.pwrs.dev/powers/sprknotes/raw/branch/main/install.ps1))) -Channel beta`
+- **Early builds:** `& ([scriptblock]::Create((irm https://raw.githubusercontent.com/ConniptionFit/SprkNotes/main/install.ps1))) -Channel beta`
 - **Whole-PC or managed installs** (all users, locked channel and source, forced or disabled updates, silent update task): see [Deployment](docs/deployment.md#updates-channels-and-locking).
 - Other ways (portable zip, MSI, MSIX, Linux): [Install](docs/install.md).
 
