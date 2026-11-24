@@ -4280,7 +4280,7 @@ dependencies = [
 
 [[package]]
 name = "sprk-asr"
-version = "0.2.0-alpha.4"
+version = "0.2.0-alpha.5"
 dependencies = [
  "sherpa-onnx",
  "sprk-models",
@@ -4289,7 +4289,7 @@ dependencies = [
 
 [[package]]
 name = "sprk-assistant"
-version = "0.2.0-alpha.4"
+version = "0.2.0-alpha.5"
 dependencies = [
  "serde",
  "serde_json",
@@ -4300,38 +4300,39 @@ dependencies = [
 
 [[package]]
 name = "sprk-audio"
-version = "0.2.0-alpha.4"
+version = "0.2.0-alpha.5"
 dependencies = [
  "cpal",
  "ringbuf",
  "sonora",
  "thiserror 1.0.69",
+ "windows 0.58.0",
 ]
 
 [[package]]
 name = "sprk-config"
-version = "0.2.0-alpha.4"
+version = "0.2.0-alpha.5"
 dependencies = [
  "windows 0.58.0",
 ]
 
 [[package]]
 name = "sprk-context"
-version = "0.2.0-alpha.4"
+version = "0.2.0-alpha.5"
 dependencies = [
  "windows 0.58.0",
 ]
 
 [[package]]
 name = "sprk-handoff"
-version = "0.2.0-alpha.4"
+version = "0.2.0-alpha.5"
 dependencies = [
  "windows 0.58.0",
 ]
 
 [[package]]
 name = "sprk-models"
-version = "0.2.0-alpha.4"
+version = "0.2.0-alpha.5"
 dependencies = [
  "base64 0.22.1",
  "ed25519-dalek",
@@ -4345,7 +4346,7 @@ dependencies = [
 
 [[package]]
 name = "sprk-pipeline"
-version = "0.2.0-alpha.4"
+version = "0.2.0-alpha.5"
 dependencies = [
  "sprk-asr",
  "sprk-audio",
@@ -4356,7 +4357,7 @@ dependencies = [
 
 [[package]]
 name = "sprk-transcript"
-version = "0.2.0-alpha.4"
+version = "0.2.0-alpha.5"
 dependencies = [
  "docx-rs",
  "serde_json",
@@ -4365,7 +4366,7 @@ dependencies = [
 
 [[package]]
 name = "sprk-update"
-version = "0.2.0-alpha.4"
+version = "0.2.0-alpha.5"
 dependencies = [
  "hex",
  "serde",
@@ -4377,7 +4378,7 @@ dependencies = [
 
 [[package]]
 name = "sprknotes"
-version = "0.2.0-alpha.4"
+version = "0.2.0-alpha.5"
 dependencies = [
  "anyhow",
  "chrono",
