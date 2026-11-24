@@ -110,6 +110,13 @@
     if (view !== "settings") syncAssistant();
   });
   const askReady = $derived(!!assistant && assistant.enabled && assistant.state === "ready");
+  // The Ask button is always findable unless the organization turned Ask Sprk off. When it is off
+  // or has no model yet, the button leads to Settings (or the panel says what is missing).
+  const askAvailable = $derived(!!assistant && !(assistant.locked && !assistant.enabled));
+  function onAsk() {
+    if (!assistant?.enabled) view = "settings";
+    else askOpen = !askOpen;
+  }
   const canTitle = $derived(askReady && !!assistant?.features.includes("title") && status !== "ready" && !name.trim() && lines.length >= 6);
 
   async function suggestTitle() {
@@ -300,7 +307,7 @@
       onsettings={() => (view = view === "settings" ? "main" : "settings")}
       settingsOpen={view === "settings"}
       onsummarize={() => summarize(null)}
-      onask={askReady ? () => (askOpen = !askOpen) : undefined}
+      onask={askAvailable ? onAsk : undefined}
       {askOpen}
       canSummarize={status === "ready" && hasTranscript}
       summarizeHint={status !== "ready" ? "Available after a session ends" : hasTranscript ? "Summarize your latest transcript" : "No transcript to summarize yet"}
@@ -314,8 +321,15 @@
       onend={() => api?.end()}
     />
   </div>
-  {#if askOpen && askReady && view === "main"}
-    <Ask {api} {lines} features={assistant?.features ?? []} onclose={() => (askOpen = false)} />
+  {#if askOpen && assistant?.enabled && view === "main"}
+    <Ask
+      {api}
+      {lines}
+      features={assistant?.features ?? []}
+      status={assistant}
+      onsettings={() => ((askOpen = false), (view = "settings"))}
+      onclose={() => (askOpen = false)}
+    />
   {/if}
   {#if choose}
     <button class="scrim" aria-label="Close menu" tabindex="-1" onclick={() => (choose = null)}></button>
