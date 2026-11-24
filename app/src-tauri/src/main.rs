@@ -13,7 +13,7 @@ mod updater;
 
 use serde::Serialize;
 use sprk_audio::cpal_backend::CpalBackend;
-use sprk_audio::live::{DeviceChoice, Preferred, SharedChoice};
+use sprk_audio::live::{Preferred, SharedChoice};
 use sprk_audio::live::Backend;
 use sprk_audio::Source;
 use sprk_pipeline::commit::Config;
