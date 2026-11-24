@@ -58,7 +58,14 @@ Alpha is cheap on purpose. Do it as often as you want testers to have something 
    It picks the next number (`0.2.0-alpha.3`), bumps the version, commits `chore(release): v0.2.0-alpha.3`, tags, and pushes.
 2. **CI makes the draft.** The **Release** workflow checks the tag, runs the tests on that exact commit, and creates a draft
    release with notes (the CHANGELOG bullets added since the last release, plus the commit list).
-3. **Build Windows** (VM) from the tag, then upload (RX9070):
+3. **Build Windows and publish**, in one command on the RX9070 (from any shell, fish included):
+   ```bash
+   bash scripts/ship-alpha.sh --base 0.2.0 --wait-pr 80     # first alpha of 0.2.0, after PR 80 merges
+   bash scripts/ship-alpha.sh                               # later alphas: next number from main
+   bash scripts/ship-alpha.sh --tag v0.2.0-alpha.1          # resume a build or upload that stopped
+   ```
+   It checks the token file, updates `main`, cuts the tag, copies the sherpa libraries to the VM, builds that exact tag, copies `dist` back,
+   uploads and publishes. Set `LIGHT_PACK_DIR=<pack folder>` to also publish the Ask Sprk model pack. The same steps by hand:
    ```bash
    git fetch --tags
    scripts/winvm.sh release-tag v0.2.0-alpha.3 -SherpaX64 <dir> -SherpaArm64 <dir>   # builds that exact tag
