@@ -11,7 +11,7 @@ export type CaptionDelay = "fast" | "steady" | "smooth";
 export const DELAY_MS: { [k in CaptionDelay]: number } = { fast: 200, steady: 400, smooth: 600 };
 type Prefs = {
   theme: Theme;
-  /** Throwback Mode: the first look (old icon, Segoe UI, earlier purple) instead of the current brand. */
+  /** Throwback Mode: the first app icon (window, taskbar and tray). Fonts, colors and layout stay the same. */
   throwback: boolean;
   captionsOn: boolean;
   captionsWho: CaptionWho;
@@ -142,8 +142,6 @@ export function bindTheme(overlay: boolean) {
       const el = document.documentElement;
       if (t === "system") el.removeAttribute("data-theme");
       else el.setAttribute("data-theme", t);
-      if (prefs.throwback) el.setAttribute("data-brand", "throwback");
-      else el.removeAttribute("data-brand");
       // The tray and taskbar icons live in the shell; only the main window tells it.
       if (!overlay) backend.then((b) => b.setBrand(prefs.throwback)).catch(() => {});
     });
