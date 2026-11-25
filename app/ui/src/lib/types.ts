@@ -73,6 +73,8 @@ export type Caption = {
   sealed?: string[];
   /** Which utterance this belongs to, so the final one replaces its locked rows. */
   utt?: number;
+  /** Final captions: HH:MM:SS where the utterance began, shown before the line commits. */
+  t?: string;
 };
 
 /** One transcript in the library list. */

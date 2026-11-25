@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- Fewer stray Me lines from the speakers: a short line of only filler words ("So,", "Okay,", "um", "yeah") that starts while the other person is talking is now treated as their voice leaking into your microphone and left out. The same words said after they stop are kept. If one already showed in the live view, it disappears when the line would have been written. Needs a check on the laptop with a real call.
+- Lines in the right order: a quick line no longer lands above a longer line from the other person that started before it (a "So," at 00:05:30 above their sentence from 00:05:29).
+- Times on new lines: lines that have finished but are still settling now show their time straight away instead of a blank time column.
 - Update now: when an update is available, Settings has a new **Update now** button beside **Update when I close**. It downloads with a progress bar, closes SprkNotes, installs and opens SprkNotes again by itself. It is refused while a transcript is running. Needs a check on the laptop that the app reopens after the install.
 - Updates you can see: an update that installs when you close SprkNotes now shows Windows Installer's small progress window (progress only, no questions) instead of running out of sight.
 - Keyboard shortcut (off by default): Settings has a new **Keyboard shortcut** switch and the keys to use (Ctrl+Alt+S unless you pick others). When it is on, the keys start a transcript from any app, and pause or resume the one that is running. If another app already uses the keys, Settings says so. Windows only; needs a check on the laptop that the keys work from other apps and that a clash is reported.

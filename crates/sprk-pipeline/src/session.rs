@@ -295,6 +295,7 @@ impl Session {
                                 is_final: true,
                                 sealed: Vec::new(),
                                 utt: self.captions.finished_utt(source),
+                                start_ms: segs.first().map(|s| base_ms + s.start_ms),
                             };
                             c.stable = c.word_count();
                             self.final_captions.push(c);
@@ -332,6 +333,12 @@ impl Session {
             out.extend(self.captions.poll(now_ms, self.engine.as_mut(), &remote));
         }
         out
+    }
+
+    /// Me lines the commit dropped as bleed since the last call, so the live view can take
+    /// back the row it showed for them. Transient: never written or logged.
+    pub fn take_dropped(&mut self) -> Vec<Segment> {
+        self.commit.take_dropped()
     }
 
     /// Commit whatever has aged past the delay. Call about once a second.

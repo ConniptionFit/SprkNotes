@@ -148,7 +148,7 @@ sprknotes/
 ### 4.2 Bleed removal (three layers)
 1. **Windows AEC:** open the mic stream as a communications stream; if `IAcousticEchoCancellationControl` is available, set the render endpoint being looped back as the AEC reference.
 2. **Software AEC:** run WebRTC AEC3 (pure Rust port, echo canceller only) on the mic using the loopback stream as the far-end reference (ADR-013). Both streams are kept on the wall clock: a loopback stream that delivers nothing while silent is padded with silence, and when audio returns each device packet is placed by the time it arrived (not when the app got round to reading it), so the two streams stay lined up across silences and busy moments. The speaker audio of a moment is handed to the canceller before the microphone audio of that moment, and the canceller restarts when a capture device changes. Behind the canceller, mic sound that is not clearly louder (about 8 dB) than the bleed the speakers are expected to cause is muted, and sound that still follows the speakers' loudness pattern is muted too. No level setting is exposed: the expected bleed level is learned from the session.
-3. **Transcript dedupe (always on):** in the commit buffer, drop a Me segment when an Others segment overlaps it in time (±2 s) and normalized text similarity is ≥ 0.6 (token-level ratio; threshold configurable), or when 80% of its words (4 or more) appear in order in the Others speech around it, or when a 2 or 3 word Me segment is the same words in a row as an Others segment at about the same moment (within 0.8 s of where those words fall in it). Prefer the Others version.
+3. **Transcript dedupe (always on):** in the commit buffer, drop a Me segment when an Others segment overlaps it in time (±2 s) and normalized text similarity is ≥ 0.6 (token-level ratio; threshold configurable), or when 80% of its words (4 or more) appear in order in the Others speech around it, or when a 2 or 3 word Me segment is the same words in a row as an Others segment at about the same moment (within 0.8 s of where those words fall in it), or when a Me segment of 1 to 3 words made only of filler and discourse words ("so", "okay", "yeah", "um" and the like) starts while an Others segment is being spoken (from 0.5 s before its start until its end). Prefer the Others version. A Me line already shown live and then dropped here is taken back from the live view.
 - **Headset detection:** if the render endpoint form factor is headphones/headset, layers 1 and 2 may be skipped; layer 3 stays on.
 - **Known limitation:** people speaking in the same room as the user are labeled Me.
 
@@ -164,7 +164,8 @@ sprknotes/
 - **NPU acceleration (v1.1):** evaluate sherpa-onnx QNN models on Snapdragon. CPU int8 is the v1 baseline.
 
 ### 4.4 Commit buffer
-- Finalized segments wait **6 s** (configurable 3 to 15 s) for dedupe and merge, then commit in timestamp order.
+- Finalized segments wait **6 s** (configurable 3 to 15 s) for dedupe and merge, then commit in timestamp order. A segment that is ready waits for any segment that started before it and is not ready yet (a short line inside a longer, earlier one from the other stream), up to 20 s more, so lines are written in start order.
+- Finished lines shown in the live view before they commit carry the time their utterance began.
 - On pause, end, or panic: flush the buffer immediately.
 
 ### 4.4a Live captions

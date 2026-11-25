@@ -54,6 +54,9 @@ pub struct Caption {
     pub sealed: Vec<String>,
     /// Which utterance this belongs to, so a final caption can replace its locked rows.
     pub utt: u64,
+    /// Session time the finished utterance began (final captions only), so its row can show
+    /// a time before the committed line arrives.
+    pub start_ms: Option<u64>,
 }
 
 impl Caption {
@@ -399,6 +402,7 @@ impl Captioner {
             is_final: false,
             sealed: std::mem::take(&mut lane.stab.sealed),
             utt: lane.utt,
+            start_ms: None,
         }
     }
 

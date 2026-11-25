@@ -99,6 +99,12 @@
         }),
       );
       offs.push(
+        await b.onDropped((d) => {
+          locked.dropped(d.speaker, d.text);
+          liveRows = [...locked.rows];
+        }),
+      );
+      offs.push(
         await b.onCaption((c) => {
           locked.caption(c, Date.now());
           liveRows = [...locked.rows];

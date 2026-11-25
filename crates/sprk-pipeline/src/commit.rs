@@ -34,6 +34,9 @@ pub struct CommitBuffer {
     cfg: Config,
     pending: Vec<Segment>,
     remote_history: Vec<Segment>,
+    /// Me lines dropped as bleed since the last `take_dropped`, so the live view can remove
+    /// the row it already showed for them. Transient: never written or logged.
+    dropped: Vec<Segment>,
 }
 
 impl CommitBuffer {
@@ -43,6 +46,7 @@ impl CommitBuffer {
             cfg,
             pending: Vec::new(),
             remote_history: Vec::new(),
+            dropped: Vec::new(),
         }
     }
 
@@ -61,12 +65,25 @@ impl CommitBuffer {
     /// land after it. The wait is capped, so a stalled stream cannot block everything.
     pub fn drain_ready_before(&mut self, now_ms: u64, settled_ms: u64) -> Vec<Segment> {
         let delay = self.cfg.delay_ms;
-        let (ready, keep): (Vec<_>, Vec<_>) = self.pending.drain(..).partition(|s| {
-            s.end_ms + delay <= now_ms
-                && (s.end_ms <= settled_ms || s.end_ms + delay + MAX_HOLD_MS <= now_ms)
-        });
+        let overdue = |s: &Segment| s.end_ms + delay + MAX_HOLD_MS <= now_ms;
+        let (ready, mut keep): (Vec<_>, Vec<_>) = self
+            .pending
+            .drain(..)
+            .partition(|s| s.end_ms + delay <= now_ms && (s.end_ms <= settled_ms || overdue(s)));
+        // A short line can age out before a longer one that began earlier on the other stream
+        // (a quick "So," inside a long remote sentence). Hold it so lines land in start order.
+        let first_held = keep.iter().map(|s| s.start_ms).min();
+        let (ready, wait): (Vec<_>, Vec<_>) = ready
+            .into_iter()
+            .partition(|s| first_held.is_none_or(|h| s.start_ms <= h) || overdue(s));
+        keep.extend(wait);
         self.pending = keep;
         self.finish(ready, now_ms)
+    }
+
+    /// Me lines dropped as bleed since the last call (for the live view only).
+    pub fn take_dropped(&mut self) -> Vec<Segment> {
+        std::mem::take(&mut self.dropped)
     }
 
     /// Commit everything now (pause, end, panic).
@@ -87,10 +104,9 @@ impl CommitBuffer {
             .cloned()
             .collect();
         let thr = self.cfg.dedupe_threshold;
-        let batch: Vec<Segment> = batch
-            .into_iter()
-            .filter(|s| !is_bleed(s, &remote, thr))
-            .collect();
+        let (bleed, batch): (Vec<Segment>, Vec<Segment>) =
+            batch.into_iter().partition(|s| is_bleed(s, &remote, thr));
+        self.dropped.extend(bleed);
         let batch = drop_fillers(batch, self.cfg.drop_fillers);
         let batch = merge_fragments(batch);
         // Long utterances become several lines with their own times; order again afterwards
@@ -243,5 +259,51 @@ mod tests {
         b.push(seg(Speaker::Me, 0, 1_000, "clamped delay test"));
         assert!(b.drain_ready(3_999).is_empty());
         assert_eq!(b.drain_ready(4_000).len(), 1);
+    }
+
+    #[test]
+    fn a_short_line_inside_a_longer_earlier_line_waits_for_it() {
+        // Others start at 329 s and speak until 340 s; a short Me line at 331 s ages out first.
+        let mut b = CommitBuffer::new(Config::default());
+        b.push(seg(
+            Speaker::Others,
+            329_000,
+            340_000,
+            "a long remote sentence keeps going",
+        ));
+        b.push(seg(Speaker::Me, 331_000, 331_600, "right then"));
+        assert!(b.drain_ready(338_000).is_empty());
+        let out = b.drain_ready(346_000);
+        let starts: Vec<_> = out.iter().map(|s| s.start_ms).collect();
+        assert_eq!(starts, vec![329_000, 331_000]);
+    }
+
+    #[test]
+    fn a_held_line_is_still_released_when_the_other_one_stalls() {
+        let mut b = CommitBuffer::new(Config::default());
+        b.push(seg(Speaker::Others, 0, 60_000, "a very long line"));
+        b.push(seg(Speaker::Me, 1_000, 2_000, "short reply here"));
+        // 2 s end + 6 s delay + 20 s cap: released at 28 s even though Others is not ready.
+        let out = b.drain_ready(28_000);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].speaker, Speaker::Me);
+    }
+
+    #[test]
+    fn dropped_bleed_is_reported_once() {
+        let mut b = CommitBuffer::new(Config::default());
+        b.push(seg(
+            Speaker::Others,
+            10_000,
+            16_000,
+            "So we have logs going back ninety days",
+        ));
+        b.push(seg(Speaker::Me, 10_500, 10_900, "So,"));
+        let out = b.drain_ready(30_000);
+        assert!(out.iter().all(|s| s.speaker == Speaker::Others));
+        let d = b.take_dropped();
+        assert_eq!(d.len(), 1);
+        assert_eq!(d[0].text, "So,");
+        assert!(b.take_dropped().is_empty());
     }
 }

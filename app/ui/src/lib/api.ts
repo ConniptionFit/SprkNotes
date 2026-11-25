@@ -95,6 +95,8 @@ export interface Backend {
   onAssistantModelDownload(cb: (p: DownloadProgress) => void): Promise<() => void>;
   onAssistantModelUpdate(cb: (u: UpdateInfo) => void): Promise<() => void>;
   onLine(cb: (l: Line) => void): Promise<() => void>;
+  /** A line shown live was dropped as microphone bleed; its live row should go. Never saved. */
+  onDropped(cb: (d: { speaker: string; text: string }) => void): Promise<() => void>;
   onStatus(cb: (s: Status) => void): Promise<() => void>;
   onPhase(cb: (p: Phase) => void): Promise<() => void>;
 }
@@ -162,6 +164,7 @@ async function tauri(): Promise<Backend> {
     onAssistantModelDownload: (cb) => listen<DownloadProgress>("assistant-model-download", (e) => cb(e.payload)),
     onAssistantModelUpdate: (cb) => listen<UpdateInfo>("assistant-model-update", (e) => cb(e.payload)),
     onLine: (cb) => listen<Line>("transcript-line", (e) => cb(e.payload)),
+    onDropped: (cb) => listen<{ speaker: string; text: string }>("transcript-dropped", (e) => cb(e.payload)),
     onStatus: (cb) => listen<Status>("session-status", (e) => cb(e.payload)),
     onPhase: (cb) => listen<Phase>("session-phase", (e) => cb(e.payload)),
   };
@@ -467,6 +470,7 @@ export function mockBackend(): Backend {
     onProblem: async () => () => {},
     ...mockAssistant(),
     onLine: async (cb) => ((lineCb = cb), () => {}),
+    onDropped: async () => () => {},
     onStatus: async (cb) => ((statusCb = cb), () => {}),
     onPhase: async () => () => {},
   };
