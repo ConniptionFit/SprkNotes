@@ -14,7 +14,7 @@ type Prefs = {
   theme: Theme;
   /** Throwback Mode: the first app icon (window, taskbar and tray). Fonts, colors and layout stay the same. */
   throwback: boolean;
-  /** How the Me and Others buttons draw sound: nine bars (default) or rolling bars. */
+  /** How the Me and Others buttons draw sound: nine bars (default) or a smooth line. */
   waveStyle: WaveStyle;
   captionsOn: boolean;
   captionsWho: CaptionWho;
@@ -81,7 +81,8 @@ function load(): Prefs {
     p.captionW = clamp(p.captionW, CAPTION_LIMITS.minW, CAPTION_LIMITS.maxW, defaults.captionW);
     p.captionH = clamp(p.captionH, CAPTION_LIMITS.minH, CAPTION_LIMITS.maxH, defaults.captionH);
     p.captionText = clamp(p.captionText, 0, CAPTION_TEXT.length - 1, defaults.captionText);
-    if (p.waveStyle !== "bars" && p.waveStyle !== "rolling") p.waveStyle = defaults.waveStyle;
+    // "rolling" was a style in 0.2.0-alpha.11 that is gone now; it and anything unknown become bars.
+    if (p.waveStyle !== "bars" && p.waveStyle !== "line") p.waveStyle = defaults.waveStyle;
     if (!(p.captionDelay in DELAY_MS)) p.captionDelay = defaults.captionDelay;
     p.lineText = clamp(p.lineText, 0, LINE_TEXT.length - 1, defaults.lineText);
     if (!["titles", "light", "standard"].includes(p.assistantTier)) p.assistantTier = defaults.assistantTier;

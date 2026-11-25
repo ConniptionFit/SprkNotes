@@ -3,18 +3,19 @@ import {
   BARS,
   GATE,
   REST,
-  ROLL_STEP_MS,
+  SAMPLE_MS,
   SLOTS,
+  WAVE_STYLES,
+  barRects,
   ease,
   flat,
   gated,
+  linePoints,
+  meterRest,
+  meterStart,
+  meterStep,
+  meterStill,
   pushLevel,
-  rollHeights,
-  rollPush,
-  rollShift,
-  rollStart,
-  rollStep,
-  rollStill,
   settled,
   waveform,
 } from "./waveform";
@@ -73,48 +74,108 @@ describe("waveform", () => {
   });
 });
 
-describe("rolling waveform", () => {
-  it("starts flat and still", () => {
-    const r = rollStart();
-    expect(rollHeights(r)).toEqual(new Array(BARS + 1).fill(REST));
-    expect(rollStill(r)).toBe(true);
+describe("meter clock", () => {
+  // Run the meter at display frames while the level holds `level` for `ms`.
+  const run = (m: ReturnType<typeof meterStart>, level: number, ms: number, snap = false) => {
+    for (let t = 0; t < ms; t += 16) m = meterStep(m, level, 16, snap);
+    return m;
+  };
+
+  it("walks every bar down to the flat line when silence repeats the same 0", () => {
+    // The window hears a level only when it changes, so after speech it may get one 0 and no more.
+    let m = run(meterStart(), 1, 400);
+    expect(Math.max(...m.bars)).toBeGreaterThan(0.5);
+    m = run(m, 0, 1500);
+    expect(m.hist.every((h) => h === 0)).toBe(true);
+    expect(settled(m.bars, flat())).toBe(true);
+    expect(meterStill(m, 0)).toBe(true);
+    expect(meterRest(m).bars).toEqual(flat());
   });
 
-  it("brings new sound in at the right edge and moves it left", () => {
-    let r = rollStart();
-    for (let t = 0; t < ROLL_STEP_MS * 2; t += 16) r = rollStep(r, 0.9, 16);
-    const h = rollHeights(r);
-    expect(h[h.length - 1]).toBeGreaterThan(REST);
-    expect(h[0]).toBe(REST);
-    const before = h.findIndex((x) => x > REST);
-    for (let t = 0; t < ROLL_STEP_MS * 3; t += 16) r = rollStep(r, 0, 16);
-    expect(rollHeights(r).findIndex((x) => x > REST)).toBeLessThan(before);
+  it("samples about twenty times a second, not once per frame", () => {
+    const m = meterStep(meterStart(), 1, SAMPLE_MS - 1);
+    expect(m.hist[0]).toBe(0);
+    expect(meterStep(m, 1, 1).hist[0]).toBe(1);
   });
 
-  it("slides smoothly between columns", () => {
-    let r = rollStart();
-    r = rollStep(r, 0.9, ROLL_STEP_MS);
-    expect(rollShift(r)).toBeCloseTo(1);
-    r = rollStep(r, 0.9, ROLL_STEP_MS / 2);
-    expect(rollShift(r)).toBeCloseTo(0.5);
+  it("is not still while sound is coming in or the bars are still falling", () => {
+    let m = run(meterStart(), 0.9, 200);
+    expect(meterStill(m, 0.9)).toBe(false);
+    m = meterStep(m, 0, 60);
+    expect(meterStill(m, 0)).toBe(false);
   });
 
-  it("goes flat and still after dead air, hiss included", () => {
-    let r = rollStart();
-    for (let t = 0; t < 1000; t += 16) r = rollStep(r, 0.9, 16);
-    expect(rollStill(r)).toBe(false);
-    for (let t = 0; t < 3000; t += 16) r = rollStep(r, 0.2, 16);
-    expect(rollStill(r)).toBe(true);
-    expect(rollHeights(r).every((x) => Math.abs(x - REST) < 0.01)).toBe(true);
+  it("treats hiss below the gate as silence", () => {
+    const m = run(meterStart(), GATE - 0.05, 1000);
+    expect(meterStill(m, GATE - 0.05)).toBe(true);
   });
 
-  it("with reduced motion, adds a column per level", () => {
-    let r = rollStart();
-    r = rollPush(r, 1);
-    expect(rollHeights(r)[BARS]).toBe(1);
-    expect(rollShift(r)).toBe(1);
-    r = rollPush(r, gated(0.1));
-    expect(rollHeights(r)[BARS]).toBe(REST);
-    expect(rollHeights(r)[BARS - 1]).toBe(1);
+  it("with reduced motion, jumps straight to each shape and the line does not drift", () => {
+    let m = run(meterStart(), 1, 100, true);
+    expect(m.bars).toEqual(waveform(m.hist));
+    expect(m.env).toBe(1);
+    expect(m.phase).toBe(0);
+    m = run(m, 0, 300, true);
+    expect(m.bars).toEqual(flat());
+  });
+});
+
+describe("bar layout", () => {
+  for (const dpr of [1, 1.25, 1.5, 1.75, 2, 3]) {
+    it(`keeps bars and gaps even and on whole pixels at ${dpr * 100}%`, () => {
+      const W = Math.round(34 * dpr);
+      const H = Math.round(16 * dpr);
+      const r = barRects(waveform([1, 0.6, 0.3, 0.1, 0]), W, H, dpr);
+      expect(r.length).toBe(BARS);
+      const steps = r.slice(1).map((b, i) => b.x - r[i].x);
+      expect(new Set(steps).size).toBe(1);
+      expect(new Set(r.map((b) => b.w)).size).toBe(1);
+      for (const b of r) {
+        expect(Number.isInteger(b.x) && Number.isInteger(b.y) && Number.isInteger(b.h)).toBe(true);
+        expect(b.x).toBeGreaterThanOrEqual(0);
+        expect(b.x + b.w).toBeLessThanOrEqual(W);
+        expect(b.y).toBeGreaterThanOrEqual(0);
+        expect(b.y + b.h).toBeLessThanOrEqual(H);
+      }
+      // Centered: the space left and right differs by at most one device pixel.
+      const right = W - (r[BARS - 1].x + r[BARS - 1].w);
+      expect(Math.abs(right - r[0].x)).toBeLessThanOrEqual(1);
+    });
+  }
+
+  it("draws silence as one even row of small dots", () => {
+    const r = barRects(flat(), 34, 16, 1);
+    expect(new Set(r.map((b) => `${b.y}/${b.h}`)).size).toBe(1);
+    expect(r[0].h).toBeLessThanOrEqual(3);
+  });
+
+  it("gives louder bars more height", () => {
+    const r = barRects(waveform([1]), 34, 16, 1);
+    const mid = (BARS - 1) / 2;
+    expect(r[mid].h).toBeGreaterThan(r[0].h);
+  });
+});
+
+describe("line wave", () => {
+  it("is exactly flat in silence", () => {
+    expect(linePoints(0, 1234, 20).every((y) => y === 0)).toBe(true);
+  });
+
+  it("swells with loudness, tapers to the ends and stays inside the box", () => {
+    const quiet = linePoints(0.2, 500, 40);
+    const loud = linePoints(1, 500, 40);
+    const peak = (a: number[]) => Math.max(...a.map(Math.abs));
+    expect(peak(loud)).toBeGreaterThan(peak(quiet));
+    expect(peak(loud)).toBeLessThanOrEqual(1);
+    expect(Math.abs(loud[0])).toBeLessThan(1e-9);
+    expect(Math.abs(loud[loud.length - 1])).toBeLessThan(1e-9);
+  });
+
+  it("moves over time while there is sound", () => {
+    expect(linePoints(1, 0, 20)).not.toEqual(linePoints(1, 120, 20));
+  });
+
+  it("offers bars first, then the line", () => {
+    expect(WAVE_STYLES).toEqual(["bars", "line"]);
   });
 });
