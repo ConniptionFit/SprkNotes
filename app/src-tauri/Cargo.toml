@@ -24,6 +24,7 @@ sprk-assistant = { path = "../../crates/sprk-assistant" }
 sprk-asr = { path = "../../crates/sprk-asr" }
 sprk-audio = { path = "../../crates/sprk-audio" }
 sprk-config = { path = "../../crates/sprk-config" }
+sprk-core = { path = "../../crates/sprk-core" }
 sprk-context = { path = "../../crates/sprk-context" }
 sprk-handoff = { path = "../../crates/sprk-handoff" }
 sprk-models = { path = "../../crates/sprk-models" }

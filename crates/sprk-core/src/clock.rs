@@ -1,7 +1,7 @@
 use chrono::Local;
 use sprk_pipeline::host::{Clock, Stamp};
 
-/// Local wall clock (Windows time zone rules via chrono).
+/// Local wall clock (the device's time zone rules via chrono).
 pub struct LocalClock;
 
 impl Clock for LocalClock {

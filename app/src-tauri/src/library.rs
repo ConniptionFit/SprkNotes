@@ -155,7 +155,7 @@ pub fn recovery_scan(
     app: AppHandle,
     state: tauri::State<crate::AppState>,
 ) -> Result<Vec<Entry>, String> {
-    if state.host.lock().map(|h| h.is_some()).unwrap_or(true) {
+    if state.busy() {
         return Ok(Vec::new());
     }
     let idle = |p: &Path| {
@@ -179,7 +179,7 @@ pub fn recovery_mark(
     state: tauri::State<crate::AppState>,
     path: String,
 ) -> Result<(), String> {
-    if state.host.lock().map(|h| h.is_some()).unwrap_or(true) {
+    if state.busy() {
         return Err("End the current session first.".into());
     }
     let p = checked(&app, &path)?;
@@ -393,8 +393,7 @@ pub fn summarize(
 /// The file the running session writes to, if any. The library leaves that one alone: moving
 /// or deleting it mid-session would lose lines.
 fn live(state: &tauri::State<crate::AppState>) -> Option<PathBuf> {
-    let host = state.host.lock().ok()?;
-    let p = host.as_ref()?.path()?;
+    let p = state.live_path()?;
     Some(std::fs::canonicalize(&p).unwrap_or(p))
 }
 

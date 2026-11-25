@@ -4325,6 +4325,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "sprk-core"
+version = "0.2.0-alpha.11"
+dependencies = [
+ "chrono",
+ "serde",
+ "sprk-asr",
+ "sprk-audio",
+ "sprk-config",
+ "sprk-pipeline",
+]
+
+[[package]]
 name = "sprk-handoff"
 version = "0.2.0-alpha.11"
 dependencies = [
@@ -4390,6 +4402,7 @@ dependencies = [
  "sprk-audio",
  "sprk-config",
  "sprk-context",
+ "sprk-core",
  "sprk-handoff",
  "sprk-models",
  "sprk-pipeline",

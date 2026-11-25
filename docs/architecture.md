@@ -18,6 +18,7 @@ On Linux the same pipeline runs with `parec` (PipeWire or PulseAudio monitor) fo
 |---|---|---|
 | `sprk-transcript` | Format, writer, recovery, parser, exporters | Done (portable) |
 | `sprk-pipeline` | Commit buffer, dedupe, rules, `Session` orchestrator, session host, `Captioner` (ADR-006, ADR-007, ADR-008) | Done (portable) |
+| `sprk-core` | App core shared by the desktop and phone shells: session control (one session, device choice, sources off), policy-driven settings, the window's event names and payloads, local clock (ADR-015) | Started (portable) |
 | `sprk-asr` | `Engine` and `Vad` traits, sherpa-onnx adapters | Done |
 | `sprk-models` | Packs, manifest, resolver, stores, import, signing | Done (portable) |
 | `sprk-context` | Audio source timing, call title rules, labeling modes | Windows sources and call context wired; UI Automation tabs, Teams local API pending |
