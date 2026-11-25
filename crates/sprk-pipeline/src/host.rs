@@ -75,6 +75,10 @@ pub trait Events: Send + Sync {
     /// Input levels, 0 to 1, for Me and Others, about ten times a second while a session runs.
     /// A number only; never audio. Default: ignore.
     fn levels(&self, _me: f32, _others: f32) {}
+    /// A Me line already shown live (a final caption) was dropped as microphone bleed, so the
+    /// live view can take its row back. Transient like captions: never stored or logged.
+    /// Default: ignore.
+    fn dropped(&self, _speaker: &'static str, _text: &str) {}
     /// What the UI wants now: `(captions on, include Me)`. Polled by the session thread.
     fn captions_wanted(&self) -> (bool, bool) {
         (false, false)
@@ -96,6 +100,8 @@ pub struct UiCaption {
     pub sealed: Vec<String>,
     /// Which utterance this belongs to.
     pub utt: u64,
+    /// `HH:MM:SS` where the finished utterance began (final captions only).
+    pub t: Option<String>,
 }
 
 /// How often the source buttons' meters are updated.
@@ -113,6 +119,7 @@ fn emit_captions(events: &dyn Events, session: &mut Session, now_ms: u64) {
             is_final: c.is_final,
             sealed: c.sealed,
             utt: c.utt,
+            t: c.start_ms.map(timestamp),
             text: c.text,
         });
     }
@@ -471,6 +478,11 @@ fn run(
             last_tick = t;
             if let Err(e) = session.tick(t) {
                 problem(e);
+            }
+            for d in session.take_dropped() {
+                if d.speaker == Speaker::Me {
+                    events.dropped("Me", &d.text);
+                }
             }
         }
     }

@@ -60,6 +60,23 @@ pub struct Stats {
     pub utterances: u64,
     pub decode_errors: u64,
     pub committed: u64,
+    /// Microphone utterances never decoded because they were too quiet to be anyone speaking.
+    pub too_quiet: u64,
+}
+
+/// Loudest 20 ms of a microphone utterance (RMS) must reach this (about -48 dBFS) to be
+/// decoded. A muted or switched-off microphone still hands over near-silence, and the
+/// detector can fire on its noise; a speech model given that makes up a short word ("Okay.",
+/// "So,"). Speech into a laptop or headset microphone is far louder (about -35 to -15 dBFS).
+pub const ME_SPEECH_FLOOR: f32 = 0.004;
+const FLOOR_WINDOW: usize = 320;
+
+/// RMS of the loudest 20 ms window.
+pub fn loudest_rms(samples: &[f32]) -> f32 {
+    samples
+        .chunks(FLOOR_WINDOW)
+        .map(|w| (w.iter().map(|v| v * v).sum::<f32>() / w.len() as f32).sqrt())
+        .fold(0.0, f32::max)
 }
 
 pub type VadFactory = Box<dyn Fn() -> Box<dyn Vad> + Send>;
@@ -276,6 +293,10 @@ impl Session {
     ) {
         for u in utterances {
             self.stats.utterances += 1;
+            if source == Source::Mic && loudest_rms(&u.samples) < ME_SPEECH_FLOOR {
+                self.stats.too_quiet += 1;
+                continue;
+            }
             match transcribe_utterance(self.engine.as_mut(), &u) {
                 Ok(segs) => {
                     // The committed decode is also the final caption (ADR-007): same text,
@@ -295,6 +316,7 @@ impl Session {
                                 is_final: true,
                                 sealed: Vec::new(),
                                 utt: self.captions.finished_utt(source),
+                                start_ms: segs.first().map(|s| base_ms + s.start_ms),
                             };
                             c.stable = c.word_count();
                             self.final_captions.push(c);
@@ -332,6 +354,12 @@ impl Session {
             out.extend(self.captions.poll(now_ms, self.engine.as_mut(), &remote));
         }
         out
+    }
+
+    /// Me lines the commit dropped as bleed since the last call, so the live view can take
+    /// back the row it showed for them. Transient: never written or logged.
+    pub fn take_dropped(&mut self) -> Vec<Segment> {
+        self.commit.take_dropped()
     }
 
     /// Commit whatever has aged past the delay. Call about once a second.
@@ -540,6 +568,43 @@ mod tests {
                 "10000 Me: after the break we continue",
             ]
         );
+    }
+
+    #[test]
+    fn a_muted_mic_beside_remote_speech_writes_no_me_lines() {
+        // The engine hands out the next answer for any audio it is given, so a decode of the
+        // muted mic would show up as a Me line.
+        let (mut s, log) = make(&[
+            "we can go through the process",
+            "all right so then the annual review",
+        ]);
+        let muted = [0.0f32; 16_000];
+        // Near-silence with a little hiss, as a muted microphone can still deliver.
+        let hiss: Vec<f32> = (0..16_000)
+            .map(|i| if i % 2 == 0 { 0.002 } else { -0.002 })
+            .collect();
+        s.feed(Source::Mic, &muted);
+        s.feed(Source::Mic, &hiss);
+        s.feed(Source::System, &ONE_SEC);
+        s.feed(Source::System, &ONE_SEC);
+        s.end(10_000).unwrap();
+        let l = log.0.lock().unwrap().clone();
+        assert!(l.iter().all(|x| !x.contains("Me:")), "{l:?}");
+        assert_eq!(l.len(), 2, "{l:?}");
+        assert_eq!(s.stats().too_quiet, 2);
+    }
+
+    #[test]
+    fn quiet_but_real_speech_on_the_mic_is_kept() {
+        let (mut s, log) = make(&["can you hear me"]);
+        // About -34 dBFS: a soft voice on a laptop microphone.
+        let soft: Vec<f32> = (0..16_000)
+            .map(|i| if i % 2 == 0 { 0.02 } else { -0.02 })
+            .collect();
+        s.feed(Source::Mic, &soft);
+        s.end(5_000).unwrap();
+        assert_eq!(log.0.lock().unwrap().clone(), vec!["0 Me: can you hear me"]);
+        assert_eq!(loudest_rms(&[0.0; 10]), 0.0);
     }
 
     #[test]

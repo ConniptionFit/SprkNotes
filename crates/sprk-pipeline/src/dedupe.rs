@@ -70,6 +70,61 @@ fn short_line_is_bleed(me: &Segment, mine: &[String], near: &[&Segment]) -> bool
     })
 }
 
+/// Words people drop in while someone else talks ("so", "okay", "um"). A Me line made only of
+/// these, starting while a remote line is being spoken, is the mic hearing the speakers: bleed
+/// of the other person's own "So," or "Okay," that the echo gate let through. A real reply that
+/// starts after the remote line ends is kept.
+const SOFT_WORDS: &[&str] = &[
+    "um",
+    "uh",
+    "umm",
+    "uhh",
+    "er",
+    "erm",
+    "ah",
+    "hmm",
+    "mm",
+    "mhm",
+    "mmhmm",
+    "uhhuh",
+    "so",
+    "okay",
+    "ok",
+    "yeah",
+    "yep",
+    "yes",
+    "right",
+    "well",
+    "alright",
+    "and",
+    "but",
+    "like",
+    "oh",
+    "sure",
+    "now",
+    "anyway",
+    "actually",
+    "basically",
+    "hm",
+    "huh",
+];
+/// Longest Me line judged by the soft-word test.
+const MAX_SOFT_WORDS: usize = 3;
+/// A soft Me line may start this much before the remote line's own start (the two streams'
+/// clocks and cut points differ slightly) and still count as said during it.
+const SOFT_LEAD_MS: u64 = 500;
+
+fn soft_line_is_bleed(me: &Segment, mine: &[String], near: &[&Segment]) -> bool {
+    if mine.is_empty()
+        || mine.len() > MAX_SOFT_WORDS
+        || !mine.iter().all(|w| SOFT_WORDS.contains(&w.as_str()))
+    {
+        return false;
+    }
+    near.iter()
+        .any(|r| me.start_ms + SOFT_LEAD_MS >= r.start_ms && me.start_ms < r.end_ms)
+}
+
 fn overlaps(a: &Segment, b: &Segment) -> bool {
     a.start_ms <= b.end_ms + OVERLAP_MS && b.start_ms <= a.end_ms + OVERLAP_MS
 }
@@ -81,7 +136,9 @@ fn overlaps(a: &Segment, b: &Segment) -> bool {
 /// bleed line can be a piece of one remote line or span two. The remote lines near it are
 /// joined in time order and the Me line must sit inside them (at least 80% of its words, in
 /// order). Lines of two or three words are judged by a stricter third test: the same words in
-/// a row at about the same moment (see `SHORT_MATCH_MS`). One-word lines only by the first.
+/// a row at about the same moment (see `SHORT_MATCH_MS`). Lines of only filler words ("So,",
+/// "Okay,", "um") that start while a remote line is being spoken are bleed (`SOFT_WORDS`).
+/// Other one-word lines only by the first test.
 pub fn is_bleed(me: &Segment, remote: &[Segment], threshold: f64) -> bool {
     if me.speaker != crate::Speaker::Me {
         return false;
@@ -97,6 +154,9 @@ pub fn is_bleed(me: &Segment, remote: &[Segment], threshold: f64) -> bool {
         return true;
     }
     let mine = tokens(&me.text);
+    if soft_line_is_bleed(me, &mine, &near) {
+        return true;
+    }
     if short_line_is_bleed(me, &mine, &near) {
         return true;
     }
@@ -253,5 +313,52 @@ mod tests {
         // One word is never judged this way.
         let one = seg(Speaker::Me, 11_000, 11_300, "fix");
         assert!(!is_bleed(&one, &remote, DEFAULT_THRESHOLD));
+    }
+
+    #[test]
+    fn filler_heard_while_the_other_person_talks_is_bleed() {
+        // The screenshot case: the remote line opens with "So", and the mic copy lands as Me.
+        let remote = [seg(
+            Speaker::Others,
+            329_000,
+            340_000,
+            "So in order to avoid losing more data, I did capture the current logs as of yesterday.",
+        )];
+        for t in ["So,", "Okay,", "Um.", "Yeah, okay.", "so um"] {
+            let me = seg(Speaker::Me, 330_000, 330_400, t);
+            assert!(is_bleed(&me, &remote, DEFAULT_THRESHOLD), "{t}");
+        }
+        // Just before the remote line's own start still counts (the streams cut differently).
+        let early = seg(Speaker::Me, 328_700, 329_000, "Okay,");
+        assert!(is_bleed(&early, &remote, DEFAULT_THRESHOLD));
+    }
+
+    #[test]
+    fn filler_said_as_a_reply_after_the_other_person_stops_is_kept() {
+        let remote = [seg(
+            Speaker::Others,
+            10_000,
+            14_000,
+            "would that date work for you",
+        )];
+        let reply = seg(Speaker::Me, 14_200, 14_600, "Okay.");
+        assert!(!is_bleed(&reply, &remote, DEFAULT_THRESHOLD));
+        let before = seg(Speaker::Me, 8_000, 8_400, "So,");
+        assert!(!is_bleed(&before, &remote, DEFAULT_THRESHOLD));
+    }
+
+    #[test]
+    fn a_real_line_during_remote_speech_is_not_a_filler() {
+        let remote = [seg(
+            Speaker::Others,
+            10_000,
+            16_000,
+            "we should ship the fix on thursday after the review board signs off",
+        )];
+        // More than filler words: judged by the other tests, and kept.
+        let real = seg(Speaker::Me, 11_000, 12_000, "okay but wait");
+        let long = seg(Speaker::Me, 11_000, 12_500, "so yeah okay right");
+        assert!(!is_bleed(&real, &remote, DEFAULT_THRESHOLD));
+        assert!(!is_bleed(&long, &remote, DEFAULT_THRESHOLD));
     }
 }

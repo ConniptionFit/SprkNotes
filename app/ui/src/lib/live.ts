@@ -8,7 +8,7 @@
  */
 import type { Caption } from "./types";
 
-export type Row = { uid: number; utt: number; speaker: string; text: string; at: number };
+export type Row = { uid: number; utt: number; speaker: string; text: string; at: number; t?: string };
 
 /** Locked rows older than this are dropped, in case their committed line never arrives. */
 export const ROW_TTL_MS = 45_000;
@@ -32,8 +32,8 @@ export class Rows {
   rows: Row[] = [];
   private next = 0;
 
-  private add(utt: number, speaker: string, text: string, at: number) {
-    this.rows.push({ uid: this.next++, utt, speaker, text, at });
+  private add(utt: number, speaker: string, text: string, at: number, t?: string) {
+    this.rows.push({ uid: this.next++, utt, speaker, text, at, t });
   }
 
   /** A caption arrived. Locked rows are kept; a final caption replaces its utterance's rows. */
@@ -42,7 +42,8 @@ export class Rows {
     const utt = c.utt ?? -1;
     if (c.final) {
       this.rows = this.rows.filter((r) => !(r.utt === utt && r.speaker === c.speaker));
-      for (const s of sentences(c.text)) this.add(utt, c.speaker, s, now);
+      // Each sentence shows when the utterance began; the committed lines bring exact times.
+      for (const s of sentences(c.text)) this.add(utt, c.speaker, s, now, c.t);
       return;
     }
     for (const s of c.sealed ?? []) this.add(utt, c.speaker, s, now);
@@ -57,6 +58,18 @@ export class Rows {
       if (w.length === 0) return false;
       const hit = w.filter((x) => have.has(x)).length;
       return hit / w.length < 0.6;
+    });
+  }
+
+  /** The engine dropped a line it had shown live (microphone bleed): take its rows back. */
+  dropped(speaker: string, text: string): void {
+    const gone = ` ${normWords(text).join(" ")} `;
+    if (!gone.trim()) return;
+    this.rows = this.rows.filter((r) => {
+      if (r.speaker !== speaker) return true;
+      const row = normWords(r.text).join(" ");
+      // Whole words only: dropping "so" must not take back a row that says "also".
+      return !row || !gone.includes(` ${row} `);
     });
   }
 

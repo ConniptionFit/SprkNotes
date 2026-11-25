@@ -63,6 +63,16 @@ struct CaptionPayload {
     /// Rows that locked since the last caption (ADR-008).
     sealed: Vec<String>,
     utt: u64,
+    /// Where a finished utterance began, so its row shows a time before it commits.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    t: Option<String>,
+}
+
+/// A Me line shown live was dropped as microphone bleed (transient, never stored).
+#[derive(Serialize, Clone)]
+struct DroppedPayload {
+    speaker: String,
+    text: String,
 }
 
 struct TauriEvents(AppHandle);
@@ -101,6 +111,15 @@ impl Events for TauriEvents {
     fn captions_wanted(&self) -> (bool, bool) {
         shell::captions_wanted(&self.0)
     }
+    fn dropped(&self, speaker: &'static str, text: &str) {
+        let _ = self.0.emit(
+            "transcript-dropped",
+            DroppedPayload {
+                speaker: speaker.to_string(),
+                text: text.to_string(),
+            },
+        );
+    }
     fn levels(&self, me: f32, others: f32) {
         // Only the main window has the source buttons.
         let _ = self.0.emit_to("main", "source-levels", [me, others]);
@@ -115,6 +134,7 @@ impl Events for TauriEvents {
                 is_final: c.is_final,
                 sealed: c.sealed.clone(),
                 utt: c.utt,
+                t: c.t.clone(),
             },
         );
     }

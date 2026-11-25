@@ -158,3 +158,19 @@ describe("typing one live row", () => {
     expect(b.shown.map((w) => w.w)).toEqual(["three"]);
   });
 });
+
+describe("rows dropped as bleed", () => {
+  it("takes back the Me row the engine dropped, and nothing else", () => {
+    const r = new Rows();
+    r.caption({ speaker: "Me", text: "So,", stable: 1, final: true, utt: 1, t: "00:05:30" }, 0);
+    r.caption({ speaker: "Me", text: "Also fine.", stable: 2, final: true, utt: 2 }, 0);
+    r.caption({ speaker: "Others", text: "So in order to avoid it.", stable: 6, final: true, utt: 3 }, 0);
+    r.dropped("Me", "So,");
+    expect(r.rows.map((x) => x.text)).toEqual(["Also fine.", "So in order to avoid it."]);
+  });
+  it("gives a finished utterance's rows its start time", () => {
+    const r = new Rows();
+    r.caption({ speaker: "Others", text: "That's a good question. It depends.", stable: 6, final: true, utt: 4, t: "00:05:47" }, 0);
+    expect(r.rows.map((x) => x.t)).toEqual(["00:05:47", "00:05:47"]);
+  });
+});

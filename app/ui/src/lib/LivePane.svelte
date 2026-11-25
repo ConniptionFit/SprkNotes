@@ -208,7 +208,7 @@
     {/each}
     {#each rows as r (r.uid)}
       <p class="line row" class:me={r.speaker === "Me"} class:others={r.speaker !== "Me"}>
-        <time></time><strong>{r.speaker}</strong><span class="text">{r.text}</span>
+        <time>{r.t ?? ""}</time><strong>{r.speaker}</strong><span class="text">{r.text}</span>
       </p>
     {/each}
     {#each liveRows as lr (lr.speaker)}
