@@ -294,7 +294,6 @@ pub const KEYS: &[&str] = &[
 pub const UI_KEYS: &[&str] = &[
     "Theme",
     "ThrowbackMode",
-    "WaveformStyle",
     "LiveCaptions",
     "LiveLine",
     "CaptionDelay",

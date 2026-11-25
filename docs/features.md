@@ -115,7 +115,6 @@ With one app installed it opens that one (Claude gets the file; for Copilot the 
 
 - **Transcription model:** status, **Download model**, **Check for updates**.
 - **Appearance:** System, Light or Dark.
-- **Sound meter:** Nine bars (default) or Line wave.
 - **Misc:** Throwback Mode.
 - **Live captions:** captions on the overlay, the live line in the main window, **Live text delay** (Fast, Steady, Smoothest) and whose words (Others only or Others and Me).
 

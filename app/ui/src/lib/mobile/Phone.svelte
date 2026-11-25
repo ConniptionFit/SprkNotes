@@ -60,9 +60,6 @@
   const offs: (() => void)[] = [];
   let ticker: ReturnType<typeof setInterval> | undefined;
   onMount(async () => {
-    // The phone's sound meter is the Line wave, with no other style (John, 2026-11-25). Not stored,
-    // so it never overrides a choice the desktop may still offer.
-    prefs.waveStyle = "line";
     const b = await backend;
     api = b;
     b.setDevice("mic", prefs.micDevice).catch(() => {});

@@ -1,9 +1,10 @@
 # Changelog
 
 ## Unreleased
-- Nine bars fix: after someone stops talking, every bar now walks down to the flat line (before, the outer bars could stay raised until the next sound), and the bars and gaps are drawn on whole screen pixels so the spacing is even at 100, 125, 150 or 200 percent. Needs a look on the laptop.
+- Line wave is the sound meter: the Me and Others buttons now always show the smooth line that swells with the voice. Nine bars is retired and its code archived (see docs/archive/nine-bars.md), so the **Sound meter** setting is gone, and so is the admin key `WaveformStyle`; a saved choice or a policy that still sets it is ignored. Needs a look on the laptop.
+- Nine bars fix (Nine bars is now retired, see above): after someone stops talking, every bar now walks down to the flat line (before, the outer bars could stay raised until the next sound), and the bars and gaps are drawn on whole screen pixels so the spacing is even at 100, 125, 150 or 200 percent. Needs a look on the laptop.
 - Smoother waveform: the Me and Others meters have nine bars instead of five, glide between levels instead of jumping, and fall to a flat line when there is no sound (room hiss no longer holds them a little raised). Needs a look on the laptop.
-- Sound meter setting: Settings now offers **Nine bars** (default) or **Line wave**, one smooth line that swells with the voice. Admins can set or lock it with `WaveformStyle` (bars, line). Rolling bars from 0.2.0-alpha.11 is gone: a saved or locked `rolling` becomes Nine bars, and a lock stays a lock.
+- Sound meter setting (removed again in the next alpha, see above): Settings offered **Nine bars** (default) or **Line wave**, one smooth line that swells with the voice. Admins can set or lock it with `WaveformStyle` (bars, line). Rolling bars from 0.2.0-alpha.11 is gone: a saved or locked `rolling` becomes Nine bars, and a lock stays a lock.
 - Throwback Mode now changes only the app icon (window, taskbar and tray). The font and colors no longer switch, so the page no longer shifts slightly when you turn it on or off.
 - Docs: the deployment form is linked at the top of the README, the deployment guide, the admin guide and the install guide, with a short summary of the two scripts it writes.
 - Admin form online: the install-script form is published at https://conniptionfit.github.io/SprkNotes/ so admins can open it from a link. It still runs entirely in the browser and sends nothing anywhere.
