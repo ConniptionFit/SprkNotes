@@ -98,6 +98,8 @@ Speech engine: **sherpa-onnx** (Apache-2.0) because it supports Windows ARM64 an
                           JSONL sidecar)                                      (Tauri events)
 ```
 
+Threads: a capture thread reads both streams every 20 ms and hands 16 kHz frames to the session thread through an in-memory channel; the session thread runs echo removal, VAD, ASR, live captions, the commit buffer and the writer. A decode never delays reading the devices, and Pause and End first take every frame read up to that moment.
+
 ### 3.3 Repo layout
 
 ```
