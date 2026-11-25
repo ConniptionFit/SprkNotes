@@ -7,8 +7,23 @@
   import { prefs, setPref } from "./prefs.svelte";
   import { menuOptions, deviceLabel } from "./sources";
   import type { Source } from "./types";
-  import { BARS, pushLevel, waveform } from "./waveform";
-  import { untrack } from "svelte";
+  import {
+    SLOTS,
+    ease,
+    flat,
+    gated,
+    pushLevel,
+    rollHeights,
+    rollPush,
+    rollShift,
+    rollStart,
+    rollStep,
+    rollStill,
+    settled,
+    waveform,
+    type Roll,
+  } from "./waveform";
+  import { onDestroy, untrack } from "svelte";
 
   let {
     source,
@@ -23,19 +38,81 @@
     onsource: (s: Source, on: boolean) => void;
   } = $props();
 
-  // A small waveform beside the icon: five bars fed by the last few levels, so speech shows as
-  // movement and a muted or wrong device stays flat. Hidden when off or not transcribing.
+  // A small waveform beside the icon, in the style picked in Settings (waveform.ts): nine bars with
+  // the newest level in the middle (default), or rolling bars that slide right to left. Speech
+  // shows as movement and silence, or a muted or wrong device, settles into a flat line. Levels
+  // arrive about twenty times a second; the bars ease toward them on display frames so the motion
+  // is fluid. Frames run only while something is moving, so a quiet source costs nothing. Hidden
+  // when off or not transcribing.
   const live = $derived(on && level !== null);
-  let history = $state<number[]>(new Array(BARS).fill(0));
+  const style = $derived(prefs.waveStyle);
+  const still = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const canAnimate = !still && typeof requestAnimationFrame === "function";
+
+  // Bars: a short history of levels, and bar heights easing toward the shape they make.
+  let history = $state<number[]>(new Array(SLOTS).fill(0));
+  const target = $derived(waveform(history));
+  let bars = $state<number[]>(flat());
+  // Rolling: columns that enter at the right edge, and how far the row still sits to the right.
+  let roll = $state<Roll>(rollStart());
+  let latest = 0;
+
   $effect(() => {
     if (!live) {
-      history = new Array(BARS).fill(0);
+      history = new Array(SLOTS).fill(0);
+      roll = rollStart();
+      latest = 0;
       return;
     }
     const l = level ?? 0;
-    history = pushLevel(untrack(() => history), l);
+    latest = l;
+    if (untrack(() => style) === "rolling") {
+      if (!canAnimate) roll = rollPush(untrack(() => roll), gated(l));
+      else wake();
+    } else {
+      history = pushLevel(untrack(() => history), l);
+    }
   });
-  const bars = $derived(waveform(history));
+
+  let frame = 0;
+  let last = 0;
+  function tick(now: number) {
+    const dt = last ? now - last : 16;
+    last = now;
+    let moving: boolean;
+    if (style === "rolling") {
+      roll = rollStep(roll, latest, dt);
+      moving = !(rollStill(roll) && gated(latest) === 0);
+      if (!moving) roll = rollStart();
+    } else {
+      bars = ease(bars, target, dt);
+      moving = !settled(bars, target);
+      if (!moving) bars = target;
+    }
+    if (!moving) {
+      frame = 0;
+      last = 0;
+      return;
+    }
+    frame = requestAnimationFrame(tick);
+  }
+  function wake() {
+    if (canAnimate && !frame) frame = requestAnimationFrame(tick);
+  }
+  $effect(() => {
+    const t = target;
+    if (!canAnimate) {
+      bars = t;
+      return;
+    }
+    wake();
+  });
+  onDestroy(() => {
+    if (frame && typeof cancelAnimationFrame === "function") cancelAnimationFrame(frame);
+  });
+  const heights = $derived(style === "rolling" ? rollHeights(roll) : bars);
+  // One column step is a bar plus its gap (2px + 1.5px).
+  const slide = $derived(style === "rolling" && canAnimate ? rollShift(roll) * 3.5 : 0);
 
   let open = $state(false);
   let found = $state<string[]>([]);
@@ -121,8 +198,10 @@
     {/if}
     {#if !on}<span class="slash" aria-hidden="true"></span>{/if}
     {#if live}
-      <span class="wave" aria-hidden="true">
-        {#each bars as b, i (i)}<span style:transform="scaleY({b})"></span>{/each}
+      <span class="wave" class:rolling={style === "rolling"} aria-hidden="true">
+        <span class="row" style:transform={slide ? `translateX(${slide}px)` : undefined}>
+          {#each heights as b, i (i)}<span style:transform="scaleY({b})"></span>{/each}
+        </span>
       </span>
     {/if}
     <svg class="caret" viewBox="0 0 10 10" aria-hidden="true"><path d="M2.5 4l2.5 2.5L7.5 4" /></svg>
@@ -170,10 +249,11 @@
   .src .caret { width: 0.6rem; height: 0.6rem; opacity: 0.7; }
   .src.on.mic { background: var(--me-soft); color: var(--me); border-color: transparent; }
   .src.on.system { background: var(--others-soft); color: var(--others); border-color: transparent; }
-  .wave { display: inline-flex; align-items: center; gap: 2px; height: 1rem; }
-  .wave span { width: 2.5px; height: 100%; border-radius: 2px; background: currentColor; transform-origin: center; transition: transform 60ms linear; }
-  @media (prefers-reduced-motion: reduce) { .wave span { transition: none; } }
-  @media (forced-colors: active) { .wave span { background: CanvasText; } }
+  /* Nine bars of 2px with 1.5px gaps; rolling adds one bar that slides in while another slides out. */
+  .wave { display: inline-flex; justify-content: flex-end; width: 30px; height: 1rem; overflow: hidden; }
+  .wave .row { display: inline-flex; align-items: center; gap: 1.5px; height: 100%; flex: none; will-change: transform; }
+  .wave .row span { width: 2px; height: 100%; border-radius: 1px; background: currentColor; transform-origin: center; will-change: transform; }
+  @media (forced-colors: active) { .wave .row span { background: CanvasText; } }
   .slash { position: absolute; left: 0.45rem; top: 50%; width: 1.15rem; height: 1.5px; background: currentColor; transform: rotate(-45deg); }
   .src:hover { border-color: var(--accent); }
   .src:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

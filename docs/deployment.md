@@ -1,5 +1,16 @@
 # Deployment guides
 
+## Admin deployment form
+
+> [!IMPORTANT]
+> **Open the form: https://conniptionfit.github.io/SprkNotes/**
+>
+> It is the quickest way to deploy SprkNotes to a team. For each setting choose **Not managed**, **Starting value** (the person can change it later) or **Locked** (greyed out in the app), pick the update channel, and it writes:
+> - **`Set-SprkNotesPolicy.ps1`**, the lock script: run it as SYSTEM. It writes `HKLM\Software\Policies\SprkNotes`, a locked-down `%ProgramData%\SprkNotes\policy.json`, or both.
+> - **`Install-SprkNotes-User.ps1`**, the install script: run it as the signed-in user (for example a NinjaOne self-service item). It downloads the newest release on your channel, checks its SHA-256 and installs with your starting values.
+>
+> The form runs entirely in your browser and sends nothing anywhere. To use it offline, open `tools/admin-form/index.html` from this repository. The full walkthrough is in [NinjaOne per user with locked settings](#ninjaone-per-user-with-locked-settings-recommended); the same scripts work in Intune and other RMMs.
+
 For one PC see [install.md](install.md). This page is for fleets. Every method installs the same version; use `scripts/release.ps1` output so the MSIs, MSIX bundle and portable zip always match. Verified paths are marked; everything else is documented but not yet exercised on a managed fleet.
 
 ## What to push
