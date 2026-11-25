@@ -1,19 +1,64 @@
-//! Another app holding the microphone (SPEC 8.3a). Read-only: SprkNotes only looks at whether a
-//! microphone is in use by some other app, never which app or what it hears, and never touches it.
-//! Nothing here is logged; the prompt names no app.
+//! Another app holding the microphone (SPEC 8.3a). Read-only: SprkNotes only looks at which other
+//! apps hold a microphone, never what they hear, and never touches it. App ids and names stay in
+//! memory for the prompt and the user's "Don't ask for this app" list; nothing here is logged.
 
-/// Whether an app other than SprkNotes is using a microphone right now.
+/// The apps other than SprkNotes using a microphone right now, as stable ids (see [`app_id`]).
 pub trait MicUse: Send {
-    fn in_use_by_others(&self) -> bool;
+    fn apps_in_use(&self) -> Vec<String>;
 }
 
 /// Test and non-Windows stand-in: answers whatever it holds.
 #[derive(Clone, Default)]
-pub struct FakeMicUse(pub std::sync::Arc<std::sync::atomic::AtomicBool>);
+pub struct FakeMicUse(pub std::sync::Arc<std::sync::Mutex<Vec<String>>>);
 impl MicUse for FakeMicUse {
-    fn in_use_by_others(&self) -> bool {
-        self.0.load(std::sync::atomic::Ordering::Relaxed)
+    fn apps_in_use(&self) -> Vec<String> {
+        self.0.lock().map(|v| v.clone()).unwrap_or_default()
     }
+}
+
+/// A stable id for a privacy-data entry name. Packaged apps are named by package family
+/// (`Microsoft.Teams_8wekyb3d8bbwe`); unpackaged ones by path with `#` for `\`
+/// (`C:#Users#jo#AppData#Local#Zoom#bin#Zoom.exe`). The path holds user and version folders, so
+/// an unpackaged app is known by its file name alone. Lower case.
+pub fn app_id(entry: &str, packaged: bool) -> String {
+    let id = if packaged {
+        entry
+    } else {
+        entry.rsplit(['#', '\\', '/']).next().unwrap_or(entry)
+    };
+    id.trim().to_lowercase()
+}
+
+/// A readable name for an app id, for the prompt and Settings: `microsoft.teams_8wekyb3d8bbwe`
+/// becomes "Microsoft Teams" and `zoom.exe` becomes "Zoom".
+pub fn display_name(id: &str) -> String {
+    let base = match id.rsplit_once('.') {
+        Some((stem, ext)) if ext.eq_ignore_ascii_case("exe") => stem,
+        _ => id.split('_').next().unwrap_or(id),
+    };
+    let words: Vec<String> = base
+        .split(['.', '_', '-', ' '])
+        .filter(|w| !w.is_empty())
+        .map(|w| {
+            let mut c = w.chars();
+            match c.next() {
+                Some(f) => f.to_uppercase().chain(c).collect(),
+                None => String::new(),
+            }
+        })
+        .collect();
+    if words.is_empty() {
+        "Another app".into()
+    } else {
+        words.join(" ")
+    }
+}
+
+/// The apps still worth asking about: those not on the user's skip list.
+pub fn not_skipped(apps: Vec<String>, skipped: &[String]) -> Vec<String> {
+    apps.into_iter()
+        .filter(|a| !skipped.iter().any(|s| s.eq_ignore_ascii_case(a)))
+        .collect()
 }
 
 /// How long another app must hold the microphone before SprkNotes asks. Long enough that a
@@ -174,8 +219,41 @@ mod tests {
     #[test]
     fn fake_reports_what_it_holds() {
         let f = FakeMicUse::default();
-        assert!(!f.in_use_by_others());
-        f.0.store(true, std::sync::atomic::Ordering::Relaxed);
-        assert!(f.in_use_by_others());
+        assert!(f.apps_in_use().is_empty());
+        f.0.lock().unwrap().push("zoom.exe".into());
+        assert_eq!(f.apps_in_use(), vec!["zoom.exe".to_string()]);
+    }
+
+    #[test]
+    fn app_ids_drop_the_path_of_unpackaged_apps() {
+        assert_eq!(
+            app_id("C:#Users#jo#AppData#Local#Zoom#bin#Zoom.exe", false),
+            "zoom.exe"
+        );
+        assert_eq!(
+            app_id("Microsoft.Teams_8wekyb3d8bbwe", true),
+            "microsoft.teams_8wekyb3d8bbwe"
+        );
+    }
+
+    #[test]
+    fn display_names_read_like_the_app() {
+        assert_eq!(display_name("zoom.exe"), "Zoom");
+        assert_eq!(
+            display_name("microsoft.teams_8wekyb3d8bbwe"),
+            "Microsoft Teams"
+        );
+        assert_eq!(display_name("discord.exe"), "Discord");
+        assert_eq!(display_name("ms-teams.exe"), "Ms Teams");
+        assert_eq!(display_name(""), "Another app");
+    }
+
+    #[test]
+    fn skipped_apps_are_left_out() {
+        let apps = vec!["zoom.exe".to_string(), "discord.exe".to_string()];
+        assert_eq!(
+            not_skipped(apps, &["Zoom.exe".to_string()]),
+            vec!["discord.exe".to_string()]
+        );
     }
 }

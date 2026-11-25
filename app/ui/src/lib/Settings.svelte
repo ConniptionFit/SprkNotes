@@ -168,6 +168,47 @@
 
   <div class="panel">
     <div class="stack">
+      <div class="row">
+        <div class="what">
+          <h3>When another app uses the microphone</h3>
+          <p class="help">
+            While SprkNotes is in the background, offer to start a transcript once a call or another app
+            has held the microphone for a few seconds.
+          </p>
+        </div>
+        <label class="switch">
+          <input
+            type="checkbox"
+            role="switch"
+            checked={prefs.micPromptOn}
+            onchange={(e) => setPref("micPromptOn", e.currentTarget.checked)}
+          />
+          <span class="track" aria-hidden="true"></span>
+          <span class="sr-only">Offer to start when another app uses the microphone</span>
+        </label>
+      </div>
+      {#if prefs.micPromptSkip.length > 0}
+        <div class="what">
+          <p class="plain">Not asking for</p>
+          <ul class="skipped">
+            {#each prefs.micPromptSkip as a (a.id)}
+              <li>
+                <span>{a.name}</span>
+                <button
+                  class="small"
+                  aria-label={`Ask again for ${a.name}`}
+                  onclick={() => setPref("micPromptSkip", prefs.micPromptSkip.filter((s) => s.id !== a.id))}
+                >Ask again</button>
+              </li>
+            {/each}
+          </ul>
+        </div>
+      {/if}
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="stack">
       <h3>Misc</h3>
     <div class="row">
       <div class="what">
@@ -219,4 +260,12 @@
   input:checked + .track::after { transform: translateX(20px); background: var(--on-accent); }
   .switch:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 13px; }
   .help { margin: 0; color: var(--muted); font-size: 0.9rem; max-width: 34rem; }
+  .skipped { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.35rem; }
+  .skipped li { display: flex; align-items: center; justify-content: space-between; gap: 1rem; max-width: 34rem; }
+  .small {
+    padding: 0.25rem 0.75rem; border-radius: 999px; border: 1px solid var(--border);
+    background: transparent; color: var(--text); font: inherit; font-size: 0.85rem; cursor: pointer;
+  }
+  .small:hover { background: var(--surface-2); }
+  .small:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 </style>

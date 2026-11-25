@@ -1,9 +1,9 @@
 //! Windows: is another app using a microphone? Reads the per-user privacy data Windows keeps
 //! for the microphone (`CapabilityAccessManager\ConsentStore\microphone`, the same data behind the
 //! microphone icon in the taskbar). Read-only registry access; nothing is opened, changed or
-//! logged, and no app name leaves this module.
+//! logged; app ids go only to the prompt.
 #![allow(unsafe_code)]
-use crate::mic_use::{entry_in_use, filetime_from_unix, MicUse, MAX_USE_SECS};
+use crate::mic_use::{app_id, entry_in_use, filetime_from_unix, MicUse, MAX_USE_SECS};
 use windows::core::{w, PCWSTR, PWSTR};
 use windows::Win32::Foundation::ERROR_SUCCESS;
 use windows::Win32::System::Registry::{
@@ -109,32 +109,40 @@ fn qword(key: &Key, sub: &str, value: PCWSTR) -> u64 {
     }
 }
 
-fn any_in_use(key: &Key, now: u64, skip: &dyn Fn(&str) -> bool) -> bool {
-    subkeys(key).iter().any(|name| {
-        name != "NonPackaged"
-            && !skip(name)
+fn in_use(key: &Key, now: u64, packaged: bool, skip: &dyn Fn(&str) -> bool, out: &mut Vec<String>) {
+    for name in subkeys(key) {
+        if name != "NonPackaged"
+            && !skip(&name)
             && entry_in_use(
-                qword(key, name, w!("LastUsedTimeStart")),
-                qword(key, name, w!("LastUsedTimeStop")),
+                qword(key, &name, w!("LastUsedTimeStart")),
+                qword(key, &name, w!("LastUsedTimeStop")),
                 now,
                 MAX_USE_SECS,
             )
-    })
+        {
+            let id = app_id(&name, packaged);
+            if !out.contains(&id) {
+                out.push(id);
+            }
+        }
+    }
 }
 
 impl MicUse for RegistryMicUse {
-    fn in_use_by_others(&self) -> bool {
+    fn apps_in_use(&self) -> Vec<String> {
+        let mut out = Vec::new();
         let Some(store) = open(HKEY_CURRENT_USER, STORE) else {
-            return false;
+            return out;
         };
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| filetime_from_unix(d.as_secs()))
             .unwrap_or(0);
         let skip = |n: &str| self.is_own(n);
-        if any_in_use(&store, now, &skip) {
-            return true;
+        in_use(&store, now, true, &skip, &mut out);
+        if let Some(np) = open(store.0, w!("NonPackaged")) {
+            in_use(&np, now, false, &skip, &mut out);
         }
-        open(store.0, w!("NonPackaged")).is_some_and(|np| any_in_use(&np, now, &skip))
+        out
     }
 }

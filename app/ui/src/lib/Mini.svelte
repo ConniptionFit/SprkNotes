@@ -6,6 +6,7 @@
   import Light from "./Light.svelte";
   import IconButton from "./IconButton.svelte";
   import CaptionWords from "./CaptionWords.svelte";
+  import { askText, skipLabel, withSkipped, NO_ASK, type MicAsk } from "./micAsk";
 
   // Plenty of history for a tall drawer; whatever does not fit is clipped at the top.
   const MAX_LINES = 12;
@@ -59,10 +60,20 @@
   }
 
   // Another app has held the microphone for a while and SprkNotes is in the background.
-  let micAsk = $state(false);
+  let micAsk = $state<MicAsk>(NO_ASK);
   function answerMic(start: boolean) {
-    micAsk = false;
+    micAsk = NO_ASK;
     api?.micPromptAnswer(start).catch(() => {});
+  }
+  // "Don't ask for <App>": remember the app (kept in the app settings on this PC), tell the
+  // shell, then take the question down.
+  function skipMicApps() {
+    const skip = withSkipped(prefs.micPromptSkip, micAsk.apps);
+    setPref("micPromptSkip", skip);
+    api
+      ?.setMicPrompt(prefs.micPromptOn, skip.map((a) => a.id))
+      .catch(() => {})
+      .finally(() => answerMic(false));
   }
 
   let nextId = 0;
@@ -124,8 +135,8 @@
         }),
       );
       offs.push(await b.onMiniFlip((f) => (flipped = f)));
-      offs.push(await b.onMicPrompt((up) => (micAsk = up)));
-      b.micPromptPending().then((up) => (micAsk = up)).catch(() => {});
+      offs.push(await b.onMicPrompt((a) => (micAsk = a)));
+      b.micPromptPending().then((a) => (micAsk = a)).catch(() => {});
       b.assistantStatus().then((a) => (assistant = a)).catch(() => {});
       flipped = await b.miniFlipped();
     });
@@ -304,13 +315,16 @@
       {/if}
     </div>
 
-    {#if micAsk && status === "ready"}
+    {#if micAsk.up && status === "ready"}
       <div class="ask" role="alertdialog" aria-labelledby="mic-ask">
-        <p id="mic-ask">Your microphone is in use. Start a transcript?</p>
+        <p id="mic-ask">{askText(micAsk.apps)}</p>
         <div class="ask-buttons">
           <button class="go" onclick={() => answerMic(true)}>Start</button>
           <button onclick={() => answerMic(false)}>Dismiss</button>
         </div>
+        {#if micAsk.apps.length > 0}
+          <button class="skip" onclick={skipMicApps}>{skipLabel(micAsk.apps)}</button>
+        {/if}
       </div>
     {/if}
     {#if catchUp}
@@ -450,7 +464,7 @@
   .ask {
     display: flex; align-items: center; gap: 0.75rem; max-width: 26rem; padding: 0.55rem 0.6rem 0.55rem 0.9rem;
     border: 1px solid var(--border); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow);
-    font-size: 0.92rem; animation: drawer-in 180ms ease-out;
+    flex-wrap: wrap; font-size: 0.92rem; animation: drawer-in 180ms ease-out;
   }
   .ask p { margin: 0; }
   .ask-buttons { display: flex; gap: 0.35rem; flex: none; }
@@ -459,6 +473,7 @@
   .ask button.go { background: var(--accent); color: var(--on-accent); border-color: transparent; }
   .ask button.go:hover { background: var(--accent-hover); }
   .ask button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .ask button.skip { flex-basis: 100%; text-align: left; border: none; padding: 0.15rem 0.3rem; font-weight: 400; color: var(--muted); text-decoration: underline; text-underline-offset: 2px; }
   @media (prefers-reduced-motion: reduce) { .ask { animation: none; } }
   .catchup {
     position: relative; max-width: 26rem; margin-top: 0.4rem; padding: 0.6rem 1.8rem 0.6rem 0.8rem;

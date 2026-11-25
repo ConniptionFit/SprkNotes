@@ -504,10 +504,16 @@ fn set_captions(app: AppHandle, on: bool, me: bool) {
     shell::set_captions(&app, on, me);
 }
 
-/// Whether "Start a transcript?" is up in the mini (SPEC 8.3a).
+/// Whether "Start a transcript?" is up in the mini, and which apps it is about (SPEC 8.3a).
 #[tauri::command]
-fn mic_prompt_pending(app: AppHandle) -> bool {
-    shell::mic_prompt_up(&app)
+fn mic_prompt_pending(app: AppHandle) -> shell::MicAsk {
+    shell::mic_prompt_state(&app)
+}
+
+/// Settings for "Start a transcript?": on or off, and the apps not to ask about.
+#[tauri::command]
+fn set_mic_prompt(app: AppHandle, enabled: bool, skipped: Vec<String>) {
+    shell::set_mic_prompt(&app, enabled, skipped);
 }
 
 /// The answer to "Start a transcript?": Start begins a session, Dismiss takes it down.
@@ -593,6 +599,7 @@ fn main() -> anyhow::Result<()> {
             set_captions,
             mic_prompt_pending,
             mic_prompt_answer,
+            set_mic_prompt,
             set_brand,
             open_app,
             model_status,

@@ -61,6 +61,26 @@ pub struct Shell {
     mic_prompt: AtomicBool,
     /// The mini was shown for that question alone, so answering it hides the mini again.
     mini_for_prompt: AtomicBool,
+    /// The user turned that question off in Settings.
+    mic_prompt_off: AtomicBool,
+    /// Apps the user said not to ask about (ids from the privacy data, lower case).
+    mic_prompt_skip: Mutex<Vec<String>>,
+    /// The apps the question is about while it is up.
+    mic_prompt_apps: Mutex<Vec<MicApp>>,
+}
+
+/// An app holding the microphone, as the prompt and Settings show it. Kept in memory only.
+#[derive(Clone, Serialize)]
+pub struct MicApp {
+    pub id: String,
+    pub name: String,
+}
+
+/// What the mini shows: whether the question is up, and which apps it is about.
+#[derive(Clone, Serialize, Default)]
+pub struct MicAsk {
+    pub up: bool,
+    pub apps: Vec<MicApp>,
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -356,9 +376,59 @@ pub fn mic_prompt_up(app: &AppHandle) -> bool {
     app.state::<Shell>().mic_prompt.load(Ordering::SeqCst)
 }
 
-/// Ask "Start a transcript?" in the mini. Only while in the background and no session runs:
-/// with the main window open the Start button is already in view.
-pub fn show_mic_prompt(app: &AppHandle) {
+/// The question as the mini shows it.
+pub fn mic_prompt_state(app: &AppHandle) -> MicAsk {
+    let shell = app.state::<Shell>();
+    MicAsk {
+        up: shell.mic_prompt.load(Ordering::SeqCst),
+        apps: shell
+            .mic_prompt_apps
+            .lock()
+            .map(|a| a.clone())
+            .unwrap_or_default(),
+    }
+}
+
+/// The apps holding the microphone that are worth asking about: none while the question is
+/// turned off, and none on the user's skip list.
+pub fn mic_prompt_wanted(app: &AppHandle, apps: Vec<String>) -> Vec<String> {
+    let shell = app.state::<Shell>();
+    if shell.mic_prompt_off.load(Ordering::SeqCst) {
+        return Vec::new();
+    }
+    let skip = shell
+        .mic_prompt_skip
+        .lock()
+        .map(|s| s.clone())
+        .unwrap_or_default();
+    sprk_context::mic_use::not_skipped(apps, &skip)
+}
+
+/// Settings for the question: on or off, and the apps not to ask about. Turning it off, or
+/// skipping the apps it is about, takes it down.
+pub fn set_mic_prompt(app: &AppHandle, enabled: bool, skipped: Vec<String>) {
+    let shell = app.state::<Shell>();
+    shell.mic_prompt_off.store(!enabled, Ordering::SeqCst);
+    let skipped: Vec<String> = skipped.into_iter().map(|s| s.to_lowercase()).collect();
+    let showing: Vec<String> = shell
+        .mic_prompt_apps
+        .lock()
+        .map(|a| a.iter().map(|m| m.id.clone()).collect())
+        .unwrap_or_default();
+    if let Ok(mut s) = shell.mic_prompt_skip.lock() {
+        *s = skipped.clone();
+    }
+    let all_skipped =
+        !showing.is_empty() && sprk_context::mic_use::not_skipped(showing, &skipped).is_empty();
+    if !enabled || all_skipped {
+        hide_mic_prompt(app);
+    }
+}
+
+/// Ask "Start a transcript?" in the mini, naming the apps holding the microphone. Only while
+/// in the background and no session runs: with the main window open the Start button is
+/// already in view.
+pub fn show_mic_prompt(app: &AppHandle, apps: Vec<String>) {
     if !main_away(app) || status_of(app) != "ready" {
         return;
     }
@@ -366,13 +436,22 @@ pub fn show_mic_prompt(app: &AppHandle) {
         return;
     };
     let shell = app.state::<Shell>();
+    if let Ok(mut a) = shell.mic_prompt_apps.lock() {
+        *a = apps
+            .into_iter()
+            .map(|id| MicApp {
+                name: sprk_context::mic_use::display_name(&id),
+                id,
+            })
+            .collect();
+    }
     shell.mic_prompt.store(true, Ordering::SeqCst);
     if !mini.is_visible().unwrap_or(false) {
         place_mini(app, &mini);
         let _ = mini.show();
         shell.mini_for_prompt.store(true, Ordering::SeqCst);
     }
-    let _ = mini.emit("mic-prompt", true);
+    let _ = mini.emit("mic-prompt", mic_prompt_state(app));
 }
 
 /// Take the question down (answered, the call ended, or the main window came back). A mini
@@ -382,8 +461,11 @@ pub fn hide_mic_prompt(app: &AppHandle) {
     if !shell.mic_prompt.swap(false, Ordering::SeqCst) {
         return;
     }
+    if let Ok(mut a) = shell.mic_prompt_apps.lock() {
+        a.clear();
+    }
     if let Some(mini) = app.get_webview_window("mini") {
-        let _ = mini.emit("mic-prompt", false);
+        let _ = mini.emit("mic-prompt", MicAsk::default());
         if shell.mini_for_prompt.swap(false, Ordering::SeqCst) && status_of(app) == "ready" {
             save_positions(app);
             let _ = mini.hide();

@@ -1,4 +1,5 @@
 import type { AppUpdateInfo, AppUpdateStatus, AssistantRequest, AssistantModelStatus, AssistantResponse, AssistantStatus, Caption, DownloadProgress, ExportFormat, LibraryEntry, Line, ModelStatus, Phase, Source, Status, Summarized, TranscriptView, UpdateInfo } from "./types";
+import { asAsk, NO_ASK, type MicAsk } from "./micAsk";
 
 /** Typed surface between the UI and the Rust side. Every command has a matching Tauri command. */
 export interface Backend {
@@ -30,9 +31,11 @@ export interface Backend {
   onMiniFlip(cb: (flipped: boolean) => void): Promise<() => void>;
   /** "Start a transcript?" while another app holds the microphone and the app is in the
    * background (SPEC 8.3a): whether it is up now, changes to it, and the answer. */
-  micPromptPending(): Promise<boolean>;
-  onMicPrompt(cb: (up: boolean) => void): Promise<() => void>;
+  micPromptPending(): Promise<MicAsk>;
+  onMicPrompt(cb: (ask: MicAsk) => void): Promise<() => void>;
   micPromptAnswer(start: boolean): Promise<void>;
+  /** Turn the question on or off, and set the apps (ids) it should not ask about. */
+  setMicPrompt(enabled: boolean, skipped: string[]): Promise<void>;
   /** Tell the engine which caption sources are wanted, so unused ones cost nothing. */
   setCaptions(on: boolean, me: boolean): Promise<void>;
   /** Swap the tray and window icons between the current brand and Throwback Mode. */
@@ -115,9 +118,10 @@ async function tauri(): Promise<Backend> {
     miniResize: (width, height, flipped) => invoke("mini_resize", { width, height, flipped }),
     miniFlipped: () => invoke<boolean>("mini_flipped"),
     onMiniFlip: (cb) => listen<boolean>("mini-flip", (e) => cb(e.payload)),
-    micPromptPending: () => invoke<boolean>("mic_prompt_pending"),
-    onMicPrompt: (cb) => listen<boolean>("mic-prompt", (e) => cb(e.payload)),
+    micPromptPending: () => invoke<unknown>("mic_prompt_pending").then(asAsk),
+    onMicPrompt: (cb) => listen<unknown>("mic-prompt", (e) => cb(asAsk(e.payload))),
     micPromptAnswer: (start) => invoke("mic_prompt_answer", { start }),
+    setMicPrompt: (enabled, skipped) => invoke("set_mic_prompt", { enabled, skipped }),
     setCaptions: (on, me) => invoke("set_captions", { on, me }),
     setBrand: (throwback) => invoke("set_brand", { throwback }),
     onCaption: (cb) => listen<Caption>("caption", (e) => cb(e.payload)),
@@ -350,9 +354,13 @@ export function mockBackend(): Backend {
     miniFlipped: async () => typeof location !== "undefined" && location.search.includes("flip"),
     onMiniFlip: async () => () => {},
     // Preview the question with ?mic in the overlay's address.
-    micPromptPending: async () => typeof location !== "undefined" && location.search.includes("mic"),
+    micPromptPending: async () =>
+      typeof location !== "undefined" && location.search.includes("mic")
+        ? { up: true, apps: [{ id: "zoom.exe", name: "Zoom" }] }
+        : NO_ASK,
     onMicPrompt: async () => () => {},
     micPromptAnswer: async () => {},
+    setMicPrompt: async () => {},
     setCaptions: async () => {},
     setBrand: async () => {},
     onCaption: async (cb) => ((capCb = cb), () => {}),

@@ -52,6 +52,11 @@
   $effect(() => {
     api?.setCaptions(...captionFlags()).catch(() => {});
   });
+  // "Start a transcript?" settings (SPEC 8.3a): on or off, and the apps not to ask about.
+  $effect(() => {
+    const ids = prefs.micPromptSkip.map((a) => a.id);
+    api?.setMicPrompt(prefs.micPromptOn, ids).catch(() => {});
+  });
   $effect(() => {
     if (status === "ready") {
       speaking.clear();

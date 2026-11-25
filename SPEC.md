@@ -368,9 +368,11 @@ Scheduled Teams and Zoom meetings live on the user's Outlook calendar, so one lo
 
 ### 8.3a Offer to start when another app uses the microphone
 - While SprkNotes is in the background (main window minimized or closed to the tray) and no session is running, it checks every 2 s whether another app holds a microphone, using the per-user Windows microphone privacy data (`CapabilityAccessManager\ConsentStore\microphone`, the data behind the taskbar microphone icon). Read-only; SprkNotes' own entries are skipped, and an entry that started more than 12 hours ago with no stop is treated as stale.
-- After 5 s of continuous use the overlay appears with "Your microphone is in use. Start a transcript?" and two buttons: **Start** (begins a session; the overlay stays as its controller) and **Dismiss**.
+- After 5 s of continuous use the overlay appears with "<App> is using your microphone. Start a transcript?" (two or three apps are listed by name) and three buttons: **Start** (begins a session; the overlay stays as its controller), **Dismiss**, and **Don't ask for <App>** ("these apps" for more than one).
+- An app is known by its privacy-data entry: the package family for a Store app, the file name of the executable for any other (its folder holds user and version names, so it is dropped). Its shown name comes from that id (`Microsoft.Teams_8wekyb3d8bbwe` reads "Microsoft Teams", `Zoom.exe` reads "Zoom").
 - One question per hold: answered or dismissed, it is not asked again until the other app lets go of the microphone. A hold during which a session ran counts as answered. The question is taken down if the other app lets go first, a session starts, or the main window comes back.
-- Which app holds the microphone is never shown, stored or logged.
+- **Don't ask for <App>** adds the app to a skip list; an app on it never starts the 5 s count. Settings has a switch, **When another app uses the microphone** (on by default), that turns the question off altogether, and lists the skipped apps by name with **Ask again** for each. Both are kept in the app's settings on this PC, so they last across restarts. Turning the switch off, or skipping the apps a question is about, takes that question down.
+- App ids and names are kept in memory while the question is up; only the skip list the user builds is stored. They are never logged.
 
 ### 8.4 Library
 - List of transcripts (newest first): name, date, duration, folder. Search by name and full text.

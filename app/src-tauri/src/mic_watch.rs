@@ -1,8 +1,9 @@
 //! Offer a transcript when another app starts using the microphone (SPEC 8.3a). While
 //! SprkNotes runs in the background with no session, it looks every two seconds at whether some
 //! other app holds a microphone (Windows microphone privacy data, read-only). After a few seconds of that,
-//! the mini asks "Start a transcript?" with Start and Dismiss. Nothing is logged or stored, and
-//! the question names no app.
+//! the mini asks "<App> is using your microphone. Start a transcript?" with Start, Dismiss and
+//! "Don't ask for <App>". The question can be turned off in Settings. Nothing is logged; the app
+//! names stay in memory, and only the skip list the user builds is kept (in the app settings).
 use sprk_context::mic_use::{MicPrompt, MicUse, MicWatch};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager};
@@ -41,12 +42,17 @@ fn run(app: AppHandle, source: Box<dyn MicUse>) {
             .map(|h| h.is_some())
             .unwrap_or(true);
         // Reading the data is cheap, but skip it entirely while a session runs.
-        let in_use = busy || source.in_use_by_others();
+        let apps = if busy {
+            Vec::new()
+        } else {
+            crate::shell::mic_prompt_wanted(&app, source.apps_in_use())
+        };
+        let in_use = busy || !apps.is_empty();
         let now = began.elapsed().as_millis() as u64;
         match watch.poll(now, in_use, busy) {
             MicPrompt::Ask => {
                 let a = app.clone();
-                let _ = app.run_on_main_thread(move || crate::shell::show_mic_prompt(&a));
+                let _ = app.run_on_main_thread(move || crate::shell::show_mic_prompt(&a, apps));
             }
             MicPrompt::Withdraw => {
                 let a = app.clone();
