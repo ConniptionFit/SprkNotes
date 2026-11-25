@@ -322,6 +322,67 @@ async fn update_install() -> Result<Option<String>, String> {
     Ok(v)
 }
 
+/// "Update now": refuse mid-session, download and verify with progress in Settings, then close
+/// SprkNotes and hand over to the installer, which shows its own progress and starts the app
+/// again when it is done. Returns None when this is already the newest version.
+#[tauri::command]
+async fn update_now(app: AppHandle, state: State<'_, AppState>) -> Result<Option<String>, String> {
+    let p = policy();
+    updater::can_update_now(&p)?;
+    if state.host.lock().map(|h| h.is_some()).unwrap_or(true) {
+        return Err("End the transcript first, then update.".into());
+    }
+    let a = app.clone();
+    let v = tauri::async_runtime::spawn_blocking(move || {
+        let mut last: Option<u8> = None;
+        updater::fetch_update_with(&p, &mut |done, total| {
+            let pct = sprk_update::percent(done, total);
+            if pct != last {
+                last = pct;
+                let _ = a.emit(
+                    "app-update-progress",
+                    updater::UpdateProgress {
+                        stage: "download",
+                        percent: pct,
+                    },
+                );
+            }
+        })
+    })
+    .await
+    .map_err(|_| "The update was interrupted.".to_string())??;
+    let Some(v) = v else {
+        return Ok(None);
+    };
+    // A session may have started while the download ran.
+    if state.host.lock().map(|h| h.is_some()).unwrap_or(true) {
+        updater::request_install();
+        return Err(
+            "A transcript started, so the update installs when you close SprkNotes.".into(),
+        );
+    }
+    let _ = app.emit(
+        "app-update-progress",
+        updater::UpdateProgress {
+            stage: "install",
+            percent: None,
+        },
+    );
+    if !updater::install_and_relaunch() {
+        updater::request_install();
+        return Err(
+            "The installer did not start. The update installs when you close SprkNotes.".into(),
+        );
+    }
+    // Leave a moment for the window to show "Installing", then close for the installer.
+    let a = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(600));
+        a.exit(0);
+    });
+    Ok(Some(v))
+}
+
 /// What the window is busy doing while it works: `loading` (with the model's name) at Start,
 /// `ending` while the transcript is closed off, `idle` otherwise.
 #[derive(Serialize, Clone)]
@@ -621,6 +682,7 @@ fn main() -> anyhow::Result<()> {
             update_check,
             update_set,
             update_install,
+            update_now,
             assistant::assistant_status,
             assistant::assistant_set,
             assistant::assistant_cancel,

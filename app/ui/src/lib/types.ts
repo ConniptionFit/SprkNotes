@@ -33,6 +33,8 @@ export type AppUpdateStatus = {
   /** Per-machine install: a background task keeps it current. */
   managedInstall: boolean;
 };
+/** Mirrors the Rust `UpdateProgress`: "Update now" downloading (percent when the size is known), then installing. */
+export type AppUpdateProgress = { stage: "download" | "install"; percent?: number | null };
 export type AppUpdateInfo = { available: boolean; version?: string | null; notesUrl?: string | null };
 
 /** Mirrors the Rust `AssistantModelStatus` (camelCase): Ask Sprk model packs on this PC. No network call behind it. */

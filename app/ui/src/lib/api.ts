@@ -1,4 +1,4 @@
-import type { AppUpdateInfo, AppUpdateStatus, AssistantRequest, AssistantModelStatus, AssistantResponse, AssistantStatus, Caption, DownloadProgress, ExportFormat, LibraryEntry, Line, ModelStatus, Phase, Source, Status, Summarized, TranscriptView, UpdateInfo } from "./types";
+import type { AppUpdateInfo, AppUpdateProgress, AppUpdateStatus, AssistantRequest, AssistantModelStatus, AssistantResponse, AssistantStatus, Caption, DownloadProgress, ExportFormat, LibraryEntry, Line, ModelStatus, Phase, Source, Status, Summarized, TranscriptView, UpdateInfo } from "./types";
 import { asAsk, NO_ASK, type MicAsk } from "./micAsk";
 
 /** Typed surface between the UI and the Rust side. Every command has a matching Tauri command. */
@@ -21,6 +21,11 @@ export interface Backend {
   appUpdateSet(change: { channel?: string; repoUrl?: string; mode?: string }): Promise<void>;
   /** Downloads and verifies; installs when the app closes. Resolves to the new version, or null. */
   appUpdateInstall(): Promise<string | null>;
+  /** "Update now": downloads with progress, then closes SprkNotes, installs with Windows Installer's
+   * progress window and starts the app again. Resolves to the new version, or null when current.
+   * Rejects with a short sentence (for example while a transcript is running). */
+  appUpdateNow(): Promise<string | null>;
+  onAppUpdateProgress(cb: (p: AppUpdateProgress) => void): Promise<() => void>;
   onModelDownload(cb: (p: DownloadProgress) => void): Promise<() => void>;
   onModelUpdate(cb: (u: UpdateInfo) => void): Promise<() => void>;
   /** Overlay only: size the floating window to its content (logical pixels). */
@@ -115,6 +120,8 @@ async function tauri(): Promise<Backend> {
     appUpdateCheck: () => invoke("update_check"),
     appUpdateSet: ({ channel, repoUrl, mode }) => invoke("update_set", { channel, repoUrl, mode }),
     appUpdateInstall: () => invoke("update_install"),
+    appUpdateNow: () => invoke("update_now"),
+    onAppUpdateProgress: (cb) => listen<AppUpdateProgress>("app-update-progress", (e) => cb(e.payload)),
     onModelDownload: (cb) => listen<DownloadProgress>("model-download", (e) => cb(e.payload)),
     onModelUpdate: (cb) => listen<UpdateInfo>("model-update", (e) => cb(e.payload)),
     miniResize: (width, height, flipped) => invoke("mini_resize", { width, height, flipped }),
@@ -261,6 +268,7 @@ export function mockBackend(): Backend {
   // Preview switches for the browser mock: ?model=missing | managed | update
   const flag = typeof location !== "undefined" ? new URLSearchParams(location.search).get("model") : null;
   let ready = flag !== "missing" && flag !== "managed";
+  let updCb: (p: AppUpdateProgress) => void = () => {};
   let dlCb: (p: DownloadProgress) => void = () => {};
   let capCb: (c: Caption) => void = () => {};
   const stamp = () => {
@@ -336,6 +344,15 @@ export function mockBackend(): Backend {
       if (channel) upd.channel = channel as typeof upd.channel;
     },
     appUpdateInstall: async () => "0.2.0-beta.1",
+    appUpdateNow: async () => {
+      for (let pct = 0; pct <= 100; pct += 20) {
+        updCb({ stage: "download", percent: pct });
+        await new Promise((r) => setTimeout(r, 300));
+      }
+      updCb({ stage: "install" });
+      return "0.2.0-beta.1";
+    },
+    onAppUpdateProgress: async (cb) => ((updCb = cb), () => {}),
     modelDownload: async () => {
       const total = 640_000_000;
       let done = 0;
