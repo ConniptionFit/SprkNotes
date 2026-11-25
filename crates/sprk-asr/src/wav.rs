@@ -98,26 +98,6 @@ pub fn read_file(path: &std::path::Path) -> Result<Audio, WavError> {
     parse(&bytes)
 }
 
-/// Linear-interpolation resample to 16 kHz mono (adequate for speech input to the engines).
-pub fn to_16k(audio: &Audio) -> Vec<f32> {
-    const TARGET: u32 = 16_000;
-    if audio.sample_rate == TARGET || audio.samples.is_empty() {
-        return audio.samples.clone();
-    }
-    let ratio = f64::from(audio.sample_rate) / f64::from(TARGET);
-    let n = (audio.samples.len() as f64 / ratio) as usize;
-    (0..n)
-        .map(|i| {
-            let p = i as f64 * ratio;
-            let i0 = p as usize;
-            let frac = (p - i0 as f64) as f32;
-            let a = audio.samples.get(i0).copied().unwrap_or(0.0);
-            let b = audio.samples.get(i0 + 1).copied().unwrap_or(a);
-            a + (b - a) * frac
-        })
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -167,19 +147,5 @@ mod tests {
         let len = w.len();
         w[len - 8..len - 4].copy_from_slice(&u32::MAX.to_le_bytes()); // data size lies
         assert_eq!(parse(&w).unwrap().samples.len(), 2);
-    }
-
-    #[test]
-    fn resamples_48k_to_16k() {
-        let a = Audio {
-            sample_rate: 48_000,
-            samples: vec![0.0; 4800],
-        };
-        assert_eq!(to_16k(&a).len(), 1600);
-        let same = Audio {
-            sample_rate: 16_000,
-            samples: vec![0.1; 10],
-        };
-        assert_eq!(to_16k(&same), same.samples);
     }
 }

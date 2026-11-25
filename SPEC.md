@@ -143,7 +143,7 @@ sprknotes/
 - **System:** WASAPI loopback on the user-selected output (default: the default *communications* render device, where call audio plays, else the console default). Follow default-device changes (headset plugged in, Bluetooth connects) without stopping the session.
 - Either source can be toggled off. Labels: mic = **Me**, loopback = **Others**, or the remote person's name on a confirmed 1:1 call (section 19).
 - The two streams are never mixed: each has its own VAD and utterance queue, and the label comes from the stream. The devices in use are written to the transcript as event lines ("Microphone: ...", "Others audio: ...") at the start and whenever they change (ADR-014).
-- Convert to 16 kHz mono f32 in the pipeline. Audio stays in in-memory ring buffers only.
+- Convert to 16 kHz mono f32 in the pipeline, low-pass filtered first (Kaiser-windowed sinc, pass band to 7 kHz, at least 60 dB down from 8 kHz) so sound above 8 kHz does not fold into the speech band. WAV input in `sprkctl` uses the same filter. Audio stays in in-memory ring buffers only.
 
 ### 4.2 Bleed removal (three layers)
 1. **Windows AEC:** open the mic stream as a communications stream; if `IAcousticEchoCancellationControl` is available, set the render endpoint being looped back as the AEC reference.

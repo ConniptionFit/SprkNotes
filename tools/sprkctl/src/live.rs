@@ -6,7 +6,7 @@ use anyhow::{bail, Context, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use ringbuf::traits::{Consumer, Producer, Split};
 use ringbuf::HeapRb;
-use sprk_audio::LinearResampler;
+use sprk_audio::Resampler;
 use std::time::{Duration, Instant};
 
 pub fn list_devices() -> Result<()> {
@@ -79,7 +79,7 @@ pub fn transcribe_mic(a: &Args) -> Result<()> {
     };
     stream.play()?;
 
-    let mut resampler = LinearResampler::new(rate, 16_000);
+    let mut resampler = Resampler::new(rate, 16_000);
     let start = Instant::now();
     let mut buf = vec![0.0f32; 4096];
     while start.elapsed() < Duration::from_secs(seconds) {
