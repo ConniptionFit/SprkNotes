@@ -3,7 +3,7 @@
   Installs (or removes) SprkNotes silently, picking the MSI that matches the OS architecture.
 .DESCRIPTION
   Put this script next to SprkNotes_<ver>_x64.msi and SprkNotes_<ver>_arm64.msi. Use it from NinjaOne
-  or any RMM. Logs to %ProgramData%\SprkNotes\install.log. Uninstall never deletes transcripts.
+  or any RMM. Logs to %LocalAppData%\SprkNotes\install (per user) or %ProgramData%\SprkNotes (-Machine). Uninstall never deletes transcripts.
 .PARAMETER Machine
   Install for all users (ALLUSERS=1, needs elevation). Default is per-user.
 .PARAMETER Uninstall
@@ -14,6 +14,11 @@
   Write those values as admin policy so users cannot change them (LOCK_UPDATES=1; per-machine for a real lock).
 .PARAMETER NoUpdateTask
   With -Machine, do not create the SYSTEM update task (UPDATE_TASK=0).
+.PARAMETER Defaults
+  Starting values for any setting, "Key=Value;Key=Value" (MSI switch DEFAULTS). Users may change them.
+.PARAMETER Policy
+  Locked values, same format (MSI switch POLICY). Only a -Machine install puts them out of the user's
+  reach; for per-user installs lock settings with the SYSTEM script from tools/admin-form.
 #>
 [CmdletBinding()]
 param(
@@ -22,9 +27,11 @@ param(
   [string]$RepoUrl = '',
   [ValidateSet('', 'off', 'notify', 'auto', 'force')][string]$Mode = '',
   [string]$PublicKey = '',
-  [switch]$Lock, [switch]$NoUpdateTask)
+  [switch]$Lock, [switch]$NoUpdateTask,
+  [string]$Defaults = '', [string]$Policy = '')
 $ErrorActionPreference = 'Stop'
-$logDir = Join-Path $env:ProgramData 'SprkNotes'
+# Per-user installs log in the user's own profile; per-machine ones in ProgramData.
+$logDir = if ($Machine) { Join-Path $env:ProgramData 'SprkNotes' } else { Join-Path $env:LOCALAPPDATA 'SprkNotes\install' }
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $log = Join-Path $logDir 'install.log'
 function Say($m) { "$(Get-Date -Format s) $m" | Tee-Object -FilePath $log -Append | Write-Host }
@@ -44,6 +51,8 @@ if (-not $Uninstall) {
   if ($PublicKey) { $args += "UPDATE_PUBLIC_KEY=`"$PublicKey`"" }
   if ($Lock) { $args += 'LOCK_UPDATES=1' }
   if ($NoUpdateTask) { $args += 'UPDATE_TASK=0' }
+  if ($Defaults) { $args += "DEFAULTS=`"$Defaults`"" }
+  if ($Policy) { $args += "POLICY=`"$Policy`"" }
 }
 Say "msiexec $($args -join ' ')"
 $p = Start-Process msiexec.exe -ArgumentList $args -Wait -PassThru

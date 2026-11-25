@@ -115,8 +115,11 @@ fn utf16(bytes: &[u8]) -> Vec<u16> {
         .collect()
 }
 
-impl PolicyStore for RegistryPolicy {
-    fn get(&self, key: &str) -> Option<String> {
+/// The value the installer's `POLICY` / `DEFAULTS` switch writes: `Key=Value;Key=Value`.
+const PACKED: &str = "Settings";
+
+impl RegistryPolicy {
+    fn single(&self, key: &str) -> Option<String> {
         let (kind, bytes) = self.raw(key)?;
         if kind == REG_DWORD && bytes.len() >= 4 {
             return Some(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]).to_string());
@@ -129,6 +132,19 @@ impl PolicyStore for RegistryPolicy {
         None
     }
 
+    fn packed(&self) -> crate::FilePolicy {
+        self.single(PACKED)
+            .map(|t| crate::packed(&t))
+            .unwrap_or_default()
+    }
+}
+
+impl PolicyStore for RegistryPolicy {
+    /// A value of its own wins over the same key in the packed `Settings` value.
+    fn get(&self, key: &str) -> Option<String> {
+        self.single(key).or_else(|| self.packed().get(key))
+    }
+
     fn get_multi(&self, key: &str) -> Vec<String> {
         match self.raw(key) {
             Some((kind, bytes)) if kind == REG_MULTI_SZ => utf16(&bytes)
@@ -136,7 +152,8 @@ impl PolicyStore for RegistryPolicy {
                 .map(String::from_utf16_lossy)
                 .filter(|s| !s.is_empty())
                 .collect(),
-            _ => self.get(key).into_iter().collect(),
+            Some(_) => self.single(key).into_iter().collect(),
+            None => self.packed().get_multi(key),
         }
     }
 }

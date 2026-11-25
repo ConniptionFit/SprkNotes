@@ -13,6 +13,12 @@
                                             starting values the user may change. Real locking needs a
                                             per-machine install (HKLM); per-user writes HKCU.
        UPDATE_TASK=0                        per-machine only: do not create the scheduled update task
+       DEFAULTS="Key=Value;Key=Value"       starting values for settings with a control in
+                                            the window (docs/admin-guide.md; the user may change them). "|" separates items of a list. Paths may use
+                                            %USERPROFILE%, %OneDrive% and the like, expanded for each user.
+       POLICY="Key=Value;Key=Value"         the same, locked. Only a per-machine install (HKLM) is out of the
+                                            user's reach; for per-user installs lock settings with the
+                                            SYSTEM policy script from tools/admin-form instead.
      Per-machine installs register the "SprkNotes\Update" task (SYSTEM, every 6 hours, no window) that
      runs SprkNotes.exe with the update switch. -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
@@ -31,6 +37,8 @@
     <Property Id="UPDATE_PUBLIC_KEY" Secure="yes" />
     <Property Id="LOCK_UPDATES" Secure="yes" />
     <Property Id="UPDATE_TASK" Secure="yes" />
+    <Property Id="DEFAULTS" Secure="yes" />
+    <Property Id="POLICY" Secure="yes" />
 
     <!-- Upgrades keep what an earlier install wrote. The registry values below exist only while their
          install property is set, and an upgrade usually runs without them (the updater runs
@@ -78,6 +86,14 @@
     <SetProperty Action="Restore_UPDATE_PUBLIC_KEY_DM" Id="UPDATE_PUBLIC_KEY" Value="[OLD_DM_KEYS]" After="AppSearch" Condition="NOT UPDATE_PUBLIC_KEY AND OLD_DM_KEYS AND ALLUSERS=1" />
     <SetProperty Action="Restore_UPDATE_PUBLIC_KEY_PU" Id="UPDATE_PUBLIC_KEY" Value="[OLD_PU_KEYS]" After="AppSearch" Condition="NOT UPDATE_PUBLIC_KEY AND OLD_PU_KEYS AND NOT ALLUSERS=1" />
     <SetProperty Action="Restore_UPDATE_PUBLIC_KEY_DU" Id="UPDATE_PUBLIC_KEY" Value="[OLD_DU_KEYS]" After="AppSearch" Condition="NOT UPDATE_PUBLIC_KEY AND OLD_DU_KEYS AND NOT ALLUSERS=1" />
+    <Property Id="OLD_PM_SETTINGS"><RegistrySearch Id="RsPMSETTINGS" Root="HKLM" Key="Software\Policies\SprkNotes" Name="Settings" Type="raw" Bitness="always64" /></Property>
+    <Property Id="OLD_DM_SETTINGS"><RegistrySearch Id="RsDMSETTINGS" Root="HKLM" Key="Software\SprkNotes\Defaults" Name="Settings" Type="raw" Bitness="always64" /></Property>
+    <Property Id="OLD_PU_SETTINGS"><RegistrySearch Id="RsPUSETTINGS" Root="HKCU" Key="Software\Policies\SprkNotes" Name="Settings" Type="raw" /></Property>
+    <Property Id="OLD_DU_SETTINGS"><RegistrySearch Id="RsDUSETTINGS" Root="HKCU" Key="Software\SprkNotes\Defaults" Name="Settings" Type="raw" /></Property>
+    <SetProperty Action="Restore_POLICY_M" Id="POLICY" Value="[OLD_PM_SETTINGS]" After="AppSearch" Condition="NOT POLICY AND OLD_PM_SETTINGS AND ALLUSERS=1" />
+    <SetProperty Action="Restore_POLICY_U" Id="POLICY" Value="[OLD_PU_SETTINGS]" After="AppSearch" Condition="NOT POLICY AND OLD_PU_SETTINGS AND NOT ALLUSERS=1" />
+    <SetProperty Action="Restore_DEFAULTS_M" Id="DEFAULTS" Value="[OLD_DM_SETTINGS]" After="AppSearch" Condition="NOT DEFAULTS AND OLD_DM_SETTINGS AND ALLUSERS=1" />
+    <SetProperty Action="Restore_DEFAULTS_U" Id="DEFAULTS" Value="[OLD_DU_SETTINGS]" After="AppSearch" Condition="NOT DEFAULTS AND OLD_DU_SETTINGS AND NOT ALLUSERS=1" />
     <SetProperty Action="RestoreLockM" Id="LOCK_UPDATES" Value="1" After="AppSearch" Condition="NOT LOCK_UPDATES AND ALLUSERS=1 AND (OLD_PM_CHANNEL OR OLD_PM_REPOURL OR OLD_PM_PROVIDER OR OLD_PM_MODE OR OLD_PM_KEYS)" />
     <SetProperty Action="RestoreLockU" Id="LOCK_UPDATES" Value="1" After="AppSearch" Condition="NOT LOCK_UPDATES AND NOT ALLUSERS=1 AND (OLD_PU_CHANNEL OR OLD_PU_REPOURL OR OLD_PU_PROVIDER OR OLD_PU_MODE OR OLD_PU_KEYS)" />
 
@@ -98,6 +114,8 @@
       <ComponentRef Id="RegPolUpdateMode" />
       <ComponentRef Id="RegDefUpdatePublicKeys" />
       <ComponentRef Id="RegPolUpdatePublicKeys" />
+      <ComponentRef Id="RegDefSettings" />
+      <ComponentRef Id="RegPolSettings" />
     </Feature>
 
     <StandardDirectory Id="ProgramMenuFolder">
@@ -143,6 +161,12 @@
       </Component>
       <Component Id="RegPolUpdatePublicKeys" Guid="*" Condition="UPDATE_PUBLIC_KEY AND LOCK_UPDATES=&quot;1&quot;">
         <RegistryValue Root="HKMU" Key="Software\Policies\SprkNotes" Name="UpdatePublicKeys" Type="string" Value="[UPDATE_PUBLIC_KEY]" KeyPath="yes" />
+      </Component>
+      <Component Id="RegDefSettings" Guid="*" Condition="DEFAULTS">
+        <RegistryValue Root="HKMU" Key="Software\SprkNotes\Defaults" Name="Settings" Type="string" Value="[DEFAULTS]" KeyPath="yes" />
+      </Component>
+      <Component Id="RegPolSettings" Guid="*" Condition="POLICY">
+        <RegistryValue Root="HKMU" Key="Software\Policies\SprkNotes" Name="Settings" Type="string" Value="[POLICY]" KeyPath="yes" />
       </Component>
     </DirectoryRef>
 

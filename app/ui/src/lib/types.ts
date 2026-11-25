@@ -78,6 +78,15 @@ export type Caption = {
 };
 
 /** One transcript in the library list. */
+/** Where transcripts are saved (Settings). `source` says who decided: an administrator ("policy"),
+ * the person ("user"), the installer ("install") or nobody ("default", the Documents folder). */
+export type SaveLocation = {
+  path: string;
+  chosen: string | null;
+  source: "policy" | "user" | "install" | "default";
+  locked: boolean;
+};
+
 export type LibraryEntry = {
   path: string;
   name: string;
@@ -153,3 +162,9 @@ export type AssistantResponse =
   | { kind: "prep"; markdown: string }
   | { kind: "asked"; items: { lineId: number; t: string; text: string }[] }
   | { kind: "catchups"; items: { from: string; to: string; bullets: Cited[] }[] };
+
+/** Admin values for window preferences, keyed by policy name (Theme, LiveCaptions ...). Raw text. */
+export interface ManagedPrefs {
+  locked: { [key: string]: string };
+  defaults: { [key: string]: string };
+}

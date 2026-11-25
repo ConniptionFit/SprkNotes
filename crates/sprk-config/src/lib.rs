@@ -2,8 +2,88 @@
 //! policy of SPEC 10.2. Registry overrides win over user settings.
 use std::collections::HashMap;
 
+pub mod file;
 #[cfg(windows)]
 pub mod registry;
+pub mod trust;
+#[cfg(windows)]
+pub mod trust_win;
+
+pub use file::{expand_env, packed, policy_file, FilePolicy, PolicyFile};
+
+/// `%ProgramData%\SprkNotes\policy.json`, the file form of admin policy (SPEC 10.2).
+pub fn machine_file() -> Option<std::path::PathBuf> {
+    let base = std::env::var_os("ProgramData")?;
+    Some(
+        std::path::PathBuf::from(base)
+            .join("SprkNotes")
+            .join("policy.json"),
+    )
+}
+
+/// The machine policy file, when there is one that only administrators can change. `Err` says why
+/// a file that exists is ignored (the app logs it). Off Windows there is no such file.
+pub fn machine_policy_file() -> Result<PolicyFile, String> {
+    #[cfg(windows)]
+    {
+        let Some(path) = machine_file().filter(|p| p.is_file()) else {
+            return Ok(PolicyFile::default());
+        };
+        trust::check(&trust_win::WindowsSecurity, &path)?;
+        let text =
+            std::fs::read_to_string(&path).map_err(|_| "it could not be read".to_string())?;
+        Ok(policy_file(&text))
+    }
+    #[cfg(not(windows))]
+    {
+        Ok(PolicyFile::default())
+    }
+}
+
+fn trusted_file() -> PolicyFile {
+    machine_policy_file().unwrap_or_default()
+}
+
+/// Admin sources, strongest first, for one kind of value (locked or starting): machine registry,
+/// then the machine `policy.json`, then the user registry. The registry wins over the file setting
+/// by setting, so Group Policy or an RMM registry script can override one value of a shared file.
+pub fn layered<M: PolicyStore, U: PolicyStore>(
+    machine: M,
+    file: FilePolicy,
+    user: U,
+) -> Layered<M, Layered<FilePolicy, U>> {
+    Layered(machine, Layered(file, user))
+}
+
+/// Locked settings from every admin source (see [`layered`]). Only administrators can write the
+/// machine key and the trusted file, so that is where locks belong. Nothing is set off Windows.
+pub fn admin_policy() -> AppPolicy {
+    #[cfg(windows)]
+    {
+        AppPolicy::load(&layered(
+            registry::RegistryPolicy::machine(),
+            trusted_file().locked,
+            registry::RegistryPolicy::user(),
+        ))
+    }
+    #[cfg(not(windows))]
+    {
+        AppPolicy::load(&trusted_file().locked)
+    }
+}
+
+/// Starting values (never locked) from the same sources.
+pub fn admin_defaults() -> InstallDefaults {
+    #[cfg(windows)]
+    {
+        let r = registry::RegistryPolicy::defaults_layered();
+        InstallDefaults::load(&layered(r.0, trusted_file().defaults, r.1))
+    }
+    #[cfg(not(windows))]
+    {
+        InstallDefaults::load(&trusted_file().defaults)
+    }
+}
 
 pub trait PolicyStore: Send {
     /// A string value; a DWORD is returned as its decimal text.
@@ -53,6 +133,9 @@ impl<A: PolicyStore, B: PolicyStore> PolicyStore for Layered<A, B> {
 pub struct AppPolicy {
     pub transcripts_root: Option<String>,
     pub calendar_provider: Option<String>,
+    /// `SummarizeEnabled=0` removes Summarize altogether (transcripts may hold PHI); the
+    /// per-app switches below hide one app each.
+    pub summarize_enabled: Option<bool>,
     pub show_claude_handoff: Option<bool>,
     pub show_copilot_handoff: Option<bool>,
     /// Where the Copilot handoff opens (SPEC 9.2): an app link or an https page.
@@ -129,6 +212,8 @@ fn safe_link(v: &str) -> bool {
 /// they apply until the user picks something else.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct InstallDefaults {
+    /// Starting save folder; may hold `%USERPROFILE%`-style variables (expanded per user).
+    pub transcripts_root: Option<String>,
     pub update_mode: Option<String>,
     pub update_channel: Option<String>,
     pub update_repo_url: Option<String>,
@@ -140,6 +225,7 @@ impl InstallDefaults {
         // Same validation as policy, so one rule set covers both.
         let p = AppPolicy::load(s);
         Self {
+            transcripts_root: p.transcripts_root,
             update_mode: p.update_mode,
             update_channel: p.update_channel,
             update_repo_url: p.update_repo_url,
@@ -160,6 +246,112 @@ fn num(s: &dyn PolicyStore, k: &str) -> Option<u64> {
     s.get(k)?.trim().parse().ok()
 }
 
+/// Every key `AppPolicy::load` reads. The admin install-script form and the ADMX list the same
+/// keys; a test keeps the form in step with this list.
+pub const KEYS: &[&str] = &[
+    "TranscriptsRoot",
+    "CalendarProvider",
+    "SummarizeEnabled",
+    "ShowClaudeHandoff",
+    "ShowCopilotHandoff",
+    "CopilotTarget",
+    "PromptTemplatePath",
+    "FillerRemoval",
+    "CommitDelaySeconds",
+    "AudioSourceDetection",
+    "AudioMergeWindowSeconds",
+    "CallMergeWindowSeconds",
+    "AudioSourceExcludePatterns",
+    "CallContext",
+    "CallPollSeconds",
+    "NameOneToOneSpeakers",
+    "TeamsLocalApi",
+    "ModelDownload",
+    "ModelUpdateCheck",
+    "ModelIndexUrl",
+    "RequireSignedModels",
+    "ModelPublicKeys",
+    "AllowedModelHashes",
+    "KeepModelVersions",
+    "AssistantEnabled",
+    "AssistantTier",
+    "AssistantPinnedModel",
+    "AssistantIdleUnloadMinutes",
+    "AssistantMaxThreads",
+    "AssistantSaveOutputs",
+    "AssistantBackground",
+    "AssistantFeatures",
+    "UpdateMode",
+    "UpdateChannel",
+    "UpdateRepoUrl",
+    "UpdateProvider",
+    "UpdatePublicKeys",
+    "UpdateCheckHours",
+];
+
+/// Window preferences an admin can set (SPEC 10.2b). The app keeps these in the window, so the
+/// backend hands over the raw text and the window checks it; a bad value is ignored there.
+pub const UI_KEYS: &[&str] = &[
+    "Theme",
+    "ThrowbackMode",
+    "LiveCaptions",
+    "LiveLine",
+    "CaptionDelay",
+    "CaptionSpeakers",
+    "MicPrompt",
+    "Hotkey",
+    "HotkeyKeys",
+];
+
+/// Admin values for the window preferences: `locked` from policy (the control is read-only),
+/// `defaults` from the installer (used until the person changes that preference). Includes
+/// `AssistantEnabled`, whose switch lives in the window too.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct UiManaged {
+    pub locked: std::collections::BTreeMap<String, String>,
+    pub defaults: std::collections::BTreeMap<String, String>,
+}
+
+impl UiManaged {
+    pub fn load(policy: &dyn PolicyStore, defaults: &dyn PolicyStore) -> Self {
+        let pick = |s: &dyn PolicyStore| {
+            UI_KEYS
+                .iter()
+                .chain(["AssistantEnabled", "SummarizeEnabled"].iter())
+                .filter_map(|k| {
+                    let v = s.get(k)?.trim().to_string();
+                    (!v.is_empty()).then(|| (k.to_string(), v))
+                })
+                .collect()
+        };
+        Self {
+            locked: pick(policy),
+            defaults: pick(defaults),
+        }
+    }
+}
+
+/// [`UiManaged`] from every admin source (see [`layered`]).
+pub fn admin_ui() -> UiManaged {
+    let file = trusted_file();
+    #[cfg(windows)]
+    {
+        let d = registry::RegistryPolicy::defaults_layered();
+        UiManaged::load(
+            &layered(
+                registry::RegistryPolicy::machine(),
+                file.locked,
+                registry::RegistryPolicy::user(),
+            ),
+            &layered(d.0, file.defaults, d.1),
+        )
+    }
+    #[cfg(not(windows))]
+    {
+        UiManaged::load(&file.locked, &file.defaults)
+    }
+}
+
 impl AppPolicy {
     /// Unparseable values count as "not set" (never an error: policy must not break the app).
     pub fn load(s: &dyn PolicyStore) -> Self {
@@ -171,6 +363,7 @@ impl AppPolicy {
         Self {
             transcripts_root: text("TranscriptsRoot"),
             calendar_provider: text("CalendarProvider").filter(|v| v == "com" || v == "off"),
+            summarize_enabled: flag(s, "SummarizeEnabled"),
             show_claude_handoff: flag(s, "ShowClaudeHandoff"),
             show_copilot_handoff: flag(s, "ShowCopilotHandoff"),
             copilot_target: text("CopilotTarget").filter(|v| safe_link(v)),
@@ -238,6 +431,46 @@ impl AppPolicy {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn machine_registry_beats_the_file_which_beats_user_policy() {
+        let file = policy_file(
+            r#"{"settings":{"TranscriptsRoot":{"value":"D:\\File","locked":true},
+               "CommitDelaySeconds":{"value":7,"locked":true},
+               "Theme":{"value":"light","locked":false}}}"#,
+        );
+        let machine = fake(&[("TranscriptsRoot", "D:\\Machine")]);
+        let user = fake(&[
+            ("TranscriptsRoot", "D:\\User"),
+            ("CommitDelaySeconds", "3"),
+            ("FillerRemoval", "0"),
+        ]);
+        let p = AppPolicy::load(&layered(machine, file.locked.clone(), user));
+        assert_eq!(p.transcripts_root.as_deref(), Some("D:\\Machine"));
+        assert_eq!(p.commit_delay_seconds, Some(7));
+        assert_eq!(p.filler_removal, Some(false));
+        // An unlocked value in the file is a starting value, never a lock.
+        let ui = UiManaged::load(
+            &layered(fake(&[]), file.locked, fake(&[])),
+            &layered(fake(&[]), file.defaults, fake(&[("Theme", "dark")])),
+        );
+        assert_eq!(ui.locked.get("Theme"), None);
+        assert_eq!(ui.defaults.get("Theme").map(String::as_str), Some("light"));
+    }
+
+    #[test]
+    fn window_preferences_come_from_policy_and_defaults() {
+        let pol = fake(&[("LiveCaptions", "0"), ("Theme", " "), ("Nope", "1")]);
+        let def = fake(&[("Theme", "dark"), ("AssistantEnabled", "1")]);
+        let m = UiManaged::load(&pol, &def);
+        assert_eq!(m.locked.len(), 1);
+        assert_eq!(m.locked.get("LiveCaptions").map(String::as_str), Some("0"));
+        assert_eq!(m.defaults.get("Theme").map(String::as_str), Some("dark"));
+        assert_eq!(
+            m.defaults.get("AssistantEnabled").map(String::as_str),
+            Some("1")
+        );
+    }
 
     fn fake(pairs: &[(&str, &str)]) -> FakePolicy {
         FakePolicy(

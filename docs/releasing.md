@@ -33,6 +33,9 @@ A channel includes the more stable ones, and the app never downgrades. Pick a ch
    version files (`Cargo.toml`, `Cargo.lock`, `app/ui/package.json`, `CHANGELOG.md`). The release workflow fails if anything else differs.
 4. **Version numbers are SemVer** and come only from the root `Cargo.toml` (hard rule 7). Tags are `v` plus the version.
    Patch (`0.2.1`) for fixes, minor (`0.3.0`) for features, major only for breaking changes.
+   In practice: a version is tested as numbered alphas (`0.2.0-alpha.1`, `.2`, `.3` ...) until it is called done, then
+   released as plain `0.2.0`. The next feature batch starts at `0.3.0-alpha.1`; a fix-only release after `0.2.0` is `0.2.1`
+   (alpha first). Numbers only go up: never reuse, skip back or restart a number within a version.
 5. **A release is a draft until it is complete.** The update check cannot see drafts, so nobody gets half a release.
 6. **Rollback is "stop offering it, ship a fixed version".** See [Rollback](#rollback).
 

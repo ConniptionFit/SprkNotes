@@ -284,7 +284,7 @@ Exports are generated on demand from the `.md` file plus the JSONL sidecar.
 - Root: `%USERPROFILE%\Documents\SprkNotes\` resolved with the Known Folder API (`FOLDERID_Documents`) so OneDrive folder redirection is respected.
 - Transcripts: `...\SprkNotes\Transcripts\` (user subfolders allowed).
 - Sidecars: `...\SprkNotes\Transcripts\.sprknotes\<session-id>.jsonl` (hidden).
-- Root is configurable by the user and overridable by admin policy (10.2).
+- Root is configurable by the user and overridable by admin policy (10.2). Order: admin policy `TranscriptsRoot`, then the user's choice (Settings, kept in `settings.json`), then an installer starting value (`DEFAULTS="TranscriptsRoot=..."`), then the Documents folder above. Any of them may use `%USERPROFILE%`, `%OneDrive%` and other environment variables; they are stored as written and expanded for the person running the app, so one admin value gives everyone their own folder. A value that still holds an unknown `%NAME%` or is not a full path is skipped. Choosing a folder in Settings creates it at once, so a typo shows there. A session keeps the folder it started in.
 
 ### 6.2 Naming
 - Pattern: `YYYY-MM-DD HHmm <Title>.md`.
@@ -345,11 +345,11 @@ Scheduled Teams and Zoom meetings live on the user's Outlook calendar, so one lo
 **Principle:** one main window, one floating mini controller, nothing else visible. Neutral, quiet, light and dark following Windows theme.
 
 ### 8.1 Main window
-- **Top bar:** editable session name, source buttons (small icon buttons: microphone **Me**, speaker **Others**, struck through when off). Clicking one opens a menu: System default, each device found now (a saved device that is unplugged stays listed as not connected), and Turn off / Turn on. Picking a device turns that source on. The device choice is the same one as Settings. Which sources are on is remembered across launches (both on at first run). While transcribing, each button that is on shows a small level meter beside its name: the peak input level about ten times a second, on a loudness scale from -60 dBFS to full scale, measured before echo removal so a muted or wrong device reads flat. Only the number reaches the window; no audio is kept or logged. Status pill ("Transcribing", "Paused", "Ready").
+- **Top bar:** editable session name, source buttons (small icon buttons: microphone **Me**, speaker **Others**, struck through when off). Clicking one opens a menu: System default, each device found now (a saved device that is unplugged stays listed as not connected), and Turn off / Turn on. Picking a device turns that source on. The device choice is the same one as Settings. Which sources are on is remembered across launches (both on at first run). While transcribing, each button that is on shows a small waveform of five bars (newest level in the middle, older ones spreading outward): the peak input level about twenty times a second, on a loudness scale from -60 dBFS to full scale, measured before echo removal so a muted or wrong device reads flat. Only the number reaches the window; no audio is kept or logged. The buttons show icons only (Me and Others are in the tooltip). Status pill ("Transcribing", "Paused", "Ready").
 - **Controls:** Start · Pause/Resume · End. Context-aware (only valid actions enabled).
 - **Live pane:** transcript lines styled per 5.1 (timestamp muted, speaker bold, Me and Others visually distinct).
 - **Live line:** while transcribing, the newest words appear as the last line of the live pane (marked "live"), growing word by word. Words the engine is unsure of (after `stable`) are muted with a dotted underline; words that change are briefly tinted; when the committed line arrives it replaces the live line. Both speakers, whatever the pop-out shows (Me's live words make Me as quick as Others; before, Me waited for the commit delay). Each speaker has a live row of their own: when two people talk at once, both rows grow side by side (the one who started first on top) instead of one row switching between them. The live line is display only: the saved transcript contains committed lines only, and partial text is never written to disk or logged. A toolbar above the pane has smaller/larger text (remembered) and a show/hide toggle (also in Settings, on by default).
-- **Footer:** Library, Settings, AI handoff (after End or from Library).
+- **Footer:** Library, Settings, Summarize (document icon; hands the newest transcript to Claude or Copilot, 9; greyed with a tooltip saying why when there is nothing to summarize), and Ask Sprk only while the assistant and its Ask feature are on (hidden otherwise).
 
 ### 8.2 Live pane scrolling (must feel calm)
 - **Follow mode** is on when the user is within 48 px of the bottom. New lines keep the view pinned to the bottom smoothly.
@@ -377,11 +377,14 @@ Scheduled Teams and Zoom meetings live on the user's Outlook calendar, so one lo
 
 ### 8.4 Library
 - List of transcripts (newest first): name, date, duration, folder. Search by name and full text.
-- Folder tree for user subfolders: create, rename, move transcripts (drag or menu).
+- Folder tree for user subfolders: create, rename, move transcripts (drag or menu). **Open in File Explorer** opens the folder being shown.
+- Each list item has a **⋯** menu: Open, Continue transcribing, Rename, Move to folder, Show in File Explorer, Summarize, Delete (with confirm). Rename, Move and Delete work in place under the item.
+- **Continue transcribing** (also on the open transcript) starts a session that appends to that file: its status goes back to in progress, a "Transcription continued" line marks the restart, and new times carry on from one second after the last line, so the file reads as one timeline. Refused while a session runs.
 - Transcript view: rendered Markdown, **View in folder** (`explorer /select,`), **Export** (md, txt, docx, json), **Rename**, **Summarize with Claude**, **Summarize with Copilot**, **Delete** (to Recycle Bin, with confirm).
 - Rename changes the title in the front matter (`name_source: user`) and the file name; the `YYYY-MM-DD HHmm ` prefix stays and a clash gets a number. Move and rename take the sidecar along. Delete moves the transcript and its sidecar to the Recycle Bin; summaries and exports next to it stay. The running session's transcript, and the folder it is in, can't be renamed, moved or deleted until End. Folder names may not start with a dot, contain `\ / : < > " | ? *` or lead outside the transcripts root.
 
 ### 8.5 Settings (keep short)
+- Save transcripts to: the folder (6.1), typed with variables allowed, with **Save**, **Use default** and **Open**. Read-only with "Set by your organization." when policy sets it.
 - Audio: mic device and output device (lists of devices; "System default" follows the headset, an unplugged pick falls back to the default), Others on/off, filler removal, commit delay (advanced).
 - Outlook: provider, context prompt behavior (Ask / Always / Never).
 - Context: detect audio sources (on/off, merge window), Teams call context (on/off, poll interval), name 1:1 speakers (on/off), excluded apps/title patterns.
@@ -404,16 +407,17 @@ Scheduled Teams and Zoom meetings live on the user's Outlook calendar, so one lo
 
 ## 9. AI handoff
 
-SprkNotes itself makes no network call here: it only opens the Claude or Copilot app with a prompt and the file. Sending the transcript to the cloud service happens inside that app, when the user presses send. Admin policy can hide either button (10.2). Only enterprise-protected services are allowed (Claude under the company's agreement, Microsoft 365 Copilot with work sign-in; never consumer Copilot).
+SprkNotes itself makes no network call here: it only opens the Claude or Copilot app with a prompt and the file. Sending the transcript to the cloud service happens inside that app, when the user presses send. Admin policy can hide either button, or remove Summarize altogether with `SummarizeEnabled=0` (10.2). Only enterprise-protected services are allowed (Claude under the company's agreement, Microsoft 365 Copilot with work sign-in; never consumer Copilot).
 
 ### 9.0 Choosing the app
 Summarize looks for installed clients by asking the OS which app handles each link scheme (`claude:`, `ms-officeapp:`, also `ms-copilot:`) and, on Windows, whether the Store package is installed (Store apps register links through the package); it never starts or scans the apps. Exactly one found (and not hidden by policy): use it. Both: the user chooses. None: copy the prompt, reveal the file (the file manager's folder on Linux) and show the toast "No Claude or Copilot app found. Prompt copied and the file is highlighted. Open your assistant, attach the file and paste." Copilot has no Linux client, so on Linux only Claude can be found. An https `CopilotTarget` counts as present.
 
 ### 9.1 Claude
-- Open Claude Desktop with `claude://claude.ai/new?q=<one line>` (URL-encoded). The link carries only a short start line, because Windows cuts links near 2,000 characters and a link cannot reliably attach a local file (Claude reported it could not see the file).
-- The clipboard holds the prompt followed by the transcript text. A toast says: click the chat box, press Ctrl+V, send. The user reviews and sends in Claude.
+- The clipboard holds the prompt followed by the transcript text, then Claude Desktop opens on an empty new chat (`claude://claude.ai/new`). Toast: "Transcript copied. In Claude, click the chat box, press Ctrl+V, then send." The user reviews and sends in Claude.
+- The link fills nothing in. Claude warns about any prompt a link fills in ("Use caution before running this prompt"), and a link cannot attach a local file.
 - The prompt asks for the summary in the reply, not a file saved to a folder (Claude cannot write to the user's folders).
-- If `claude://` is not registered: copy the same text, show a toast with instructions.
+- If Claude Desktop does not open, `https://claude.ai/new` opens in the browser instead, with the same text on the clipboard.
+- The clipboard is opened with the app's window as owner and retried briefly when another app holds it. If it still can't be written, the toast never says "copied": Claude opens, the transcript is highlighted in File Explorer, and the toast says to drag the file into the chat box.
 
 ### 9.2 Microsoft 365 Copilot
 - No documented link that attaches a local file. Flow: copy the prompt to the clipboard, open the configured Copilot target (default: Microsoft 365 Copilot app or `https://m365.cloud.microsoft/chat`; verify in M8), reveal the transcript in Explorer, toast: "Prompt copied. Attach the highlighted file and paste."
@@ -454,11 +458,28 @@ Rules: use only the transcript and meeting context. Mark uncertain items "(uncle
 JSON at `%APPDATA%\SprkNotes\settings.json` (portable mode: next to the exe when `portable.flag` exists). Schema-versioned with migrations.
 
 ### 10.2 Admin policy (RMM-friendly)
-Registry overrides win over user settings and lock the matching UI control:
-- `HKLM\Software\Policies\SprkNotes` (machine) then `HKCU\Software\Policies\SprkNotes` (user).
-- Keys: `TranscriptsRoot`, `CalendarProvider` (`com`/`off`), `ContextPrompt`, `ShowClaudeHandoff`, `ShowCopilotHandoff`, `CopilotTarget`, `PromptTemplatePath`, `FillerRemoval`, `CommitDelaySeconds`.
+Admin values win over user settings and lock the matching UI control. Sources, strongest first, decided setting by setting:
+- `HKLM\Software\Policies\SprkNotes` (machine registry).
+- `%ProgramData%\SprkNotes\policy.json` (machine file): `{"settings": {"Key": {"value": ..., "locked": true}}}`. `locked: false` makes it a starting value instead (10.2b); a bare value counts as locked. Booleans, numbers and arrays are allowed. The file is used only when the folder and the file are owned by SYSTEM, Administrators or TrustedInstaller and no one else may write, delete, re-permission or take ownership of them (inherit-only entries and CREATOR OWNER aside). Otherwise it is ignored and the reason, which names only a SID, is written at startup to `%APPDATA%\SprkNotes\admin.log` (removed again once the file is trusted). This stops a user from creating the folder first and planting a file. The lock script (10.2a) sets exactly these permissions.
+- `HKCU\Software\Policies\SprkNotes` (user registry).
+- Values may also arrive packed in one string value named `Settings` (`Key=Value;Key=Value`, `|` between the items of a list), which is what the MSI switches `POLICY` and `DEFAULTS` write (10.2a). A separate value of the same name wins over the packed one.
+- Path values (`TranscriptsRoot`, `PromptTemplatePath`) are expanded per user at runtime (6.1).
+- Keys: `TranscriptsRoot`, `CalendarProvider` (`com`/`off`), `ContextPrompt`, `SummarizeEnabled` (0 removes Summarize, 9), `ShowClaudeHandoff`, `ShowCopilotHandoff`, `CopilotTarget`, `PromptTemplatePath`, `FillerRemoval`, `CommitDelaySeconds`.
 - Model keys (section 16): `PinnedModel` (`id@version`), `AllowUserModels` (0/1), `AllowedModelHashes` (multi-string, SHA-256 of `model.json`), `RequireSignedModels` (0/1; forced on from 1.0), `ModelPublicKeys` (multi-string, OpenSSH `allowed_signers` lines for Ed25519 keys), `KeepModelVersions` (default 2).
 - Context keys (sections 18, 19): `AudioSourceDetection` (0/1), `AudioMergeWindowSeconds`, `CallMergeWindowSeconds`, `AudioSourceExcludePatterns` (multi-string: process names or title regexes), `CallContext` (0/1), `CallPollSeconds`, `NameOneToOneSpeakers` (0/1), `TeamsLocalApi` (0/1, default 1: probed silently at session start).
+
+### 10.2a Deployment scripts (tools/admin-form)
+An offline page in the repository (`tools/admin-form/index.html`, no network use) lists every policy key and window preference (a test keeps it equal to `sprk_config::KEYS` plus `UI_KEYS`). The admin marks each setting Not managed, Starting value or Locked and gets:
+- **Lock script** (PowerShell, run as SYSTEM). The admin picks where it writes: the registry (`HKLM\Software\Policies\SprkNotes`, typed string, DWORD and multi-string values through the 64-bit view; by default it replaces all SprkNotes registry policy, so it can run again safely), the file (`%ProgramData%\SprkNotes\policy.json`, always written whole, starting values included as unlocked), or both (the registry wins). For the file it first makes Administrators the owner of the folder and sets a protected access list (SYSTEM and Administrators full control, Users read and execute, nothing inherited), then writes the file as UTF-8 and gives it the same access list. Users cannot change either, so this locks even when SprkNotes is installed per user.
+- **User install script** (PowerShell, run as the signed-in user, for example a NinjaOne self-service item): finds the newest release on the chosen channel (or a pinned tag) on GitHub, or an MSI in a folder or share, checks the SHA-256 against the release's `SHA256SUMS.txt`, and installs per user with the starting values in `DEFAULTS`. It refuses to run as SYSTEM.
+- **Per-machine line** (`msiexec ... ALLUSERS=1 POLICY="..." DEFAULTS="..."`) for Intune, SCCM or GPO.
+Starting values are possible for settings with a control in the window: `TranscriptsRoot`, the update settings, `AssistantEnabled` and the window preferences (10.2b). Everything else can only be locked. Upgrades keep `POLICY` and `DEFAULTS`. `packaging/admx` has a Group Policy template for the update settings, `TranscriptsRoot`, `SummarizeEnabled` and `AssistantEnabled`.
+
+### 10.2b Managed window preferences
+`UI_KEYS` are preferences the window keeps (`Theme`, `ThrowbackMode`, `LiveCaptions`, `LiveLine`, `CaptionDelay`, `CaptionSpeakers`, `MicPrompt`, `Hotkey`, `HotkeyKeys`), plus `AssistantEnabled`. The app hands the window their raw locked and starting values from every source above; the window drops values that don't fit (an unknown theme, a shortcut without Ctrl, Alt or Win).
+- **Locked:** the control stays visible but disabled, with a small lock. Hovering it shows "This option is managed by your administrator." The same text is used for the save folder, the assistant switch and the update channel. A locked value is never stored as the person's own choice, so lifting the lock brings their choice back.
+- **Starting value:** used until the person changes that preference. The window keeps a list of preferences the person chose; for stores from before 0.2.0-alpha.10 a value counts as chosen only when it differs from the built-in default.
+- Not managed yet: which sources are on (Me, Others) and the device picks.
 
 ### 10.3 Models
 See section 16.

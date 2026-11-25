@@ -36,7 +36,9 @@
     transition: background 120ms, color 120ms;
   }
   .icon:hover { background: var(--surface-2); color: var(--text); }
-  .icon:disabled { opacity: 0.35; pointer-events: none; }
+  /* Still hoverable so the tooltip can say why it is off. */
+  .icon:disabled { opacity: 0.35; cursor: default; }
+  .icon:disabled:hover { background: transparent; color: var(--muted); }
   .icon.on { background: var(--accent-soft); color: var(--accent); }
   .icon.primary { background: var(--accent); color: var(--on-accent); }
   .icon.primary:hover { background: var(--accent-hover); color: var(--on-accent); }

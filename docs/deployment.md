@@ -35,6 +35,37 @@ Neither is exercised yet; these follow standard Windows Installer behavior.
 - **SCCM / Configuration Manager:** create a Windows Installer (MSI) application per architecture and let the product code from the MSI drive detection, with requirement rules for OS architecture. Or deploy `Install-SprkNotes.ps1 -Machine` as a script application with the file detection rule above. Install for system.
 - **Upgrade:** installing a newer MSI replaces the old one (major upgrade). Downgrades are refused.
 
+## NinjaOne per user with locked settings (recommended)
+SprkNotes installs into each person's own profile (no admin rights, nothing machine-wide). Settings you lock live in the machine
+policy key or a locked-down machine file, which only administrators can change, so they hold even though the app itself is per user.
+
+1. Open `tools/admin-form/index.html` from this repository in a browser (download the repo or just that folder; it works offline
+   and sends nothing anywhere). Pick the channel, then mark each setting **Not managed**, **Starting value** or **Locked**.
+   Paths can use `%OneDrive%`, `%USERPROFILE%` and similar; they are stored as written and filled in for each person.
+2. **Lock script** (`Set-SprkNotesPolicy.ps1`): add it to the NinjaOne script library with **Run As: System**, and run it on the
+   devices (or a policy, so new devices get it). Choose where it writes:
+   - **Registry** (recommended): `HKLM\Software\Policies\SprkNotes`. By default it replaces any SprkNotes registry policy
+     already there, so running it again is safe.
+   - **File**: `%ProgramData%\SprkNotes\policy.json`, written whole each time, starting values included (unlocked). The script
+     first locks the folder down: Administrators own it, SYSTEM and Administrators have full control, Users can only read, and
+     nothing is inherited from ProgramData (whose default lets users add files). SprkNotes ignores the file if anyone else can
+     change it or the folder, so a user can't plant their own, and writes the reason to `%APPDATA%\SprkNotes\admin.log`.
+   - **Both**: where both hold a setting, the registry wins, so Group Policy or a registry script can override one value.
+   Change a setting by generating a new script and running it again.
+3. **Install script** (`Install-SprkNotes-User.ps1`): add it with **Run As: Current Logged on User**, and publish it as a
+   self-service item (or run it on a schedule). It downloads the newest release on the channel from GitHub (or uses the MSI folder
+   you gave), checks the SHA-256 against the release's `SHA256SUMS.txt`, and installs for that person with your starting values.
+   It refuses to run as SYSTEM. Running it again upgrades in place. Logs: `%LocalAppData%\SprkNotes\install`.
+4. Check on a device: Settings shows locked items greyed with a small lock, and hovering one says "This option is managed by your
+   administrator." `reg query HKLM\Software\Policies\SprkNotes` lists what the registry part wrote; for the file, open
+   `%ProgramData%\SprkNotes\policy.json` and check that `%APPDATA%\SprkNotes\admin.log` does not exist for that person.
+
+Starting values can be given for the save folder, the update settings, the assistant and the window settings (appearance, live
+captions, live line, live text delay, whose words, microphone prompt, keyboard shortcut and keys, Throwback Mode); they apply until
+the person changes that setting. Every other setting can only be locked. `SummarizeEnabled=0` removes Summarize, so transcripts are
+never handed to Claude or Copilot. People can still uninstall a per-user app themselves; the lock script's values stay and apply
+again if they reinstall.
+
 ## RMM as SYSTEM (NinjaOne and similar)
 Put the MSIs, `Install-SprkNotes.ps1` and, for models, `sprkctl.exe`, `Install-SprkModel.ps1` and the pack in one folder on the endpoint (or a share it can read), then run as SYSTEM:
 ```powershell
@@ -51,7 +82,7 @@ Exit codes: the app script returns the `msiexec` exit code (0 success, 3010 rebo
 - Pilot builds can restrict packs by `AllowedModelHashes`. From 1.0 every pack must carry a valid signature from a key listed in `ModelPublicKeys`.
 
 ## Registry policy
-Policy under `HKLM\Software\Policies\SprkNotes` (machine) wins over `HKCU\Software\Policies\SprkNotes` (user), which wins over user settings. The full key list is in the [admin guide](admin-guide.md#policy-registry). There is no ADMX template yet, so set values with a script, a `.reg` file, Group Policy Preferences (Registry) or an Intune Settings catalog custom entry.
+Policy under `HKLM\Software\Policies\SprkNotes` (machine) wins over `HKCU\Software\Policies\SprkNotes` (user), which wins over user settings. The full key list is in the [admin guide](admin-guide.md#policy-registry). A draft ADMX template in `packaging/admx` covers the update settings, `TranscriptsRoot`, `SummarizeEnabled` and `AssistantEnabled`; for the rest, set values with a script, a `.reg` file, Group Policy Preferences (Registry) or an Intune Settings catalog custom entry. The same keys can also go in `%ProgramData%\SprkNotes\policy.json` (see above), which sits between the machine and user registry keys.
 
 Example `.reg`:
 ```
@@ -113,6 +144,8 @@ msiexec /i SprkNotes_<ver>_x64.msi ALLUSERS=1 /qn /norestart `
 | `UPDATE_CHANNEL`, `UPDATE_REPO_URL`, `UPDATE_PROVIDER`, `UPDATE_MODE`, `UPDATE_PUBLIC_KEY` | Preconfigure the setting |
 | `LOCK_UPDATES=1` | Write them as policy (locked in Settings). Without it they are starting values the user may change. A real lock needs a per-machine install (HKLM); a per-user install writes the user's own hive |
 | `UPDATE_TASK=0` | Per-machine only: do not create the update task (use when Intune or an RMM pushes updates) |
+| `DEFAULTS="Key=Value;Key=Value"` | Starting values (the user may change them). `\|` separates the items of a list. Kept on upgrade |
+| `POLICY="Key=Value;Key=Value"` | The same, locked. Out of the user's reach only in a per-machine install; per-user installs lock with the lock script above. Kept on upgrade |
 
 `Install-SprkNotes.ps1` and `install.ps1` take the same options as parameters.
 

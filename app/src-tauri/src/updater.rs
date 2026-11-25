@@ -64,14 +64,7 @@ fn save_choice(c: &UserChoice) {
 }
 
 fn defaults() -> InstallDefaults {
-    #[cfg(windows)]
-    {
-        InstallDefaults::load(&sprk_config::registry::RegistryPolicy::defaults_layered())
-    }
-    #[cfg(not(windows))]
-    {
-        InstallDefaults::default()
-    }
+    sprk_config::admin_defaults()
 }
 
 fn now() -> u64 {

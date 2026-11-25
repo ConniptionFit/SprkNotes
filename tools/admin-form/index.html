@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Nothing on this page talks to the network: everything is built in the browser. -->
+<meta http-equiv="Content-Security-Policy" content="connect-src 'none'; form-action 'none'; frame-src 'none'; object-src 'none'">
+<title>SprkNotes deployment scripts</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --surface: #fff; --text: #1b1f24; --muted: #59616b; --border: #d6dae0;
+    --accent: #3157d5; --on-accent: #fff; --warn: #a3330f; --lock: #6b3fb5; --start: #1d7a4b; --code: #f0f2f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14171b; --surface: #1c2026; --text: #e7eaee; --muted: #9aa3ad; --border: #30363e;
+      --accent: #7f9cff; --on-accent: #0d1117; --warn: #ff9a7a; --lock: #c3a3ff; --start: #6fd59e; --code: #11151a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, "Segoe UI", sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  h2 { font-size: 1.15rem; margin: 0 0 8px; }
+  p { margin: 0 0 8px; }
+  .muted { color: var(--muted); }
+  section { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-top: 16px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+  label.field { display: grid; gap: 4px; font-weight: 600; }
+  label.field span { font-weight: 400; color: var(--muted); font-size: 0.85rem; }
+  input, select, textarea { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; width: 100%; }
+  textarea { min-height: 64px; font-family: ui-monospace, Consolas, monospace; font-size: 0.85rem; }
+  details { border-top: 1px solid var(--border); padding: 8px 0; }
+  details:first-of-type { border-top: 0; }
+  summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
+  .row { display: grid; grid-template-columns: minmax(180px, 1.2fr) 150px minmax(200px, 1.6fr); gap: 10px; align-items: start; padding: 10px 0; border-top: 1px dashed var(--border); }
+  .row:first-of-type { border-top: 0; }
+  .row .name { font-weight: 600; }
+  .row .name small { display: block; font-weight: 400; color: var(--muted); }
+  .row .name code { font-size: 0.78rem; color: var(--muted); }
+  .row.lock { box-shadow: inset 3px 0 0 var(--lock); padding-left: 8px; }
+  .row.start { box-shadow: inset 3px 0 0 var(--start); padding-left: 8px; }
+  .row .value[hidden] { display: none; }
+  .vars { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+  .vars button { font-size: 0.75rem; padding: 2px 6px; }
+  button { font: inherit; border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+  button.primary { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+  .errors { color: var(--warn); margin: 8px 0 0; padding-left: 20px; }
+  .out { margin-top: 12px; }
+  .out header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+  .out pre { background: var(--code); border: 1px solid var(--border); border-radius: 6px; padding: 12px; overflow: auto; max-height: 360px; font-size: 0.8rem; white-space: pre; }
+  .tag { display: inline-block; font-size: 0.75rem; padding: 1px 8px; border-radius: 999px; border: 1px solid currentColor; }
+  .tag.lock { color: var(--lock); } .tag.start { color: var(--start); }
+  .actions { display: flex; gap: 8px; }
+  @media (max-width: 680px) { .row { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>SprkNotes deployment scripts</h1>
+  <p class="muted">Choose settings, then copy two scripts into NinjaOne (or any RMM). This page works offline and sends nothing anywhere.</p>
+
+  <section>
+    <h2>How it fits together</h2>
+    <p><span class="tag lock">Locked</span> settings go in a script that runs as <b>SYSTEM</b> and writes <code>HKLM\SOFTWARE\Policies\SprkNotes</code>. Only administrators can change that key, so people cannot undo it, and SprkNotes shows those settings as set by your organization.</p>
+    <p><span class="tag start">Starting value</span> settings are baked into the install script, which runs as the <b>signed-in user</b> and installs SprkNotes into their own profile. People can change starting values later.</p>
+    <p class="muted">Paths can use <code>%OneDrive%</code>, <code>%USERPROFILE%</code> and similar. They are stored as written and filled in for each person when SprkNotes runs.</p>
+  </section>
+
+  <section>
+    <h2>Which release</h2>
+    <div class="grid">
+      <label class="field">Channel<span>The newest release on this channel is installed.</span>
+        <select id="channel"><option value="stable">stable</option><option value="beta">beta</option><option value="alpha">alpha</option></select>
+      </label>
+      <label class="field">Release tag (optional)<span>Pin one release, for example v0.2.0. Empty means newest.</span>
+        <input id="tag" placeholder="v0.2.0" autocomplete="off" spellcheck="false">
+      </label>
+      <label class="field">Repository<span>owner/name on GitHub.</span>
+        <input id="repo" value="ConniptionFit/SprkNotes" autocomplete="off" spellcheck="false">
+      </label>
+      <label class="field">MSI folder (optional)<span>A folder or share with the MSIs. Empty downloads from GitHub and checks the SHA-256.</span>
+        <input id="folder" placeholder="\\server\share\SprkNotes" autocomplete="off" spellcheck="false">
+      </label>
+    </div>
+  </section>
+
+  <section>
+    <h2>Settings</h2>
+    <p class="muted">Leave a setting on "Not managed" to let people choose.</p>
+    <div id="settings"></div>
+  </section>
+
+  <section>
+    <h2>Your scripts</h2>
+    <label for="target">Where the SYSTEM script writes locked settings</label>
+    <select id="target">
+      <option value="registry" selected>Registry: HKLM\SOFTWARE\Policies\SprkNotes (recommended)</option>
+      <option value="file">File: %ProgramData%\SprkNotes\policy.json</option>
+      <option value="both">Both (the registry wins where both hold a setting)</option>
+    </select>
+    <p class="muted">The file is used only when its folder is locked down so ordinary users can't change it; the script does that. With the file, starting values are written there too.</p>
+    <label><input type="checkbox" id="replace" checked style="width:auto"> The SYSTEM script replaces all SprkNotes registry policy on the PC (recommended, so the script is the single source of truth)</label>
+    <ul class="errors" id="errors" hidden></ul>
+    <div id="outputs"></div>
+  </section>
+</main>
+<script src="settings.js"></script>
+<script>
+(function () {
+  "use strict";
+  const A = window.SprkAdmin;
+  const $ = (id) => document.getElementById(id);
+  const state = {};
+
+  function control(s) {
+    let el;
+    if (s.type === "bool") {
+      el = document.createElement("select");
+      el.innerHTML = '<option value="1">On</option><option value="0">Off</option>';
+    } else if (s.type === "enum") {
+      el = document.createElement("select");
+      el.innerHTML = s.options.map((o) => `<option value="${o}">${o}</option>`).join("");
+    } else if (s.type === "list") {
+      el = document.createElement("textarea");
+      el.placeholder = "One per line";
+    } else {
+      el = document.createElement("input");
+      if (s.type === "number") { el.inputMode = "numeric"; el.placeholder = s.max ? `${s.min} to ${s.max}` : "a whole number"; }
+      if (s.type === "path") el.placeholder = "%OneDrive%\\SprkNotes\\Transcripts";
+      if (s.type === "url") el.placeholder = "https://";
+      el.autocomplete = "off"; el.spellcheck = false;
+    }
+    el.setAttribute("aria-label", s.label);
+    return el;
+  }
+
+  function build() {
+    const groups = [...new Set(A.SETTINGS.map((s) => s.group))];
+    for (const g of groups) {
+      const d = document.createElement("details");
+      d.open = g === "Files" || g === "Look and live text" || g === "Updates";
+      d.innerHTML = `<summary>${g}</summary>`;
+      for (const s of A.SETTINGS.filter((x) => x.group === g)) {
+        const row = document.createElement("div");
+        row.className = "row";
+        const name = document.createElement("div");
+        name.className = "name";
+        name.innerHTML = `${s.label} <code>${s.key}</code><small></small>`;
+        name.querySelector("small").textContent = s.help;
+        const mode = document.createElement("select");
+        mode.setAttribute("aria-label", s.label + " management");
+        mode.innerHTML = '<option value="">Not managed</option>' + (s.start ? '<option value="start">Starting value</option>' : "") + '<option value="lock">Locked</option>';
+        const wrap = document.createElement("div");
+        wrap.className = "value";
+        wrap.hidden = true;
+        const input = control(s);
+        wrap.append(input);
+        if (s.type === "path") {
+          const vars = document.createElement("div");
+          vars.className = "vars";
+          for (const v of A.PATH_VARS) {
+            const b = document.createElement("button");
+            b.type = "button"; b.textContent = v; b.title = "Insert " + v;
+            b.onclick = () => { input.value = v + (input.value.startsWith("%") ? input.value.replace(/^%[^%]*%/, "") : "\\SprkNotes\\Transcripts"); update(); };
+            vars.append(b);
+          }
+          wrap.append(vars);
+        }
+        mode.onchange = () => { row.className = "row " + mode.value; wrap.hidden = !mode.value; update(); };
+        input.oninput = update; input.onchange = update;
+        state[s.key] = { mode, input };
+        row.append(name, mode, wrap);
+        d.append(row);
+      }
+      $("settings").append(d);
+    }
+  }
+
+  function choices() {
+    return A.SETTINGS.filter((s) => state[s.key].mode.value).map((s) => ({ key: s.key, mode: state[s.key].mode.value, value: state[s.key].input.value }));
+  }
+
+  function output(title, who, file, text, note) {
+    const box = document.createElement("div");
+    box.className = "out";
+    const head = document.createElement("header");
+    const h = document.createElement("div");
+    h.innerHTML = `<b></b><div class="muted"></div>`;
+    h.querySelector("b").textContent = title;
+    h.querySelector(".muted").textContent = who;
+    const actions = document.createElement("div");
+    actions.className = "actions";
+    const copy = document.createElement("button");
+    copy.className = "primary"; copy.textContent = "Copy";
+    copy.onclick = async () => { try { await navigator.clipboard.writeText(text); copy.textContent = "Copied"; } catch { copy.textContent = "Select and copy"; } setTimeout(() => (copy.textContent = "Copy"), 1500); };
+    actions.append(copy);
+    if (file) {
+      const save = document.createElement("button");
+      save.textContent = "Download " + file;
+      save.onclick = () => {
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(new Blob([text.replace(/\n/g, "\r\n")], { type: "text/plain" }));
+        a.download = file; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      };
+      actions.append(save);
+    }
+    head.append(h, actions);
+    const pre = document.createElement("pre");
+    pre.textContent = text;
+    box.append(head, pre);
+    if (note) { const p = document.createElement("p"); p.className = "muted"; p.textContent = note; box.append(p); }
+    return box;
+  }
+
+  function update() {
+    const c = choices();
+    const errors = A.validate(c);
+    const list = $("errors");
+    list.hidden = errors.length === 0;
+    list.innerHTML = "";
+    for (const e of errors) { const li = document.createElement("li"); li.textContent = e; list.append(li); }
+    const outs = $("outputs");
+    outs.innerHTML = "";
+    if (errors.length) return;
+    const opts = { channel: $("channel").value, tag: $("tag").value, repo: $("repo").value, folder: $("folder").value, replace: $("replace").checked, target: $("target").value };
+    if (c.some((x) => x.mode === "lock")) {
+      outs.append(output("1. Lock settings", "Run as SYSTEM. Push it to the device (scheduled or on enrolment) before or after the install.", "Set-SprkNotesPolicy.ps1", A.policyScript(c, opts)));
+    }
+    outs.append(output((c.some((x) => x.mode === "lock") ? "2. " : "") + "Install for the signed-in user", "Run as the current logged-on user, for example as a NinjaOne self-service item.", "Install-SprkNotes-User.ps1", A.installScript(c, opts)));
+    outs.append(output("Per-machine alternative (Intune, SCCM, GPO)", "One msiexec line that installs for every user and writes locked settings to HKLM.", null, A.machineCommand(c),
+      "In a .cmd or .bat file write each % as %% so the variable reaches SprkNotes unexpanded."));
+  }
+
+  build();
+  for (const id of ["channel", "tag", "repo", "folder", "replace", "target"]) { $(id).oninput = update; $(id).onchange = update; }
+  update();
+})();
+</script>
+</body>
+</html>

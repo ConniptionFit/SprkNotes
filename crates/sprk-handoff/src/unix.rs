@@ -47,7 +47,8 @@ impl Launcher for ShellLauncher {
             .unwrap_or(false)
     }
 
-    fn copy(&mut self, text: &str) {
+    /// Without a clipboard tool the window copies the text, so this still counts as copied.
+    fn copy(&mut self, text: &str) -> bool {
         let wayland = std::env::var_os("WAYLAND_DISPLAY").is_some();
         let ok = (wayland && run_with_stdin("wl-copy", &[], text))
             || run_with_stdin("xclip", &["-selection", "clipboard"], text)
@@ -56,6 +57,7 @@ impl Launcher for ShellLauncher {
         if !ok {
             self.uncopied = Some(text.to_string());
         }
+        true
     }
 
     fn reveal(&mut self, path: &str) {

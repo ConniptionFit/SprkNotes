@@ -1,11 +1,14 @@
 <script lang="ts">
-  // One sound source as a small icon button (Me: microphone, Others: computer sound). Clicking it
+  // One sound source as a small icon button (a microphone for Me, a speaker for Others; the names
+  // are in the tooltip and for screen readers). Clicking it
   // opens a short menu: which device to transcribe, or turn this source off. The device choice is
   // the same one as in Settings (shared preference), so the two never disagree.
   import { backend } from "./api";
   import { prefs, setPref } from "./prefs.svelte";
   import { menuOptions, deviceLabel } from "./sources";
   import type { Source } from "./types";
+  import { BARS, pushLevel, waveform } from "./waveform";
+  import { untrack } from "svelte";
 
   let {
     source,
@@ -20,9 +23,19 @@
     onsource: (s: Source, on: boolean) => void;
   } = $props();
 
-  // A small meter beside the name: it moves with the sound this source picks up, so a muted
-  // or wrong device shows as flat while transcribing. Hidden when off or not transcribing.
-  const meter = $derived(on && level !== null ? Math.max(0, Math.min(1, level)) : null);
+  // A small waveform beside the icon: five bars fed by the last few levels, so speech shows as
+  // movement and a muted or wrong device stays flat. Hidden when off or not transcribing.
+  const live = $derived(on && level !== null);
+  let history = $state<number[]>(new Array(BARS).fill(0));
+  $effect(() => {
+    if (!live) {
+      history = new Array(BARS).fill(0);
+      return;
+    }
+    const l = level ?? 0;
+    history = pushLevel(untrack(() => history), l);
+  });
+  const bars = $derived(waveform(history));
 
   let open = $state(false);
   let found = $state<string[]>([]);
@@ -102,13 +115,16 @@
     onclick={toggleMenu}
   >
     {#if source === "mic"}
-      <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="7" y="2.5" width="6" height="10" rx="3" /><path d="M4.5 9.5a5.5 5.5 0 0011 0M10 15v2.5" /></svg>
+      <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="7.25" y="2.5" width="5.5" height="9.5" rx="2.75" /><path d="M4.75 9.5a5.25 5.25 0 0010.5 0M10 14.75v2.75M7.25 17.5h5.5" /></svg>
     {:else}
-      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 7.5h3l4-3.5v12l-4-3.5h-3z" /><path d="M13.5 7a4 4 0 010 6M15.5 5a7 7 0 010 10" /></svg>
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 7.75h3l4.5-3.75v12l-4.5-3.75h-3z" /><path d="M14 7.25a3.75 3.75 0 010 5.5" /></svg>
     {/if}
     {#if !on}<span class="slash" aria-hidden="true"></span>{/if}
-    <span class="who">{who}</span>
-    {#if meter !== null}<span class="meter" aria-hidden="true"><span style:transform="scaleY({meter})"></span></span>{/if}
+    {#if live}
+      <span class="wave" aria-hidden="true">
+        {#each bars as b, i (i)}<span style:transform="scaleY({b})"></span>{/each}
+      </span>
+    {/if}
     <svg class="caret" viewBox="0 0 10 10" aria-hidden="true"><path d="M2.5 4l2.5 2.5L7.5 4" /></svg>
   </button>
 
@@ -154,12 +170,11 @@
   .src .caret { width: 0.6rem; height: 0.6rem; opacity: 0.7; }
   .src.on.mic { background: var(--me-soft); color: var(--me); border-color: transparent; }
   .src.on.system { background: var(--others-soft); color: var(--others); border-color: transparent; }
-  .src:not(.on) .who { text-decoration: line-through; text-decoration-thickness: 1.5px; }
-  .meter { position: relative; width: 4px; height: 0.95rem; border-radius: 2px; background: color-mix(in srgb, currentColor 20%, transparent); overflow: hidden; }
-  .meter span { position: absolute; inset: 0; background: currentColor; border-radius: 2px; transform-origin: bottom; transition: transform 90ms linear; }
-  @media (prefers-reduced-motion: reduce) { .meter span { transition: none; } }
-  @media (forced-colors: active) { .meter { background: Canvas; outline: 1px solid CanvasText; } .meter span { background: CanvasText; } }
-  .slash { position: absolute; left: 0.5rem; top: 50%; width: 1.15rem; height: 1.5px; background: currentColor; transform: rotate(-45deg); }
+  .wave { display: inline-flex; align-items: center; gap: 2px; height: 1rem; }
+  .wave span { width: 2.5px; height: 100%; border-radius: 2px; background: currentColor; transform-origin: center; transition: transform 60ms linear; }
+  @media (prefers-reduced-motion: reduce) { .wave span { transition: none; } }
+  @media (forced-colors: active) { .wave span { background: CanvasText; } }
+  .slash { position: absolute; left: 0.45rem; top: 50%; width: 1.15rem; height: 1.5px; background: currentColor; transform: rotate(-45deg); }
   .src:hover { border-color: var(--accent); }
   .src:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 

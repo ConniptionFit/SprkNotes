@@ -105,9 +105,9 @@ pub struct UiCaption {
 }
 
 /// How often the source buttons' meters are updated.
-const LEVELS_EVERY_MS: u64 = 100;
+const LEVELS_EVERY_MS: u64 = 50;
 
-fn emit_captions(events: &dyn Events, session: &mut Session, now_ms: u64) {
+fn emit_captions(events: &dyn Events, session: &mut Session, now_ms: u64, offset_ms: u64) {
     for c in session.captions(now_ms) {
         events.caption(&UiCaption {
             speaker: if c.speaker == Speaker::Me {
@@ -119,7 +119,7 @@ fn emit_captions(events: &dyn Events, session: &mut Session, now_ms: u64) {
             is_final: c.is_final,
             sealed: c.sealed,
             utt: c.utt,
-            t: c.start_ms.map(timestamp),
+            t: c.start_ms.map(|m| timestamp(m + offset_ms)),
             text: c.text,
         });
     }
@@ -134,6 +134,8 @@ pub struct StartParams {
     /// `id@version` of the active transcription model.
     pub engine_label: String,
     pub commit: Config,
+    /// Continue this existing transcript instead of creating a new one (SPEC 6.5).
+    pub continue_from: Option<PathBuf>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -184,6 +186,8 @@ struct UiSink {
     writer: SharedWriter,
     events: Arc<dyn Events>,
     next_id: u64,
+    /// Added to every time: a continued transcript keeps counting from its last line.
+    offset_ms: u64,
 }
 
 impl UiSink {
@@ -204,19 +208,14 @@ impl Sink for UiSink {
         } else {
             "mic"
         };
+        let (start_ms, end_ms) = (seg.start_ms + self.offset_ms, seg.end_ms + self.offset_ms);
         if let Some(w) = lock(&self.writer).as_mut() {
-            w.append_statement(
-                seg.start_ms,
-                seg.end_ms,
-                seg.speaker.label(),
-                source,
-                &seg.text,
-            )?;
+            w.append_statement(start_ms, end_ms, seg.speaker.label(), source, &seg.text)?;
         }
         let id = self.id();
         self.events.line(UiLine::Statement {
             id,
-            t: timestamp(seg.start_ms),
+            t: timestamp(start_ms),
             speaker: seg.speaker.label().to_string(),
             text: seg.text.clone(),
         });
@@ -224,6 +223,7 @@ impl Sink for UiSink {
     }
 
     fn event(&mut self, at_ms: u64, text: &str) -> Result<(), SessionError> {
+        let at_ms = at_ms + self.offset_ms;
         if let Some(w) = lock(&self.writer).as_mut() {
             w.append_event(at_ms, text)?;
         }
@@ -267,27 +267,43 @@ impl Host {
             NameSource::User
         };
         std::fs::create_dir_all(&p.root).map_err(sprk_transcript::TranscriptError::from)?;
-        let path = unique_path(&p.root, &file_name(&stamp.date, &stamp.hhmm, &title));
-        let sidecar = p.root.join(".sprknotes").join(format!(
-            "{}.jsonl",
-            path.file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("session")
-        ));
-        let meta = Meta {
-            title: title.clone(),
-            date: stamp.date.clone(),
-            start: stamp.iso.clone(),
-            end: None,
-            duration: None,
-            status: Status::InProgress,
-            sources: vec!["mic".into(), "system".into()],
-            speakers: vec!["Me".into(), "Others".into()],
-            name_source: source,
-            engine: p.engine_label.clone(),
-            app: p.app_version.clone(),
+        let sidecar_for = |path: &std::path::Path| {
+            p.root.join(".sprknotes").join(format!(
+                "{}.jsonl",
+                path.file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("session")
+            ))
         };
-        let writer = TranscriptWriter::create(path, Some(sidecar), meta, None)?;
+        let (writer, offset_ms) = match &p.continue_from {
+            Some(existing) => TranscriptWriter::reopen(
+                existing.clone(),
+                Some(sidecar_for(existing)),
+                &p.app_version,
+                &p.engine_label,
+            )?,
+            None => {
+                let path = unique_path(&p.root, &file_name(&stamp.date, &stamp.hhmm, &title));
+                let sidecar = sidecar_for(&path);
+                let meta = Meta {
+                    title: title.clone(),
+                    date: stamp.date.clone(),
+                    start: stamp.iso.clone(),
+                    end: None,
+                    duration: None,
+                    status: Status::InProgress,
+                    sources: vec!["mic".into(), "system".into()],
+                    speakers: vec!["Me".into(), "Others".into()],
+                    name_source: source,
+                    engine: p.engine_label.clone(),
+                    app: p.app_version.clone(),
+                };
+                (
+                    TranscriptWriter::create(path, Some(sidecar), meta, None)?,
+                    0,
+                )
+            }
+        };
         let shared: SharedWriter = Arc::new(Mutex::new(Some(writer)));
         let writer = shared.clone();
         let (tx, rx) = channel();
@@ -309,6 +325,7 @@ impl Host {
                         commit,
                         root,
                         context,
+                        offset_ms,
                     );
                 }));
                 if outcome.is_err() {
@@ -380,6 +397,7 @@ fn run(
     commit: Config,
     root: PathBuf,
     context: Option<ContextConfig>,
+    offset_ms: u64,
 ) {
     let mut ctx = context.map(Ctx::new);
     let start = Instant::now();
@@ -392,6 +410,7 @@ fn run(
         writer: shared.clone(),
         events: events.clone(),
         next_id: 0,
+        offset_ms,
     };
     let mut session =
         Session::new(engine, make_vad, Box::new(sink), commit).with_echo_cancellation(true);
@@ -425,7 +444,7 @@ fn run(
                 if let Err(e) = session.pause(now_ms(&start)) {
                     problem(e);
                 }
-                emit_captions(events.as_ref(), &mut session, now_ms(&start));
+                emit_captions(events.as_ref(), &mut session, now_ms(&start), offset_ms);
                 events.status(UiStatus::Paused);
             }
             Ok(Cmd::Resume) => {
@@ -463,7 +482,7 @@ fn run(
         apply(got, &mut session, &mut last_device, t, &problem);
         let (cap_on, cap_me) = events.captions_wanted();
         session.set_captions(cap_on, cap_me);
-        emit_captions(events.as_ref(), &mut session, t);
+        emit_captions(events.as_ref(), &mut session, t, offset_ms);
         if t.saturating_sub(last_levels) >= LEVELS_EVERY_MS {
             last_levels = t;
             let [me, others] = session.levels();
@@ -500,16 +519,22 @@ fn run(
     if let Err(e) = session.end(t) {
         problem(e);
     }
-    emit_captions(events.as_ref(), &mut session, t);
+    emit_captions(events.as_ref(), &mut session, t, offset_ms);
     drop(session); // releases the sink's handle on the writer
     if let Some(mut w) = lock(&shared).take() {
         if let Some((name, src)) = title.take() {
             let stamp = clock.now();
-            let new_path = unique_path(&root, &file_name(&stamp.date, &stamp.hhmm, &name));
+            // Stay in the transcript's own folder (a continued one may live in a subfolder).
+            let dir = w.path().parent().map_or(root.clone(), |d| d.to_path_buf());
+            let new_path = unique_path(&dir, &file_name(&stamp.date, &stamp.hhmm, &name));
             let _ = w.rename(new_path, &name, src);
         }
-        if w.finalize(&clock.now().iso, &duration_text(t), Status::Complete)
-            .is_err()
+        if w.finalize(
+            &clock.now().iso,
+            &duration_text(t + offset_ms),
+            Status::Complete,
+        )
+        .is_err()
         {
             events.problem("finalize_failed");
         }
@@ -806,6 +831,7 @@ mod tests {
                 app_version: "0.0.1".into(),
                 engine_label: "test@2026.11.0".into(),
                 commit: Config::default(),
+                continue_from: None,
             },
             Box::new(QueueEngine(q)),
             Box::new(|| Box::new(ChunkVad(0))),
@@ -825,6 +851,69 @@ mod tests {
             .map(|e| e.path())
             .filter(|p| p.extension().is_some_and(|e| e == "md"))
             .collect()
+    }
+
+    #[test]
+    fn continuing_a_transcript_appends_to_the_same_file_with_later_times() {
+        let (host, _ev, dir) = launch("Standup", &["first part"]);
+        std::thread::sleep(Duration::from_millis(300));
+        host.end().unwrap();
+        let files = md_files(dir.path());
+        assert_eq!(files.len(), 1);
+        let before = std::fs::read_to_string(&files[0]).unwrap();
+
+        let ev = Arc::new(Collect::default());
+        let audio = Arc::new(Mutex::new(Some(vec![0.1f32; 16_000])));
+        let q = Arc::new(Mutex::new(vec!["second part".to_string()]));
+        let host = Host::start(
+            StartParams {
+                root: dir.path().to_path_buf(),
+                name: String::new(),
+                app_version: "0.0.2".into(),
+                engine_label: "test@2026.11.0".into(),
+                commit: Config::default(),
+                continue_from: Some(files[0].clone()),
+            },
+            Box::new(QueueEngine(q)),
+            Box::new(|| Box::new(ChunkVad(0))),
+            Box::new(move || Box::new(OneMicBackend(audio))),
+            Box::new(FixedClock),
+            ev.clone(),
+            None,
+        )
+        .unwrap();
+        assert_eq!(host.path(), Some(files[0].clone()));
+        std::thread::sleep(Duration::from_millis(300));
+        host.end().unwrap();
+        assert_eq!(md_files(dir.path()), files, "no second file");
+        let text = std::fs::read_to_string(&files[0]).unwrap();
+        assert!(text.contains("status: complete"));
+        assert!(text.contains("title: \"Standup\""), "{text}");
+        assert!(text.contains("**Me:** first part"));
+        assert!(text.contains("Transcription continued"));
+        assert!(text.contains("**Me:** second part"));
+        let p = sprk_transcript::parse::Parsed::parse(&text, None);
+        let first = p
+            .segments
+            .iter()
+            .find(|s| s.text == "first part")
+            .unwrap()
+            .start_ms;
+        let second = p
+            .segments
+            .iter()
+            .find(|s| s.text == "second part")
+            .unwrap()
+            .start_ms;
+        assert!(second > first, "{first} then {second}");
+        assert!(before.len() < text.len());
+        // The UI got the continued times too.
+        assert!(ev
+            .lines
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|l| matches!(l, UiLine::Statement { t, .. } if t != "00:00:00")));
     }
 
     #[test]
@@ -938,6 +1027,7 @@ mod tests {
                 app_version: "0.0.1".into(),
                 engine_label: "test@2026.11.0".into(),
                 commit: Config::default(),
+                continue_from: None,
             },
             Box::new(QueueEngine(Arc::new(Mutex::new(vec![])))),
             Box::new(|| Box::new(ChunkVad(0))),
@@ -1055,6 +1145,7 @@ mod tests {
                 app_version: "0.0.1".into(),
                 engine_label: "test@2026.11.0".into(),
                 commit: Config::default(),
+                continue_from: None,
             },
             Box::new(PanicEngine),
             Box::new(|| Box::new(ChunkVad(0))),
@@ -1097,6 +1188,7 @@ mod tests {
                 app_version: "0.0.1".into(),
                 engine_label: "test@2026.11.0".into(),
                 commit: Config::default(),
+                continue_from: None,
             },
             Box::new(QueueEngine(Arc::new(Mutex::new(vec![])))),
             Box::new(|| Box::new(ChunkVad(0))),
@@ -1184,6 +1276,7 @@ mod tests {
                 app_version: "0.0.1".into(),
                 engine_label: "test@2026.11.0".into(),
                 commit: Config::default(),
+                continue_from: None,
             },
             Box::new(SlowEngine),
             Box::new(|| Box::new(EveryFifthVad(0, 0))),

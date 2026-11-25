@@ -72,6 +72,17 @@ impl NameSource {
             NameSource::User => "user",
         }
     }
+
+    /// The front matter text back to a source; anything unknown counts as `Default`.
+    pub fn parse(v: &str) -> NameSource {
+        match v.trim() {
+            "audio-source" => NameSource::AudioSource,
+            "call" => NameSource::Call,
+            "calendar" => NameSource::Calendar,
+            "user" => NameSource::User,
+            _ => NameSource::Default,
+        }
+    }
 }
 
 /// Front matter fields. Strings are supplied by the caller (no clock in this crate).

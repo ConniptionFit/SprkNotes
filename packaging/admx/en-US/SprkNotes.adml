@@ -21,12 +21,20 @@
       <string id="UpdateRepoUrl_Explain">For example https://github.com/ConniptionFit/SprkNotes or a GitHub repository. Setting this locks the source.</string>
       <string id="UpdatePublicKeys">Trusted update signing key</string>
       <string id="UpdatePublicKeys_Explain">An OpenSSH ssh-ed25519 public key line. When set, updates must carry a signature from this key.</string>
+      <string id="Transcripts">Transcripts and AI</string>
+      <string id="TranscriptsRoot">Transcripts folder</string>
+      <string id="TranscriptsRoot_Explain">Where every user's transcripts are saved. A full path, and %VARIABLES% such as %OneDrive%\Transcripts are expanded for each user. Setting this locks the folder in Settings.</string>
+      <string id="SummarizeEnabled">Allow Summarize</string>
+      <string id="SummarizeEnabled_Explain">Disabled removes Summarize, so transcripts are never handed to Claude or Microsoft 365 Copilot. Transcripts may hold PHI.</string>
+      <string id="AssistantEnabled">Allow the on-device assistant (Ask Sprk)</string>
+      <string id="AssistantEnabled_Explain">Enabled turns the assistant on and locks it on; Disabled turns it off and locks it off.</string>
     </stringTable>
     <presentationTable>
       <presentation id="UpdateMode"><dropdownList refId="UpdateModeValue" defaultItem="1">Mode</dropdownList></presentation>
       <presentation id="UpdateChannel"><dropdownList refId="UpdateChannelValue" defaultItem="0">Channel</dropdownList></presentation>
       <presentation id="UpdateRepoUrl"><textBox refId="UpdateRepoUrlValue"><label>Repository address</label></textBox></presentation>
       <presentation id="UpdatePublicKeys"><textBox refId="UpdatePublicKeysValue"><label>Public key</label></textBox></presentation>
+      <presentation id="TranscriptsRoot"><textBox refId="TranscriptsRootValue"><label>Folder</label></textBox></presentation>
     </presentationTable>
   </resources>
 </policyDefinitionResources>
