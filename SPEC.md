@@ -368,6 +368,7 @@ Scheduled Teams and Zoom meetings live on the user's Outlook calendar, so one lo
 - List of transcripts (newest first): name, date, duration, folder. Search by name and full text.
 - Folder tree for user subfolders: create, rename, move transcripts (drag or menu).
 - Transcript view: rendered Markdown, **View in folder** (`explorer /select,`), **Export** (md, txt, docx, json), **Rename**, **Summarize with Claude**, **Summarize with Copilot**, **Delete** (to Recycle Bin, with confirm).
+- Rename changes the title in the front matter (`name_source: user`) and the file name; the `YYYY-MM-DD HHmm ` prefix stays and a clash gets a number. Move and rename take the sidecar along. Delete moves the transcript and its sidecar to the Recycle Bin; summaries and exports next to it stay. The running session's transcript, and the folder it is in, can't be renamed, moved or deleted until End. Folder names may not start with a dot, contain `\ / : < > " | ? *` or lead outside the transcripts root.
 
 ### 8.5 Settings (keep short)
 - Audio: mic device and output device (lists of devices; "System default" follows the headset, an unplugged pick falls back to the default), Others on/off, filler removal, commit delay (advanced).

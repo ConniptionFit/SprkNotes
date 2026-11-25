@@ -68,13 +68,34 @@ pub fn mark_interrupted(path: &Path) -> Result<(), TranscriptError> {
         f.write_all(format!("{sep}{}\n", event_line(at, "Transcription interrupted")).as_bytes())?;
         f.sync_all()?;
     }
-    let meta = parse_meta(&std::fs::read_to_string(path)?)?;
+    let mut meta = parse_meta(&std::fs::read_to_string(path)?)?;
+    meta.status = Status::Interrupted;
     rewrite_head(path, &meta)
 }
 
-fn parse_meta(text: &str) -> Result<crate::format::Meta, TranscriptError> {
+/// A front matter value as written by `yaml_str`: outer quotes removed, `\"` and `\\` undone.
+fn unquote(v: &str) -> String {
+    let Some(inner) = v.strip_prefix('"').and_then(|x| x.strip_suffix('"')) else {
+        return v.to_string();
+    };
+    let mut out = String::with_capacity(inner.len());
+    let mut chars = inner.chars();
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            if let Some(n) = chars.next() {
+                out.push(n);
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+/// The front matter of a transcript as a [`crate::format::Meta`], status included.
+pub(crate) fn parse_meta(text: &str) -> Result<crate::format::Meta, TranscriptError> {
     use crate::format::{Meta, NameSource};
-    let get = |k: &str| front_matter_field(text, k).map(|v| v.trim_matches('"').to_string());
+    let get = |k: &str| front_matter_field(text, k).map(unquote);
     let list = |k: &str| -> Vec<String> {
         get(k)
             .map(|v| {
@@ -94,7 +115,11 @@ fn parse_meta(text: &str) -> Result<crate::format::Meta, TranscriptError> {
         start: get("start").unwrap_or_default(),
         end: get("end"),
         duration: get("duration"),
-        status: Status::Interrupted,
+        status: match get("status").as_deref() {
+            Some("complete") => Status::Complete,
+            Some("interrupted") => Status::Interrupted,
+            _ => Status::InProgress,
+        },
         sources: list("sources"),
         speakers: list("speakers"),
         name_source: match get("name_source").as_deref() {

@@ -50,6 +50,17 @@ export interface Backend {
    * used, none copies the prompt and shows the file, and both come back as `choose`.
    */
   summarize(path: string | null, target: string | null): Promise<Summarized>;
+  /** Library folders as paths relative to the library ("Clients/Acme"), empty ones included. */
+  libraryFolders(): Promise<string[]>;
+  /** Rename a transcript (title and file name). Returns its new path. */
+  libraryRename(path: string, title: string): Promise<string>;
+  /** Move a transcript into `folder` ("" is the top of the library). Returns its new path. */
+  libraryMove(path: string, folder: string): Promise<string>;
+  /** Move a transcript to the Recycle Bin. The window asks first. */
+  libraryDelete(path: string): Promise<void>;
+  /** New folder inside `parent` ("" for the top); rename a folder. Both return the folder's path. */
+  folderCreate(parent: string, name: string): Promise<string>;
+  folderRename(folder: string, name: string): Promise<string>;
   /** Transcripts a crash left unfinished (asked once at launch), and closing one as interrupted. */
   recoveryScan(): Promise<LibraryEntry[]>;
   recoveryMark(path: string): Promise<void>;
@@ -107,6 +118,12 @@ async function tauri(): Promise<Backend> {
     libraryExport: (path, format) => invoke("library_export", { path, format }),
     latestTranscript: () => invoke("latest_transcript"),
     summarize: (path, target) => invoke("summarize", { path, target }),
+    libraryFolders: () => invoke("library_folders"),
+    libraryRename: (path, title) => invoke("library_rename", { path, title }),
+    libraryMove: (path, folder) => invoke("library_move", { path, folder }),
+    libraryDelete: (path) => invoke("library_delete", { path }),
+    folderCreate: (parent, name) => invoke("folder_create", { parent, name }),
+    folderRename: (folder, name) => invoke("folder_rename", { folder, name }),
     recoveryScan: () => invoke("recovery_scan"),
     recoveryMark: (path) => invoke("recovery_mark", { path }),
     onProblem: (cb) => listen<string>("session-problem", (e) => cb(e.payload)),
@@ -124,6 +141,8 @@ async function tauri(): Promise<Backend> {
     onPhase: (cb) => listen<Phase>("session-phase", (e) => cb(e.payload)),
   };
 }
+
+const mockFolders: string[] = ["Clients", "Clients/Acme"];
 
 const mockLibrary: LibraryEntry[] = [
   { path: "/mock/2026-11-19 0900 Budget sync.md", name: "2026-11-19 0900 Budget sync", title: "Budget sync", date: "2026-11-19", start: "09:00", duration: "0:32:10", status: "complete", folder: "" },
@@ -349,6 +368,50 @@ export function mockBackend(): Backend {
       if (have.length === 0) return { choose: [], toasts: ["No Claude or Copilot app found. Prompt copied and the file is highlighted. Open your assistant, attach the file and paste."] };
       if (have.length === 1) return { choose: [], toasts: have[0].id === "claude" ? [] : ["Prompt copied. Attach the highlighted file and paste."] };
       return { choose: have, toasts: [] };
+    },
+    libraryFolders: async () => [...mockFolders],
+    libraryRename: async (path, title) => {
+      const e = mockLibrary.find((x) => x.path === path);
+      const clean = title.trim().replace(/\s+/g, " ");
+      if (!e || !clean) throw "That name can't be used. Try a shorter one without symbols.";
+      const stamp = e.name.match(/^\d{4}-\d{2}-\d{2} \d{4} /)?.[0] ?? "";
+      e.title = clean;
+      e.name = stamp + clean;
+      e.path = `/mock/${e.folder ? e.folder + "/" : ""}${e.name}.md`;
+      return e.path;
+    },
+    libraryMove: async (path, folder) => {
+      const e = mockLibrary.find((x) => x.path === path);
+      if (!e) throw "That transcript is not in your library.";
+      if (folder && !mockFolders.includes(folder)) throw "That folder is not in your library.";
+      e.folder = folder;
+      e.path = `/mock/${folder ? folder + "/" : ""}${e.name}.md`;
+      return e.path;
+    },
+    libraryDelete: async (path) => {
+      const i = mockLibrary.findIndex((x) => x.path === path);
+      if (i >= 0) mockLibrary.splice(i, 1);
+    },
+    folderCreate: async (parent, name) => {
+      const clean = name.trim();
+      if (!clean || clean.startsWith(".") || /[\\/:<>"|?*]/.test(clean)) throw "That name can't be used. Try a shorter one without symbols.";
+      const path = parent ? `${parent}/${clean}` : clean;
+      if (mockFolders.some((f) => f.toLowerCase() === path.toLowerCase())) throw "There is already a folder with that name.";
+      mockFolders.push(path);
+      return path;
+    },
+    folderRename: async (folder, name) => {
+      const clean = name.trim();
+      if (!clean || clean.startsWith(".") || /[\\/:<>"|?*]/.test(clean)) throw "That name can't be used. Try a shorter one without symbols.";
+      const parent = folder.includes("/") ? folder.slice(0, folder.lastIndexOf("/")) : "";
+      const to = parent ? `${parent}/${clean}` : clean;
+      const move = (p: string) => (p === folder ? to : p.startsWith(folder + "/") ? to + p.slice(folder.length) : p);
+      mockFolders.splice(0, mockFolders.length, ...mockFolders.map(move));
+      for (const e of mockLibrary) {
+        e.folder = move(e.folder);
+        e.path = `/mock/${e.folder ? e.folder + "/" : ""}${e.name}.md`;
+      }
+      return to;
     },
     // "?recover" shows the unexpected-close prompt in the browser preview.
     recoveryScan: async () =>

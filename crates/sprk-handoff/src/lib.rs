@@ -4,10 +4,14 @@
 //!
 //! No network: a plan may name an `https://` page to open in the user's own app or browser,
 //! but SprkNotes itself makes no request.
+//!
+//! [`trash`] holds the other desktop-shell action the Library needs: moving a deleted
+//! transcript to the Recycle Bin or trash.
 
 pub mod detect;
 #[cfg(windows)]
 pub mod shell;
+pub mod trash;
 #[cfg(not(windows))]
 pub mod unix;
 

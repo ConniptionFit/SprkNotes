@@ -61,6 +61,10 @@ Once the Windows-only code lands, one pass in `sprk-winvm` covers it:
 - [ ] Device change test (M2): switch the VM's default output mid-session and confirm a `Source changed` event.
 - [ ] Bleed test on the Snapdragon laptop with speakers on (M4, ADR-013): play a video through the speakers while silent, then while talking; expect no Me lines from the video and your own speech kept. Check CPU stays within the 13.3 gate.
 
+## Library organize (SPEC 8.4), on the Windows VM
+- [ ] Create a folder and a subfolder, move a transcript in, rename the folder, then **View in folder** opens the new place. Rename a transcript and confirm the file name and the `.sprknotes` sidecar follow.
+- [ ] **Delete**: the transcript and its sidecar land in the Recycle Bin and **Restore** brings them back; a summary next to it stays. With a session running, rename, move and delete of its transcript are refused with "End the current session first."
+
 ## Decisions for John
 - [ ] Parakeet needs a CC-BY-4.0 attribution notice: approve the wording for the About screen and README.
 - [ ] Bundle Parakeet in the installer (about 460 MiB) or ship small and add the pack by RMM: chosen **bundle** (2026-11-19). Confirm installer size is acceptable for MSIX and Intune.

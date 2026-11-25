@@ -13,7 +13,7 @@ A tour of everything SprkNotes does and how to use it, with screenshots. All scr
 | **Pause and resume** | Gaps stay visible in the timestamps. |
 | **Overlay with live captions** | A small always-on-top controller with word-by-word captions. |
 | **Tray icon** | State at a glance and the same actions. |
-| **Library** | Browse, search, read and export past transcripts. |
+| **Library** | Browse, search, read, export and organize past transcripts in folders. |
 | **Summarize** | Hand a transcript to Claude or Microsoft 365 Copilot. |
 | **On-device speech model** | Parakeet TDT 0.6B v2, downloaded once from Settings (or bundled). |
 | **No audio on disk, no cloud** | Audio lives in memory only. The only network use is model downloads. |
@@ -93,7 +93,7 @@ Ask Sprk answers questions about the transcript while it is still going. It is *
 - It needs an assistant model installed first (Settings shows when one is missing).
 
 ## Library
-**Library** lists your transcripts newest first. Search matches names and the words inside transcripts. Open one to read it, then **View in folder**, **Export** (Word, plain text or JSON, saved next to the transcript) or **Summarize**.
+**Library** lists your transcripts newest first. Search matches names and the words inside transcripts. Open one to read it, then **View in folder**, **Export** (Word, plain text or JSON, saved next to the transcript), **Move** (into a folder), **Rename**, **Delete** (asks first, then moves it to the Recycle Bin) or **Summarize**. The folder picker above the list shows all transcripts, the top of the library or one folder; **New folder** and **Rename folder** sit next to it. The transcript of a session that is still running can't be moved, renamed or deleted until you press End.
 
 | List | Reading |
 |---|---|
