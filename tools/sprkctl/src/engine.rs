@@ -66,7 +66,7 @@ pub fn transcribe_file(a: &Args) -> Result<()> {
     let (m, mut engine) = load_engine(&a.model)?;
     let mut vad = a.vad.as_deref().map(load_vad).transpose()?;
     let audio = wav::read_file(Path::new(wav_path))?;
-    let samples = wav::to_16k(&audio);
+    let samples = sprk_audio::Resampler::convert(audio.sample_rate, 16_000, &audio.samples);
     eprintln!("model {} {} ({})", m.id, m.version, m.engine);
     let t = Instant::now();
     let segs = decode(&mut *engine, vad.as_mut(), &samples)?;
@@ -139,7 +139,7 @@ pub fn bench_accuracy(a: &Args) -> Result<()> {
     println!("model {} {} ({})", m.id, m.version, m.engine);
     for (path, reference) in fixtures(Path::new(dir))? {
         let audio = wav::read_file(&path)?;
-        let samples = wav::to_16k(&audio);
+        let samples = sprk_audio::Resampler::convert(audio.sample_rate, 16_000, &audio.samples);
         let t = Instant::now();
         let segs = decode(&mut *engine, vad.as_mut(), &samples)?;
         decode_s += t.elapsed().as_secs_f64();

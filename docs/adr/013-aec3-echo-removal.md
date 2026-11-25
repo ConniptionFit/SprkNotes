@@ -87,3 +87,42 @@ Decisions on the questions raised with this round:
 - **Input device picker:** added to Settings (SPEC 8.5 already lists mic device). Useful on its own and as a test
   tool: a headset mic sits close to the user, so the user's voice is far above the bleed.
 - Known limit: the first second of the first playback in a session is not suppressed (nothing is learned yet).
+
+## Update after alpha.6 (round 4): the streams were not lined up
+Rounds 1 to 3 were tested by feeding the canceller the microphone and the loopback in perfect step. A new end-to-end
+test (`crates/sprk-audio/tests/bleed_sim.rs`) feeds it through `LiveCapture` the way the app does: loopback that sends
+nothing while silent, 10 ms device packets, and a session thread that is sometimes busy for 0.3 to 1.5 s (decoding).
+It reproduced the field report: 3% to 100% of each phrase still leaked (most phrases over 30%), while the same audio
+in step leaked nothing after the first phrase. Three causes:
+
+1. **Audio placed by read time, not arrival time.** After a silence the loopback's audio was placed relative to when
+   the session thread read it, with the stall padding leaving it 200 to 400 ms behind the clock. Each restart of
+   playback moved the echo by a random few hundred ms, often outside the 50 to 450 ms AEC3 can follow, and the delay
+   tracker needs seconds to re-center. When playback stopped while the thread was busy, the silence was padded in
+   front of the last phrase instead of after it.
+2. **Microphone before speakers.** Each poll queued the microphone's audio first. After a busy stretch the canceller
+   had seconds of microphone audio and none of the matching speaker audio yet, gave up waiting after 300 ms, and
+   processed the microphone with no reference.
+3. **Reference slip.** Microphone audio processed without its reference consumed no reference, so the reference that
+   arrived later was matched with later microphone audio: a permanent shift until the tracker caught it.
+
+Decisions:
+- `PcmStream::read_packets` returns device packets with their arrival time (the cpal backend stamps each callback,
+  allocation-free, into a second lock-free ring). `LiveCapture` places a packet that follows a gap of 60 ms or more
+  at its arrival time minus the device's usual delay (learned while audio flows), and fills silence after a phrase,
+  never in front of it. Streams that cannot tell (Linux `parec`, which never goes quiet) keep the old padding.
+- `LiveCapture` queues system audio before microphone audio in each poll.
+- `EchoPath` keeps a reference debt: reference samples whose time was already processed without them are dropped on
+  arrival, so the streams stay lined up sample for sample.
+- The session restarts the canceller when a capture device changes, goes away or comes back.
+- Dedupe (layer 3) also drops a 2 or 3 word Me line that is the same words in a row as an Others line, at about the
+  moment those words were played (0.8 s). The same words said later, as a reply, are kept; one-word lines are not
+  judged this way. This reverses the round-1 choice to leave all short lines alone: a short phrase at the exact
+  moment it was played is the speakers.
+
+Result in the simulation (mic delay 10 to 120 ms, loopback 10 to 40 ms): after the first phrase, at most 9% of any
+phrase is cut by less than 20 dB (it was 3% to 100%), typically 30 to 60 dB of echo removed, and the user's speech in
+the gaps and over playback kept (0.6 to over 0.9 of its level). The first phrase of a session is still the weak spot
+(nothing learned yet; dedupe covers it). Real devices may deliver differently from the simulation, so the speakers-on
+laptop check (SPEC 13.2) is still the test that counts.
+

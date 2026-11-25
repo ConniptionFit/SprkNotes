@@ -48,6 +48,28 @@ const MIN_CONTAINED_WORDS: usize = 4;
 /// Share of the Me line's words that must appear, in order, in the remote speech around it.
 const CONTAINED_SHARE: f64 = 0.8;
 
+/// A short Me line (2 or 3 words) is bleed when the same words, in a row, are in a remote line
+/// at about the same moment: its start within this much of where those words fall in the remote
+/// line (estimated by their position in it). The same words said later, as a reply, are kept.
+const SHORT_MATCH_MS: u64 = 800;
+
+fn short_line_is_bleed(me: &Segment, mine: &[String], near: &[&Segment]) -> bool {
+    if mine.len() < 2 || mine.len() >= MIN_CONTAINED_WORDS {
+        return false;
+    }
+    near.iter().any(|r| {
+        let theirs = tokens(&r.text);
+        if theirs.len() < mine.len() {
+            return false;
+        }
+        let span = r.end_ms.saturating_sub(r.start_ms);
+        theirs.windows(mine.len()).enumerate().any(|(i, w)| {
+            let at = r.start_ms + span * i as u64 / theirs.len() as u64;
+            w == mine && me.start_ms.abs_diff(at) <= SHORT_MATCH_MS
+        })
+    })
+}
+
 fn overlaps(a: &Segment, b: &Segment) -> bool {
     a.start_ms <= b.end_ms + OVERLAP_MS && b.start_ms <= a.end_ms + OVERLAP_MS
 }
@@ -58,7 +80,8 @@ fn overlaps(a: &Segment, b: &Segment) -> bool {
 /// containment: the microphone and the system stream cut speech into lines differently, so a
 /// bleed line can be a piece of one remote line or span two. The remote lines near it are
 /// joined in time order and the Me line must sit inside them (at least 80% of its words, in
-/// order). Lines under four words are only judged by the first test.
+/// order). Lines of two or three words are judged by a stricter third test: the same words in
+/// a row at about the same moment (see `SHORT_MATCH_MS`). One-word lines only by the first.
 pub fn is_bleed(me: &Segment, remote: &[Segment], threshold: f64) -> bool {
     if me.speaker != crate::Speaker::Me {
         return false;
@@ -74,6 +97,9 @@ pub fn is_bleed(me: &Segment, remote: &[Segment], threshold: f64) -> bool {
         return true;
     }
     let mine = tokens(&me.text);
+    if short_line_is_bleed(me, &mine, &near) {
+        return true;
+    }
     if mine.len() < MIN_CONTAINED_WORDS || near.is_empty() {
         return false;
     }
@@ -197,14 +223,35 @@ mod tests {
             16_000,
             "we should ship the fix on thursday after the review board signs off",
         )];
-        let short = seg(Speaker::Me, 11_000, 11_800, "ship the fix");
+        // The same words repeated back later, as a reply, are the user's.
+        let repeated = seg(Speaker::Me, 15_200, 16_000, "ship the fix");
+        let other_words = seg(Speaker::Me, 11_000, 11_800, "sounds right");
         let real = seg(
             Speaker::Me,
             12_000,
             15_000,
             "thursday works but I need the rollback plan first",
         );
-        assert!(!is_bleed(&short, &remote, DEFAULT_THRESHOLD));
+        assert!(!is_bleed(&repeated, &remote, DEFAULT_THRESHOLD));
+        assert!(!is_bleed(&other_words, &remote, DEFAULT_THRESHOLD));
         assert!(!is_bleed(&real, &remote, DEFAULT_THRESHOLD));
+    }
+
+    #[test]
+    fn a_short_leaked_phrase_at_the_moment_it_was_played_is_caught() {
+        let remote = [seg(
+            Speaker::Others,
+            10_000,
+            16_000,
+            "we should ship the fix on thursday after the review board signs off",
+        )];
+        // "ship the fix" is words 3 to 5 of 13: played at about 10.9 s.
+        let leaked = seg(Speaker::Me, 11_000, 11_800, "ship the fix");
+        assert!(is_bleed(&leaked, &remote, DEFAULT_THRESHOLD));
+        let two = seg(Speaker::Me, 14_500, 15_200, "board signs");
+        assert!(is_bleed(&two, &remote, DEFAULT_THRESHOLD));
+        // One word is never judged this way.
+        let one = seg(Speaker::Me, 11_000, 11_300, "fix");
+        assert!(!is_bleed(&one, &remote, DEFAULT_THRESHOLD));
     }
 }

@@ -2,6 +2,7 @@
 //! (SPEC 4.2 to 4.4). Pure and deterministic: time is passed in, nothing reads a clock.
 
 pub mod caption;
+pub mod capture;
 pub mod commit;
 pub mod dedupe;
 pub mod host;

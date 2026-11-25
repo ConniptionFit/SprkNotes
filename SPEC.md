@@ -98,6 +98,8 @@ Speech engine: **sherpa-onnx** (Apache-2.0) because it supports Windows ARM64 an
                           JSONL sidecar)                                      (Tauri events)
 ```
 
+Threads: a capture thread reads both streams every 20 ms and hands 16 kHz frames to the session thread through an in-memory channel; the session thread runs echo removal, VAD, ASR, live captions, the commit buffer and the writer. A decode never delays reading the devices, and Pause and End first take every frame read up to that moment.
+
 ### 3.3 Repo layout
 
 ```
@@ -141,12 +143,12 @@ sprknotes/
 - **System:** WASAPI loopback on the user-selected output (default: the default *communications* render device, where call audio plays, else the console default). Follow default-device changes (headset plugged in, Bluetooth connects) without stopping the session.
 - Either source can be toggled off. Labels: mic = **Me**, loopback = **Others**, or the remote person's name on a confirmed 1:1 call (section 19).
 - The two streams are never mixed: each has its own VAD and utterance queue, and the label comes from the stream. The devices in use are written to the transcript as event lines ("Microphone: ...", "Others audio: ...") at the start and whenever they change (ADR-014).
-- Convert to 16 kHz mono f32 in the pipeline. Audio stays in in-memory ring buffers only.
+- Convert to 16 kHz mono f32 in the pipeline, low-pass filtered first (Kaiser-windowed sinc, pass band to 7 kHz, at least 60 dB down from 8 kHz) so sound above 8 kHz does not fold into the speech band. WAV input in `sprkctl` uses the same filter. Audio stays in in-memory ring buffers only.
 
 ### 4.2 Bleed removal (three layers)
 1. **Windows AEC:** open the mic stream as a communications stream; if `IAcousticEchoCancellationControl` is available, set the render endpoint being looped back as the AEC reference.
-2. **Software AEC:** run WebRTC AEC3 (pure Rust port, echo canceller only) on the mic using the loopback stream as the far-end reference (ADR-013). Both streams are kept on the wall clock: a loopback stream that delivers nothing while silent is padded with silence. Behind the canceller, mic sound that is not clearly louder (about 8 dB) than the bleed the speakers are expected to cause is muted, and sound that still follows the speakers' loudness pattern is muted too. No level setting is exposed: the expected bleed level is learned from the session.
-3. **Transcript dedupe (always on):** in the commit buffer, drop a Me segment when an Others segment overlaps it in time (±2 s) and normalized text similarity is ≥ 0.6 (token-level ratio; threshold configurable). Prefer the Others version.
+2. **Software AEC:** run WebRTC AEC3 (pure Rust port, echo canceller only) on the mic using the loopback stream as the far-end reference (ADR-013). Both streams are kept on the wall clock: a loopback stream that delivers nothing while silent is padded with silence, and when audio returns each device packet is placed by the time it arrived (not when the app got round to reading it), so the two streams stay lined up across silences and busy moments. The speaker audio of a moment is handed to the canceller before the microphone audio of that moment, and the canceller restarts when a capture device changes. Behind the canceller, mic sound that is not clearly louder (about 8 dB) than the bleed the speakers are expected to cause is muted, and sound that still follows the speakers' loudness pattern is muted too. No level setting is exposed: the expected bleed level is learned from the session.
+3. **Transcript dedupe (always on):** in the commit buffer, drop a Me segment when an Others segment overlaps it in time (±2 s) and normalized text similarity is ≥ 0.6 (token-level ratio; threshold configurable), or when 80% of its words (4 or more) appear in order in the Others speech around it, or when a 2 or 3 word Me segment is the same words in a row as an Others segment at about the same moment (within 0.8 s of where those words fall in it). Prefer the Others version.
 - **Headset detection:** if the render endpoint form factor is headphones/headset, layers 1 and 2 may be skipped; layer 3 stays on.
 - **Known limitation:** people speaking in the same room as the user are labeled Me.
 
