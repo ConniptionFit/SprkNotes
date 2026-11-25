@@ -1,5 +1,8 @@
 # SprkNotes admin guide
 
+> [!IMPORTANT]
+> **Deployment form: https://conniptionfit.github.io/SprkNotes/**. It builds the lock script (SYSTEM) and the per-user install script from the settings you pick, in your browser, with nothing sent anywhere. Walkthrough in [Deployment](deployment.md#admin-deployment-form).
+
 ## Artifacts (one version, built together)
 | Artifact | Use |
 |---|---|
@@ -15,7 +18,7 @@ Linux is a from-source build with no packaged artifact yet (see [install.md](ins
 
 ## Policy (registry)
 `HKLM\Software\Policies\SprkNotes` wins over `HKCU\Software\Policies\SprkNotes`, which wins over user settings. A policy locks the matching setting.
-Each key is its own value, or all of them packed in one string value named `Settings` (`Key=Value;Key=Value`, `|` between list items; what the MSI switch `POLICY` writes). Paths may use `%USERPROFILE%`, `%OneDrive%` and other variables, expanded for each user. To build the scripts without hand editing, use the offline form in `tools/admin-form` ([deployment](deployment.md#ninjaone-per-user-with-locked-settings-recommended)).
+Each key is its own value, or all of them packed in one string value named `Settings` (`Key=Value;Key=Value`, `|` between list items; what the MSI switch `POLICY` writes). Paths may use `%USERPROFILE%`, `%OneDrive%` and other variables, expanded for each user. To build the scripts without hand editing, use the [deployment form](https://conniptionfit.github.io/SprkNotes/) (also in this repository at `tools/admin-form/index.html`, which works offline). See [Deployment](deployment.md#admin-deployment-form).
 
 The same keys can live in `%ProgramData%\SprkNotes\policy.json`: `{"settings": {"TranscriptsRoot": {"value": "%OneDrive%\\Transcripts", "locked": true}, "Theme": {"value": "dark", "locked": false}}}`. Order, setting by setting: machine registry, then the file, then user registry. The file counts only when its folder and itself are owned by Administrators or SYSTEM and nobody else can write them; otherwise SprkNotes ignores it and writes why to `%APPDATA%\SprkNotes\admin.log`. The form's lock script sets those permissions.
 

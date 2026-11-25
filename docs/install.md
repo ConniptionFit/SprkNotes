@@ -2,6 +2,8 @@
 
 Pick the shortest path that fits. All paths install the same build and never touch existing transcripts.
 
+> **Deploying to a team?** Use the [deployment form](https://conniptionfit.github.io/SprkNotes/) to build the lock and install scripts, and see [Deployment](deployment.md#admin-deployment-form).
+
 | Path | Admin needed | Certificate | Best for |
 |---|---|---|---|
 | [Portable zip](#a-standalone-portable-zip) | No | No | Trying it, a single PC, a USB stick |
