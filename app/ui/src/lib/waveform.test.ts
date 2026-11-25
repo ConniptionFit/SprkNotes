@@ -1,5 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { BARS, GATE, REST, SLOTS, ease, flat, gated, pushLevel, settled, waveform } from "./waveform";
+import {
+  BARS,
+  GATE,
+  REST,
+  ROLL_STEP_MS,
+  SLOTS,
+  ease,
+  flat,
+  gated,
+  pushLevel,
+  rollHeights,
+  rollPush,
+  rollShift,
+  rollStart,
+  rollStep,
+  rollStill,
+  settled,
+  waveform,
+} from "./waveform";
 
 describe("waveform", () => {
   it("is a flat line when silent", () => {
@@ -52,5 +70,51 @@ describe("waveform", () => {
   it("ignores a long pause between frames instead of jumping past the target", () => {
     const c = ease(flat(), new Array(BARS).fill(1), 10_000);
     expect(Math.max(...c)).toBeLessThanOrEqual(1);
+  });
+});
+
+describe("rolling waveform", () => {
+  it("starts flat and still", () => {
+    const r = rollStart();
+    expect(rollHeights(r)).toEqual(new Array(BARS + 1).fill(REST));
+    expect(rollStill(r)).toBe(true);
+  });
+
+  it("brings new sound in at the right edge and moves it left", () => {
+    let r = rollStart();
+    for (let t = 0; t < ROLL_STEP_MS * 2; t += 16) r = rollStep(r, 0.9, 16);
+    const h = rollHeights(r);
+    expect(h[h.length - 1]).toBeGreaterThan(REST);
+    expect(h[0]).toBe(REST);
+    const before = h.findIndex((x) => x > REST);
+    for (let t = 0; t < ROLL_STEP_MS * 3; t += 16) r = rollStep(r, 0, 16);
+    expect(rollHeights(r).findIndex((x) => x > REST)).toBeLessThan(before);
+  });
+
+  it("slides smoothly between columns", () => {
+    let r = rollStart();
+    r = rollStep(r, 0.9, ROLL_STEP_MS);
+    expect(rollShift(r)).toBeCloseTo(1);
+    r = rollStep(r, 0.9, ROLL_STEP_MS / 2);
+    expect(rollShift(r)).toBeCloseTo(0.5);
+  });
+
+  it("goes flat and still after dead air, hiss included", () => {
+    let r = rollStart();
+    for (let t = 0; t < 1000; t += 16) r = rollStep(r, 0.9, 16);
+    expect(rollStill(r)).toBe(false);
+    for (let t = 0; t < 3000; t += 16) r = rollStep(r, 0.2, 16);
+    expect(rollStill(r)).toBe(true);
+    expect(rollHeights(r).every((x) => Math.abs(x - REST) < 0.01)).toBe(true);
+  });
+
+  it("with reduced motion, adds a column per level", () => {
+    let r = rollStart();
+    r = rollPush(r, 1);
+    expect(rollHeights(r)[BARS]).toBe(1);
+    expect(rollShift(r)).toBe(1);
+    r = rollPush(r, gated(0.1));
+    expect(rollHeights(r)[BARS]).toBe(REST);
+    expect(rollHeights(r)[BARS - 1]).toBe(1);
   });
 });

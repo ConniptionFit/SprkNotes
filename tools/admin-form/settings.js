@@ -13,6 +13,7 @@
 
     { key: "Theme", group: "Look and live text", type: "enum", options: ["system", "light", "dark"], start: true, label: "Appearance", help: "System follows Windows; Light or Dark always." },
     { key: "ThrowbackMode", group: "Look and live text", type: "bool", start: true, label: "Throwback Mode", help: "The first look of SprkNotes." },
+    { key: "WaveformStyle", group: "Look and live text", type: "enum", options: ["bars", "rolling"], start: true, label: "Sound meter", help: "bars (nine bars, newest in the middle) or rolling (bars sliding right to left)." },
     { key: "LiveCaptions", group: "Look and live text", type: "bool", start: true, label: "Live captions", help: "Words on the pop-out while people are still speaking." },
     { key: "LiveLine", group: "Look and live text", type: "bool", start: true, label: "Live line in the transcript window", help: "The newest words grow at the end of the transcript before they settle." },
     { key: "CaptionDelay", group: "Look and live text", type: "enum", options: ["fast", "steady", "smooth"], start: true, label: "Live text delay", help: "fast, steady or smooth (smoothest)." },

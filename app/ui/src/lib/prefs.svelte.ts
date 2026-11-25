@@ -1,4 +1,5 @@
 import { backend } from "./api";
+import type { WaveStyle } from "./waveform";
 import { chosenKeys, effective, NOTHING_MANAGED, parseManaged, type Managed } from "./managed";
 
 // Small UI-only preferences, shared by the main window and the overlay through localStorage.
@@ -13,6 +14,8 @@ type Prefs = {
   theme: Theme;
   /** Throwback Mode: the first look (old icon, Segoe UI, earlier purple) instead of the current brand. */
   throwback: boolean;
+  /** How the Me and Others buttons draw sound: nine bars (default) or rolling bars. */
+  waveStyle: WaveStyle;
   captionsOn: boolean;
   captionsWho: CaptionWho;
   captionDelay: CaptionDelay;
@@ -50,7 +53,7 @@ export const LINE_TEXT = [12, 13, 14, 15, 17, 19, 22, 26];
 export const CAPTION_LIMITS = { minW: 260, maxW: 900, minH: 64, maxH: 480 };
 
 const KEY = "sprknotes.prefs";
-const defaults: Prefs = { theme: "system", throwback: false, captionsOn: false, captionsWho: "others", captionDelay: "steady", captionW: 420, captionH: 118, captionText: 2, liveLine: true, lineText: 3, assistantOn: false, assistantTier: "light", assistantFeatures: ["title", "recap", "actions", "ask"], micDevice: null, systemDevice: null, micOn: true, systemOn: true, micPromptOn: true, micPromptSkip: [], hotkeyOn: false, hotkeyKeys: "Ctrl+Alt+S" };
+const defaults: Prefs = { theme: "system", throwback: false, waveStyle: "bars", captionsOn: false, captionsWho: "others", captionDelay: "steady", captionW: 420, captionH: 118, captionText: 2, liveLine: true, lineText: 3, assistantOn: false, assistantTier: "light", assistantFeatures: ["title", "recap", "actions", "ask"], micDevice: null, systemDevice: null, micOn: true, systemOn: true, micPromptOn: true, micPromptSkip: [], hotkeyOn: false, hotkeyKeys: "Ctrl+Alt+S" };
 
 const clamp = (n: unknown, lo: number, hi: number, fallback: number) =>
   typeof n === "number" && Number.isFinite(n) ? Math.min(hi, Math.max(lo, Math.round(n))) : fallback;
@@ -78,6 +81,7 @@ function load(): Prefs {
     p.captionW = clamp(p.captionW, CAPTION_LIMITS.minW, CAPTION_LIMITS.maxW, defaults.captionW);
     p.captionH = clamp(p.captionH, CAPTION_LIMITS.minH, CAPTION_LIMITS.maxH, defaults.captionH);
     p.captionText = clamp(p.captionText, 0, CAPTION_TEXT.length - 1, defaults.captionText);
+    if (p.waveStyle !== "bars" && p.waveStyle !== "rolling") p.waveStyle = defaults.waveStyle;
     if (!(p.captionDelay in DELAY_MS)) p.captionDelay = defaults.captionDelay;
     p.lineText = clamp(p.lineText, 0, LINE_TEXT.length - 1, defaults.lineText);
     if (!["titles", "light", "standard"].includes(p.assistantTier)) p.assistantTier = defaults.assistantTier;
