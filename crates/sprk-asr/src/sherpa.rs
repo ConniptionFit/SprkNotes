@@ -114,6 +114,11 @@ pub struct SileroVad {
 /// about 0.65 s after it begins, so less than this clipped a sentence's first words. Never
 /// reaches back into the previous utterance, so no word is decoded twice.
 const PRE_ROLL: u64 = 16_000;
+/// Samples kept after a detected utterance (0.3 s). The detector ends speech where its
+/// probability first drops, often inside a word's quiet tail (a final s, t or k), and only
+/// releases it after 0.5 s of silence, so this much is always heard already and is silence by
+/// the detector's own measure: it never reaches into the next utterance.
+const POST_ROLL: u64 = 4_800;
 /// History cap: longer than the VAD's 60 s internal buffer.
 const HISTORY_MAX: usize = 70 * 16_000;
 /// The detector only honors its maximum speech length at a pause. Speech with no pause for this
@@ -154,25 +159,27 @@ impl SileroVad {
         let mut out = Vec::new();
         while let Some(seg) = self.vad.front() {
             let start = self.offset + seg.start().max(0) as u64;
-            // Prepend pre-roll from history when it still holds those samples.
-            let want_from = start
-                .saturating_sub(PRE_ROLL)
-                .max(self.hist_base)
-                .max(self.prev_end.min(start));
-            let pre: Vec<f32> = if want_from < start {
-                let from = (want_from - self.hist_base) as usize;
-                let n = (start - want_from) as usize;
-                self.history.iter().skip(from).take(n).copied().collect()
-            } else {
-                Vec::new()
+            let len = seg.samples().len() as u64;
+            let heard = self.hist_base + self.history.len() as u64;
+            let floor = self.hist_base.max(self.prev_end.min(start));
+            let (from, to) = crate::padded_span(start, len, floor, heard, PRE_ROLL, POST_ROLL);
+            let span = |a: u64, b: u64| -> Vec<f32> {
+                let skip = a.saturating_sub(self.hist_base) as usize;
+                self.history
+                    .iter()
+                    .skip(skip)
+                    .take(b.saturating_sub(a) as usize)
+                    .copied()
+                    .collect()
             };
-            let mut samples = pre;
+            let mut samples = span(from, start);
             samples.extend_from_slice(seg.samples());
+            samples.extend(span(start + len, to));
             out.push(Utterance {
-                start_sample: start - (start - want_from).min(start),
+                start_sample: from,
                 samples,
             });
-            self.prev_end = start + seg.samples().len() as u64;
+            self.prev_end = to;
             self.vad.pop();
         }
         out

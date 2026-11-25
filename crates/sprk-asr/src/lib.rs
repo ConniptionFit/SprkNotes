@@ -53,6 +53,27 @@ fn to_ms(samples: u64) -> u64 {
     samples * 1000 / SAMPLE_RATE
 }
 
+/// Where to cut an utterance out of recent audio, as absolute sample indexes `[from, to)`.
+///
+/// The detector reports speech `[start, start + len)`: it starts late (its onset lags the real
+/// start) and ends where the speech probability first dropped, which is often inside a word's
+/// quiet tail (a final s, t or k), so the engine drops or mishears the last word. `pre` and
+/// `post` samples are added on either side, but never before `floor` (the end of the previous
+/// utterance, so no word is decoded twice) and never past `avail` (audio not heard yet).
+pub fn padded_span(
+    start: u64,
+    len: u64,
+    floor: u64,
+    avail: u64,
+    pre: u64,
+    post: u64,
+) -> (u64, u64) {
+    let end = start + len;
+    let from = start.saturating_sub(pre).max(floor.min(start));
+    let to = end.saturating_add(post).min(avail).max(end);
+    (from, to)
+}
+
 /// Transcribe one utterance and place its segments on the stream timeline.
 pub fn transcribe_utterance(
     engine: &mut dyn Engine,
@@ -224,5 +245,49 @@ mod tests {
             script: vec![seg.clone()],
         };
         assert_eq!(e.transcribe(&[]).ok(), Some(vec![seg]));
+    }
+
+    #[test]
+    fn utterance_gets_lead_in_and_tail() {
+        // Speech 10 000..20 000, plenty of audio around it.
+        assert_eq!(
+            padded_span(10_000, 10_000, 0, 40_000, 1_000, 500),
+            (9_000, 20_500)
+        );
+    }
+
+    #[test]
+    fn lead_in_never_reaches_back_into_the_previous_utterance() {
+        assert_eq!(
+            padded_span(10_000, 10_000, 9_600, 40_000, 1_000, 500),
+            (9_600, 20_500)
+        );
+        // A previous end past this start (forced cut) adds no lead-in at all.
+        assert_eq!(
+            padded_span(10_000, 10_000, 12_000, 40_000, 1_000, 500),
+            (10_000, 20_500)
+        );
+    }
+
+    #[test]
+    fn tail_never_reaches_past_the_audio_heard_so_far() {
+        assert_eq!(
+            padded_span(10_000, 10_000, 0, 20_200, 1_000, 500),
+            (9_000, 20_200)
+        );
+        // Nothing after the speech yet (end of stream): no tail, and never shorter.
+        assert_eq!(
+            padded_span(10_000, 10_000, 0, 20_000, 1_000, 500),
+            (9_000, 20_000)
+        );
+        assert_eq!(
+            padded_span(10_000, 10_000, 0, 15_000, 1_000, 500),
+            (9_000, 20_000)
+        );
+    }
+
+    #[test]
+    fn lead_in_stops_at_the_start_of_the_stream() {
+        assert_eq!(padded_span(300, 1_000, 0, 5_000, 1_000, 500), (0, 1_800));
     }
 }
