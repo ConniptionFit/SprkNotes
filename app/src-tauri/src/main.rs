@@ -582,7 +582,13 @@ fn main() -> anyhow::Result<()> {
             library::recovery_mark,
             library::library_export,
             library::latest_transcript,
-            library::summarize
+            library::summarize,
+            library::library_folders,
+            library::library_rename,
+            library::library_move,
+            library::library_delete,
+            library::folder_create,
+            library::folder_rename
         ])
         .build(tauri::generate_context!())?
         .run(|_app, event| {

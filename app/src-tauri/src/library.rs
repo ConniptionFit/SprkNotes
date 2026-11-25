@@ -346,3 +346,115 @@ pub fn summarize(
         clipboard,
     })
 }
+
+// ---- Organize (SPEC 8.4): rename, folders, move, delete to the Recycle Bin. ----
+
+/// The file the running session writes to, if any. The library leaves that one alone: moving
+/// or deleting it mid-session would lose lines.
+fn live(state: &tauri::State<crate::AppState>) -> Option<PathBuf> {
+    let host = state.host.lock().ok()?;
+    let p = host.as_ref()?.path()?;
+    Some(std::fs::canonicalize(&p).unwrap_or(p))
+}
+
+fn same(a: &Path, b: &Path) -> bool {
+    std::fs::canonicalize(a).map(|a| a == b).unwrap_or(false)
+}
+
+fn not_live(state: &tauri::State<crate::AppState>, p: &Path) -> Result<(), String> {
+    match live(state) {
+        Some(l) if same(p, &l) => Err("End the current session first.".into()),
+        _ => Ok(()),
+    }
+}
+
+fn plain(e: library::LibraryError) -> String {
+    use library::LibraryError as E;
+    match e {
+        E::BadName => "That name can't be used. Try a shorter one without symbols.".into(),
+        E::FolderExists => "There is already a folder with that name.".into(),
+        E::NoSuchFolder => "That folder is not in your library.".into(),
+        E::Trash => "Could not move it to the Recycle Bin.".into(),
+        E::Transcript(_) => "Could not change that transcript.".into(),
+    }
+}
+
+struct RecycleBin;
+
+impl library::Trash for RecycleBin {
+    fn trash(&self, paths: &[PathBuf]) -> std::io::Result<()> {
+        sprk_handoff::trash::to_trash(paths)
+    }
+}
+
+/// Every user folder under the library, as paths relative to it ("Clients/Acme").
+#[tauri::command]
+pub fn library_folders(app: AppHandle) -> Result<Vec<String>, String> {
+    Ok(library::folders(&root(&app)?))
+}
+
+/// Rename a transcript: the title in the file and the file name follow. Returns the new path.
+#[tauri::command]
+pub fn library_rename(
+    app: AppHandle,
+    state: tauri::State<crate::AppState>,
+    path: String,
+    title: String,
+) -> Result<String, String> {
+    let p = checked(&app, &path)?;
+    not_live(&state, &p)?;
+    library::rename(&root(&app)?, &p, &title)
+        .map(|n| n.to_string_lossy().into_owned())
+        .map_err(plain)
+}
+
+/// Move a transcript into `folder` ("" is the library itself). Returns the new path.
+#[tauri::command]
+pub fn library_move(
+    app: AppHandle,
+    state: tauri::State<crate::AppState>,
+    path: String,
+    folder: String,
+) -> Result<String, String> {
+    let p = checked(&app, &path)?;
+    not_live(&state, &p)?;
+    library::move_to(&root(&app)?, &p, &folder)
+        .map(|n| n.to_string_lossy().into_owned())
+        .map_err(plain)
+}
+
+/// Delete a transcript to the Recycle Bin. The window confirms first.
+#[tauri::command]
+pub fn library_delete(
+    app: AppHandle,
+    state: tauri::State<crate::AppState>,
+    path: String,
+) -> Result<(), String> {
+    let p = checked(&app, &path)?;
+    not_live(&state, &p)?;
+    library::delete(&root(&app)?, &p, &RecycleBin).map_err(plain)
+}
+
+/// New folder inside `parent` ("" for the top). Returns its relative path.
+#[tauri::command]
+pub fn folder_create(app: AppHandle, parent: String, name: String) -> Result<String, String> {
+    library::create_folder(&root(&app)?, &parent, &name).map_err(plain)
+}
+
+/// Rename a folder. Refused while the running session writes inside it.
+#[tauri::command]
+pub fn folder_rename(
+    app: AppHandle,
+    state: tauri::State<crate::AppState>,
+    folder: String,
+    name: String,
+) -> Result<String, String> {
+    let root = root(&app)?;
+    if let Some(l) = live(&state) {
+        let dir = std::fs::canonicalize(root.join(&folder)).ok();
+        if dir.is_some_and(|d| l.starts_with(d)) {
+            return Err("End the current session first.".into());
+        }
+    }
+    library::rename_folder(&root, &folder, &name).map_err(plain)
+}

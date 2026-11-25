@@ -161,6 +161,7 @@ enum Cmd {
 pub struct Host {
     tx: Sender<Cmd>,
     join: Option<JoinHandle<()>>,
+    writer: SharedWriter,
 }
 
 type SharedWriter = Arc<Mutex<Option<TranscriptWriter>>>;
@@ -275,6 +276,7 @@ impl Host {
         };
         let writer = TranscriptWriter::create(path, Some(sidecar), meta, None)?;
         let shared: SharedWriter = Arc::new(Mutex::new(Some(writer)));
+        let writer = shared.clone();
         let (tx, rx) = channel();
         let root = p.root.clone();
         let commit = p.commit.clone();
@@ -304,7 +306,14 @@ impl Host {
         Ok(Host {
             tx,
             join: Some(join),
+            writer,
         })
+    }
+
+    /// The file this session writes to right now (automatic renames move it), so the Library
+    /// can leave it alone. None once the file is closed.
+    pub fn path(&self) -> Option<std::path::PathBuf> {
+        lock(&self.writer).as_ref().map(|w| w.path().to_path_buf())
     }
 
     fn send(&self, c: Cmd) -> Result<(), HostError> {
@@ -830,8 +839,14 @@ mod tests {
     #[test]
     fn rename_during_the_session_wins_at_the_end() {
         let (host, _ev, dir) = launch("", &["some words to commit here"]);
+        let first = host.path().unwrap();
+        assert!(first.to_string_lossy().contains("Transcript"));
         host.rename("Budget review").unwrap();
         std::thread::sleep(Duration::from_millis(200));
+        // The live file keeps its name until End; path() still points at it.
+        let live = host.path().unwrap();
+        assert_eq!(live, first);
+        assert!(live.exists());
         host.end().unwrap();
         let files = md_files(dir.path());
         assert_eq!(files.len(), 1);

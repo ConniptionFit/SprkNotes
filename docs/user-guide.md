@@ -107,12 +107,14 @@ Export to `.txt`, `.json` or `.docx` from the Library.
 Everyone you hear through the speakers. On a confirmed 1:1 Teams call the other person is named. On group calls, or when nobody can be identified, it stays `Others`. Speech from a video or other app playing sound is shown as an audio source event; it may not be a person in the meeting. Live captions and the live line always say `Others`.
 
 ## Library
-**Library** (bottom bar) lists your transcripts, newest first. Type in the search box to match names and the words inside transcripts. Open one to read it, then use **View in folder**, **Export** (Word document, plain text or JSON, saved next to the transcript) or **Summarize**. It reads the same folder transcripts are saved to; no setup needed.
+**Library** (bottom bar) lists your transcripts, newest first. Type in the search box to match names and the words inside transcripts. Open one to read it, then use **View in folder**, **Export** (Word document, plain text or JSON, saved next to the transcript), **Move**, **Rename**, **Delete** or **Summarize**. It reads the same folder transcripts are saved to; no setup needed.
 
 ![Library](screenshots/library-light.png)
 ![Reading a transcript](screenshots/library-open-dark.png)
 
-Not yet in the Library: folders, rename and delete.
+**Folders.** Pick a folder above the list to see only its transcripts (and its subfolders'), or All transcripts. **New folder** makes one inside the folder you picked; **Rename folder** renames it. To put a transcript in a folder, open it and use **Move**. Dragging is not in yet.
+
+**Rename** changes the name shown in the Library and the file name; the date and time at the start of the file name stay. **Delete** asks first, then moves the transcript to the Recycle Bin, where you can restore it. Summaries and exports saved next to it are not deleted. While a session is running, its transcript (and the folder it is in) can't be renamed, moved or deleted until you press End.
 
 ## Summarize with Claude or Copilot
 **Summarize** (bottom bar, after a session ends, or inside an open transcript) hands the transcript to an assistant. SprkNotes sends nothing itself: you review and send inside that app.
