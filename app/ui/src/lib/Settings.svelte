@@ -303,7 +303,7 @@
     <div class="row">
       <div class="what">
         <p class="plain">Throwback Mode</p>
-        <p class="help">Get a blast from the past. Same app, a little vintage.</p>
+        <p class="help">Get a blast from the past: the original app icon. Everything else stays the same.</p>
       </div>
       <Managed locked={isLocked("throwback")}>
       <label class="switch">
