@@ -81,7 +81,7 @@ Open **Settings** at the bottom of the window.
   ![Update available](screenshots/settings-model-update-light.png)
   ![Managed by your organization](screenshots/settings-model-managed-light.png)
 - **Appearance.** System, Light or Dark.
-- **Sound meter.** How the Me and Others buttons show sound while transcribing: **Nine bars** (default, newest sound in the middle) or **Rolling bars** (sliding right to left like a voice note). Both go flat when nobody is talking.
+- **Sound meter.** How the Me and Others buttons show sound while transcribing: **Nine bars** (default, newest sound in the middle) or **Line wave** (one smooth line that swells with the voice). Both go flat when nobody is talking.
 - **Misc.** **Throwback Mode** (the first app icon). Everything else looks the same.
 
   ![Throwback Mode setting](screenshots/settings-throwback-light.png)
