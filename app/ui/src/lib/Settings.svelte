@@ -133,7 +133,7 @@
         value={prefs.waveStyle}
         options={[
           { value: "bars", text: "Nine bars" },
-          { value: "rolling", text: "Rolling bars" },
+          { value: "line", text: "Line wave" },
         ]}
         onchange={(v: WaveStyle) => setPref("waveStyle", v)}
         disabled={isLocked("waveStyle")}
