@@ -5,6 +5,7 @@
   import { prefs, setPref, captionFlags, CAPTION_TEXT, CAPTION_LIMITS } from "./prefs.svelte";
   import Light from "./Light.svelte";
   import IconButton from "./IconButton.svelte";
+  import CaptionWords from "./CaptionWords.svelte";
 
   // Plenty of history for a tall drawer; whatever does not fit is clipped at the top.
   const MAX_LINES = 12;
@@ -309,7 +310,7 @@
           <p class="cl old">{#if prefs.captionsWho === "both"}<b class="chip" class:me={l.speaker === "Me"}>{l.speaker}</b>{/if}{l.text}</p>
         {/each}
         {#if livePartial}
-          <p class="cl live">{#if prefs.captionsWho === "both"}<b class="chip" class:me={livePartial.speaker === "Me"}>{livePartial.speaker}</b>{/if}{#each wordsOf(livePartial) as w, i (i)}<span class="w" class:tent={i >= livePartial.stable} style="--d: {delay(livePartial, i)}ms">{w} </span>{/each}<i class="caret"></i></p>
+          <p class="cl live">{#if prefs.captionsWho === "both"}<b class="chip" class:me={livePartial.speaker === "Me"}>{livePartial.speaker}</b>{/if}<CaptionWords words={wordsOf(livePartial)} stable={livePartial.stable} delay={(i) => delay(livePartial!, i)} /><i class="caret"></i></p>
         {:else if shown.length === 0}
           <p class="cl hint">Captions appear here as people speak.</p>
         {/if}
@@ -418,10 +419,10 @@
   .cl { margin: 0; line-height: 1.4; }
   .cl.old { color: var(--muted); }
   .cl.live { color: var(--text); }
-  .w { animation: wordin 160ms ease-out both; animation-delay: var(--d, 0ms); }
-  .w.tent { opacity: 0.72; }
+  .cl :global(.w) { animation: wordin 160ms ease-out both; animation-delay: var(--d, 0ms); }
+  .cl :global(.w.tent) { opacity: 0.72; }
   @keyframes wordin { from { opacity: 0; transform: translateY(2px); } }
-  @media (prefers-reduced-motion: reduce) { .w { animation: none; } }
+  @media (prefers-reduced-motion: reduce) { .cl :global(.w) { animation: none; } }
   .cl.hint { color: var(--muted); font-size: 0.9em; }
   .chip { display: inline-block; margin-right: 0.5em; padding: 0 0.5em; border-radius: 999px; font-size: 0.7em; font-weight: 700; background: var(--others-soft); color: var(--others); }
   .chip.me { background: var(--me-soft); color: var(--me); }
