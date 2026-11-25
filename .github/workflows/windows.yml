@@ -77,6 +77,8 @@ jobs:
       - name: cargo check (app)
         working-directory: app/src-tauri
         run: cargo check --features engine-shared,tauri/custom-protocol
+      - name: cargo check (sprkctl with the engine)
+        run: cargo check -p sprkctl --features engine-shared,live
 
   package:
     name: release build (unsigned)

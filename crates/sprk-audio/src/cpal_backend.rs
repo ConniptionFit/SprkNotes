@@ -3,7 +3,7 @@
 //! The callback only pushes into a lock-free ring buffer: no allocation, no locks.
 //! Compiled with the `cpal-backend` feature.
 use crate::live::{Backend, PcmStream};
-use crate::{AudioError, LinearResampler, Source};
+use crate::{AudioError, Resampler, Source};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use ringbuf::traits::{Consumer, Producer, Split};
 use ringbuf::HeapRb;
@@ -24,7 +24,7 @@ struct CpalStream {
     // Dropping the stream stops capture.
     _stream: cpal::Stream,
     cons: ringbuf::HeapCons<f32>,
-    resampler: LinearResampler,
+    resampler: Resampler,
     scratch: Vec<f32>,
 }
 
@@ -153,7 +153,7 @@ impl Backend for CpalBackend {
         Ok(Box::new(CpalStream {
             _stream: stream,
             cons,
-            resampler: LinearResampler::new(rate, 16_000),
+            resampler: Resampler::new(rate, 16_000),
             scratch: vec![0.0; 8192],
         }))
     }
