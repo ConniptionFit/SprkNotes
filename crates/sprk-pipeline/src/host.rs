@@ -416,6 +416,7 @@ fn run(
         let t = now_ms(&start);
         capture.poll(t);
         for ev in capture.take_events() {
+            session.capture_changed();
             let text = match ev {
                 CaptureEvent::DeviceChanged(s) => format!("Source changed: {}", label(s)),
                 CaptureEvent::Unavailable(s) => format!("Source unavailable: {}", label(s)),
