@@ -155,6 +155,13 @@ impl Session {
         }
     }
 
+    /// A capture device changed, went away or came back: the echo canceller learned the old
+    /// speakers, microphone and the offset between their streams, all of which are now wrong.
+    /// Start it fresh so it relearns instead of muting or leaking with stale settings.
+    pub fn capture_changed(&mut self) {
+        self.flush_echo();
+    }
+
     pub fn state(&self) -> State {
         self.state
     }

@@ -1,15 +1,17 @@
 //! Session host: owns one live session on a dedicated thread (SPEC 3.2, 4.5, 6.3).
-//! Capture, VAD, ASR, commit buffer and the crash-safe writer all run here; the UI side only
+//! Echo removal, VAD, ASR, commit buffer and the crash-safe writer run here; the devices are
+//! read on a capture thread of their own (`capture.rs`) so a decode never stalls them. The UI side only
 //! sends commands and receives events. Everything platform-specific is injected, so the whole
 //! flow runs on the Linux dev host with fakes.
 //!
 //! Hard rules: audio never leaves memory; committed lines are appended and flushed at once
 //! (the writer does that), so a crash or a dropped `Host` loses nothing already committed.
+use crate::capture::{CaptureThread, Captured};
 use crate::commit::Config;
 use crate::session::{Session, SessionError, Sink, VadFactory};
 use crate::{Segment, Speaker};
 use sprk_asr::Engine;
-use sprk_audio::live::{Backend, CaptureEvent, LiveCapture};
+use sprk_audio::live::{Backend, CaptureEvent};
 use sprk_audio::Source;
 use sprk_context::activity::{ActivityTracker, Exclusions, Timing};
 use sprk_context::labeling::{parse_call_title, LabelTracker, Observation, TitleRules};
@@ -358,7 +360,12 @@ fn run(
     context: Option<ContextConfig>,
 ) {
     let mut ctx = context.map(Ctx::new);
-    let mut capture = LiveCapture::new(make_backend());
+    let start = Instant::now();
+    let mut capture = match CaptureThread::spawn(make_backend, start) {
+        Ok(c) => c,
+        // No thread to read the devices with: close the file as interrupted, as for a panic.
+        Err(_) => std::panic::resume_unwind(Box::new("capture thread did not start")),
+    };
     let sink = UiSink {
         writer: shared.clone(),
         events: events.clone(),
@@ -366,7 +373,6 @@ fn run(
     };
     let mut session =
         Session::new(engine, make_vad, Box::new(sink), commit).with_echo_cancellation(true);
-    let start = Instant::now();
     let now_ms = |s: &Instant| s.elapsed().as_millis() as u64;
     let mut last_tick = 0u64;
     let mut title: Option<(String, NameSource)> = None;
@@ -382,8 +388,14 @@ fn run(
         // Commands first so Pause/End act on a consistent state.
         match rx.recv_timeout(Duration::from_millis(20)) {
             Ok(Cmd::Pause) => {
-                capture.poll(now_ms(&start));
-                drain(&mut capture, &mut session);
+                let got = capture.sync();
+                apply(
+                    got,
+                    &mut session,
+                    &mut last_device,
+                    now_ms(&start),
+                    &problem,
+                );
                 if let Some(c) = ctx.as_mut() {
                     c.pause(now_ms(&start), &mut session);
                 }
@@ -395,7 +407,14 @@ fn run(
             }
             Ok(Cmd::Resume) => {
                 // Fresh streams: audio buffered through the pause must not be fed as new.
-                capture.restart();
+                let got = capture.restart();
+                apply(
+                    got,
+                    &mut session,
+                    &mut last_device,
+                    now_ms(&start),
+                    &problem,
+                );
                 if let Err(e) = session.resume(now_ms(&start)) {
                     problem(e);
                 }
@@ -414,37 +433,11 @@ fn run(
             Err(RecvTimeoutError::Timeout) => {}
         }
         let t = now_ms(&start);
-        capture.poll(t);
-        for ev in capture.take_events() {
-            let text = match ev {
-                CaptureEvent::DeviceChanged(s) => format!("Source changed: {}", label(s)),
-                CaptureEvent::Unavailable(s) => format!("Source unavailable: {}", label(s)),
-                CaptureEvent::Restored(s) => format!("Source restored: {}", label(s)),
-            };
-            if let Err(e) = session.event(t, &text) {
-                problem(e);
-            }
-        }
-        // Say which devices are in use (the transcript is the only place names may go): a wrong
-        // headset or speaker is otherwise invisible.
-        for (s, shown) in [
-            (Source::Mic, "Microphone"),
-            (Source::System, "Others audio"),
-        ] {
-            let now = capture.device_name(s).map(device_label);
-            let slot = &mut last_device[usize::from(s == Source::System)];
-            if now.is_some() && now != *slot {
-                if let Some(n) = &now {
-                    if let Err(e) = session.event(t, &format!("{shown}: {n}")) {
-                        problem(e);
-                    }
-                }
-            }
-            if now.is_some() {
-                *slot = now;
-            }
-        }
-        drain(&mut capture, &mut session);
+        // A capture panic carries on here, so the file closes as interrupted as it did when
+        // capture ran on this thread.
+        capture.rethrow_if_failed();
+        let got = capture.take();
+        apply(got, &mut session, &mut last_device, t, &problem);
         let (cap_on, cap_me) = events.captions_wanted();
         session.set_captions(cap_on, cap_me);
         emit_captions(events.as_ref(), &mut session, t);
@@ -463,8 +456,9 @@ fn run(
 
     // End (or the UI went away): flush, then finalize the file.
     let t = now_ms(&start);
-    capture.poll(t);
-    drain(&mut capture, &mut session);
+    let got = capture.sync();
+    apply(got, &mut session, &mut last_device, t, &problem);
+    capture.stop();
     if let Some(c) = ctx.as_mut() {
         if session.state() == crate::session::State::Running {
             c.pause(t, &mut session);
@@ -630,9 +624,48 @@ fn device_label(name: &str) -> String {
         .collect()
 }
 
-fn drain(capture: &mut LiveCapture, session: &mut Session) {
-    while let Some(f) = capture.next_frame() {
-        session.feed(f.source, &f.samples);
+/// Hand what capture produced to the session, in order: device notices become event lines,
+/// the device in use is named once each time it changes (the transcript is the only place names
+/// may go; a wrong headset or speaker is otherwise invisible), and audio is fed.
+fn apply(
+    got: Vec<Captured>,
+    session: &mut Session,
+    last_device: &mut [Option<String>; 2],
+    t: u64,
+    problem: &dyn Fn(SessionError),
+) {
+    for c in got {
+        match c {
+            Captured::Frame(f) => session.feed(f.source, &f.samples),
+            Captured::Event(ev) => {
+                session.capture_changed();
+                let text = match ev {
+                    CaptureEvent::DeviceChanged(s) => format!("Source changed: {}", label(s)),
+                    CaptureEvent::Unavailable(s) => format!("Source unavailable: {}", label(s)),
+                    CaptureEvent::Restored(s) => format!("Source restored: {}", label(s)),
+                };
+                if let Err(e) = session.event(t, &text) {
+                    problem(e);
+                }
+            }
+            Captured::Device(s, Some(name)) => {
+                let shown = match s {
+                    Source::Mic => "Microphone",
+                    Source::System => "Others audio",
+                };
+                let now = Some(device_label(&name));
+                let slot = &mut last_device[usize::from(s == Source::System)];
+                if now != *slot {
+                    if let Some(n) = &now {
+                        if let Err(e) = session.event(t, &format!("{shown}: {n}")) {
+                            problem(e);
+                        }
+                    }
+                    *slot = now;
+                }
+            }
+            Captured::Device(_, None) => {}
+        }
     }
 }
 
@@ -983,5 +1016,134 @@ mod tests {
             .lock()
             .unwrap()
             .contains(&"session_panicked".to_string()));
+    }
+
+    struct PanicBackend;
+    impl Backend for PanicBackend {
+        fn default_device(&self, _: Source) -> Option<String> {
+            panic!("device call failed");
+        }
+        fn open(&mut self, _: Source, _: &str) -> Result<Box<dyn PcmStream>, AudioError> {
+            Err(AudioError::Unavailable)
+        }
+    }
+
+    #[test]
+    fn a_capture_panic_still_closes_the_file_as_interrupted() {
+        let dir = tempfile::tempdir().unwrap();
+        let ev = Arc::new(Collect::default());
+        let host = Host::start(
+            StartParams {
+                root: dir.path().to_path_buf(),
+                name: "Capture crash".into(),
+                app_version: "0.0.1".into(),
+                engine_label: "test@2026.11.0".into(),
+                commit: Config::default(),
+            },
+            Box::new(QueueEngine(Arc::new(Mutex::new(vec![])))),
+            Box::new(|| Box::new(ChunkVad(0))),
+            Box::new(|| Box::new(PanicBackend)),
+            Box::new(FixedClock),
+            ev.clone(),
+            None,
+        )
+        .unwrap();
+        std::thread::sleep(Duration::from_millis(400));
+        host.end().unwrap();
+        let text = only_md(dir.path());
+        assert!(text.contains("status: interrupted"), "{text}");
+        assert!(ev
+            .problems
+            .lock()
+            .unwrap()
+            .contains(&"session_panicked".to_string()));
+    }
+
+    /// Steady 20 ms reads; logs when each read happened.
+    struct Steady(Arc<Mutex<Vec<Instant>>>, Option<Instant>);
+    impl PcmStream for Steady {
+        fn read(&mut self, out: &mut Vec<f32>) {
+            let now = Instant::now();
+            self.0.lock().unwrap().push(now);
+            let ms = self
+                .1
+                .map_or(20, |l| now.duration_since(l).as_millis() as usize);
+            self.1 = Some(now);
+            out.extend(std::iter::repeat_n(0.1f32, ms * 16));
+        }
+    }
+    struct SteadyMic(Arc<Mutex<Vec<Instant>>>);
+    impl Backend for SteadyMic {
+        fn default_device(&self, s: Source) -> Option<String> {
+            (s == Source::Mic).then(|| "mic".to_string())
+        }
+        fn open(&mut self, _: Source, _: &str) -> Result<Box<dyn PcmStream>, AudioError> {
+            Ok(Box::new(Steady(self.0.clone(), None)))
+        }
+    }
+    /// A decode that takes 300 ms, like a long utterance on a slow laptop.
+    struct SlowEngine;
+    impl Engine for SlowEngine {
+        fn transcribe(&mut self, s: &[f32]) -> Result<Vec<AsrSeg>, AsrError> {
+            std::thread::sleep(Duration::from_millis(300));
+            Ok(vec![AsrSeg {
+                start_ms: 0,
+                end_ms: s.len() as u64 * 1000 / 16_000,
+                text: "words".into(),
+            }])
+        }
+    }
+    /// One utterance per 200 ms of audio, so the session thread is nearly always decoding.
+    struct EveryFifthVad(u64, usize);
+    impl Vad for EveryFifthVad {
+        fn accept(&mut self, s: &[f32]) -> Vec<Utterance> {
+            self.1 += s.len();
+            if self.1 < 3_200 {
+                return vec![];
+            }
+            let u = Utterance {
+                start_sample: self.0,
+                samples: vec![0.1; self.1],
+            };
+            self.0 += self.1 as u64;
+            self.1 = 0;
+            vec![u]
+        }
+        fn flush(&mut self) -> Vec<Utterance> {
+            vec![]
+        }
+    }
+
+    #[test]
+    fn slow_decodes_do_not_hold_up_reading_the_devices() {
+        let dir = tempfile::tempdir().unwrap();
+        let reads = Arc::new(Mutex::new(Vec::new()));
+        let r = reads.clone();
+        let host = Host::start(
+            StartParams {
+                root: dir.path().to_path_buf(),
+                name: "Slow".into(),
+                app_version: "0.0.1".into(),
+                engine_label: "test@2026.11.0".into(),
+                commit: Config::default(),
+            },
+            Box::new(SlowEngine),
+            Box::new(|| Box::new(EveryFifthVad(0, 0))),
+            Box::new(move || Box::new(SteadyMic(r))),
+            Box::new(FixedClock),
+            Arc::new(Collect::default()),
+            None,
+        )
+        .unwrap();
+        std::thread::sleep(Duration::from_millis(1_500));
+        host.end().unwrap();
+        let r = reads.lock().unwrap().clone();
+        let worst = r.windows(2).map(|w| w[1] - w[0]).max().unwrap_or_default();
+        assert!(r.len() >= 40, "only {} reads in 1.5 s", r.len());
+        assert!(
+            worst < Duration::from_millis(150),
+            "a read waited {worst:?} behind a decode"
+        );
+        assert!(only_md(dir.path()).contains("**Me:** words"));
     }
 }
