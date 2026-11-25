@@ -8,6 +8,7 @@
     status,
     mic = $bindable(),
     system = $bindable(),
+    levels = null,
     onrename,
     onsource,
   }: {
@@ -15,6 +16,8 @@
     status: Status;
     mic: boolean;
     system: boolean;
+    /** Me and Others input levels, 0 to 1; null when nothing is being transcribed. */
+    levels?: [number, number] | null;
     onrename: (n: string) => void;
     onsource: (s: Source, on: boolean) => void;
   } = $props();
@@ -35,8 +38,8 @@
     {/if}
   </div>
   <div class="sources" role="group" aria-label="Sound sources">
-    <SourceButton source="mic" bind:on={mic} {onsource} />
-    <SourceButton source="system" bind:on={system} {onsource} />
+    <SourceButton source="mic" bind:on={mic} level={levels?.[0] ?? null} {onsource} />
+    <SourceButton source="system" bind:on={system} level={levels?.[1] ?? null} {onsource} />
   </div>
 </header>
 

@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Level meters on Me and Others: while transcribing, each source button shows a small bar that moves with the sound it picks up, so a muted or wrong device is obvious at a glance (a flat bar while you talk). It reads the device's own level, before echo removal. Needs a look on the laptop.
 - One live row per speaker: when you and someone else talk at the same time, the main window now shows a live row for each of you, growing side by side (whoever started first on top). Before, one live row switched back and forth between the two speakers. The Settings choice of whose words to show now applies to the pop-out only, and says so.
 - Remember Me and Others: whether each source is on or off is now kept when you close and reopen SprkNotes, and applied before the next Start. Both are on the first time.
 - Offer to start: when SprkNotes is in the background with no session and another app (a Teams or Zoom call, for example) keeps using your microphone for 5 seconds, the pop-out appears and asks "Your microphone is in use. Start a transcript?" with **Start** and **Dismiss**. It asks once per call; it goes away by itself if the call ends first or you open SprkNotes. SprkNotes reads the same Windows privacy data that drives the taskbar microphone icon, never which app it is or what it hears. Needs a check on Windows with a real call.

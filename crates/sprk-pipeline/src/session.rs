@@ -94,6 +94,8 @@ pub struct Session {
     final_captions: Vec<Caption>,
     /// Echo canceller on the microphone, fed by the system stream (SPEC 4.2 layer 2).
     echo: Option<EchoPath>,
+    /// Input levels for the source buttons: [Me, Others].
+    meters: [crate::meter::Meter; 2],
 }
 
 impl Session {
@@ -127,6 +129,7 @@ impl Session {
             stats: Stats::default(),
             captions: Captioner::new(),
             final_captions: Vec::new(),
+            meters: Default::default(),
             echo: None,
         }
     }
@@ -206,10 +209,22 @@ impl Session {
         self.remote = if s == Speaker::Me { Speaker::Others } else { s };
     }
 
+    /// Input levels since the last call, 0 to 1: `[Me, Others]`. Both 0 while paused.
+    pub fn levels(&mut self) -> [f32; 2] {
+        [self.meters[0].take(), self.meters[1].take()]
+    }
+
     /// Feed 16 kHz mono samples that arrived for `source`. Ignored unless running.
     pub fn feed(&mut self, source: Source, samples: &[f32]) {
         if self.state != State::Running {
             return;
+        }
+        // The buttons' meters show what the device delivers, before echo removal, so a muted or
+        // wrong device shows as flat. A source that is off shows nothing.
+        match source {
+            Source::Mic if self.mic.enabled => self.meters[0].push(samples),
+            Source::System if self.system.enabled => self.meters[1].push(samples),
+            _ => {}
         }
         if !self.echo_active() {
             self.ingest(source, samples);

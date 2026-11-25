@@ -7,7 +7,22 @@
   import { menuOptions, deviceLabel } from "./sources";
   import type { Source } from "./types";
 
-  let { source, on = $bindable(), onsource }: { source: Source; on: boolean; onsource: (s: Source, on: boolean) => void } = $props();
+  let {
+    source,
+    on = $bindable(),
+    level = null,
+    onsource,
+  }: {
+    source: Source;
+    on: boolean;
+    /** Input level, 0 to 1, while transcribing; null hides the meter. */
+    level?: number | null;
+    onsource: (s: Source, on: boolean) => void;
+  } = $props();
+
+  // A small meter beside the name: it moves with the sound this source picks up, so a muted
+  // or wrong device shows as flat while transcribing. Hidden when off or not transcribing.
+  const meter = $derived(on && level !== null ? Math.max(0, Math.min(1, level)) : null);
 
   let open = $state(false);
   let found = $state<string[]>([]);
@@ -93,6 +108,7 @@
     {/if}
     {#if !on}<span class="slash" aria-hidden="true"></span>{/if}
     <span class="who">{who}</span>
+    {#if meter !== null}<span class="meter" aria-hidden="true"><span style:transform="scaleY({meter})"></span></span>{/if}
     <svg class="caret" viewBox="0 0 10 10" aria-hidden="true"><path d="M2.5 4l2.5 2.5L7.5 4" /></svg>
   </button>
 
@@ -139,6 +155,10 @@
   .src.on.mic { background: var(--me-soft); color: var(--me); border-color: transparent; }
   .src.on.system { background: var(--others-soft); color: var(--others); border-color: transparent; }
   .src:not(.on) .who { text-decoration: line-through; text-decoration-thickness: 1.5px; }
+  .meter { position: relative; width: 4px; height: 0.95rem; border-radius: 2px; background: color-mix(in srgb, currentColor 20%, transparent); overflow: hidden; }
+  .meter span { position: absolute; inset: 0; background: currentColor; border-radius: 2px; transform-origin: bottom; transition: transform 90ms linear; }
+  @media (prefers-reduced-motion: reduce) { .meter span { transition: none; } }
+  @media (forced-colors: active) { .meter { background: Canvas; outline: 1px solid CanvasText; } .meter span { background: CanvasText; } }
   .slash { position: absolute; left: 0.5rem; top: 50%; width: 1.15rem; height: 1.5px; background: currentColor; transform: rotate(-45deg); }
   .src:hover { border-color: var(--accent); }
   .src:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

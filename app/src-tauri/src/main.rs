@@ -100,6 +100,10 @@ impl Events for TauriEvents {
     fn captions_wanted(&self) -> (bool, bool) {
         shell::captions_wanted(&self.0)
     }
+    fn levels(&self, me: f32, others: f32) {
+        // Only the main window has the source buttons.
+        let _ = self.0.emit_to("main", "source-levels", [me, others]);
+    }
     fn caption(&self, c: &sprk_pipeline::host::UiCaption) {
         let _ = self.0.emit(
             "caption",

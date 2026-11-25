@@ -37,6 +37,8 @@
   // Speech in progress, one caption per speaker (each gets its own live row).
   const speaking = new Partials();
   let partials = $state<Caption[]>([]);
+  // Input levels for the Me and Others buttons, while transcribing.
+  let levels = $state<[number, number]>([0, 0]);
   // Ask Sprk: off by default. The panel and the title suggestion only exist when it is ready.
   let assistant = $state<AssistantStatus | null>(null);
   let askOpen = $state(false);
@@ -54,6 +56,7 @@
     if (status === "ready") {
       speaking.clear();
       partials = [];
+      levels = [0, 0];
       locked.clear();
       liveRows = [];
     }
@@ -86,6 +89,7 @@
           partials = [...speaking.list];
         }),
       );
+      offs.push(await b.onLevels((l) => (levels = l)));
       offs.push(await b.onStatus((s) => (status = s)));
       offs.push(await b.onPhase((p) => (phase = p)));
       offs.push(await b.onProblem((kind) => say(problemText(kind))));
@@ -296,6 +300,7 @@
       {status}
       bind:mic
       bind:system
+      levels={status === "transcribing" ? levels : null}
       onrename={(n) => api?.rename(n)}
       onsource={setSource}
     />

@@ -39,6 +39,8 @@ export interface Backend {
   setBrand(throwback: boolean): Promise<void>;
   /** Partial caption text while someone is still speaking (never saved). */
   onCaption(cb: (c: Caption) => void): Promise<() => void>;
+  /** Input levels for the Me and Others buttons, 0 to 1, about ten a second while transcribing. */
+  onLevels(cb: (levels: [number, number]) => void): Promise<() => void>;
   /** Mini controller only: bring the main window back. */
   openApp(): Promise<void>;
   /** Library: transcripts newest first; the query matches names and full text. */
@@ -119,6 +121,7 @@ async function tauri(): Promise<Backend> {
     setCaptions: (on, me) => invoke("set_captions", { on, me }),
     setBrand: (throwback) => invoke("set_brand", { throwback }),
     onCaption: (cb) => listen<Caption>("caption", (e) => cb(e.payload)),
+    onLevels: (cb) => listen<[number, number]>("source-levels", (e) => cb(e.payload)),
     openApp: () => invoke("open_app"),
     libraryList: (query) => invoke("library_list", { query }),
     libraryOpen: (path) => invoke("library_open", { path }),
@@ -353,6 +356,7 @@ export function mockBackend(): Backend {
     setCaptions: async () => {},
     setBrand: async () => {},
     onCaption: async (cb) => ((capCb = cb), () => {}),
+    onLevels: async () => () => {},
     openApp: async () => {},
     libraryList: async (q) => mockLibrary.filter((e) => (e.title + e.name).toLowerCase().includes(q.trim().toLowerCase())),
     libraryOpen: async (path) => ({
