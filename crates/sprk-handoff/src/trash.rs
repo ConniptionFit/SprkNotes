@@ -215,6 +215,9 @@ mod tests {
         assert!(trash.join("files/t.md").exists());
         assert!(trash.join("files/t.2.md").exists());
         let rec = std::fs::read_to_string(trash.join("info/t.2.md.trashinfo")).unwrap();
+        assert!(rec.starts_with("[Trash Info]\nPath="), "{rec}");
+        // The trash spec wants an absolute path; on Windows (tests only) it is the encoded drive path.
+        #[cfg(unix)]
         assert!(rec.starts_with("[Trash Info]\nPath=/"), "{rec}");
         assert!(rec.contains("t.md\nDeletionDate=1970-01-01T00:00:00\n"));
 
