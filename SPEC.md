@@ -393,6 +393,7 @@ Scheduled Teams and Zoom meetings live on the user's Outlook calendar, so one lo
 - Models (16.7): active model, installed models, Import, Switch, Roll back. Locked with a "Managed by your organization" note when policy pins a model.
 - Appearance: System, Light or Dark (the overlay stays dark unless Light is chosen).
 - Sound meter: Nine bars (default) or Rolling bars, for the waveform on the Me and Others buttons (8.1).
+- Throwback Mode: off (default) or on. It swaps only the app icon in the tray and on the window to the first (starburst) icon; fonts, colors, sizes and spacing stay the same, so the window does not move.
 - Live captions: on or off, and Others only (default) or Others and Me in the pop-out. The transcript window's live line always shows both.
 - Startup: launch at sign-in, start minimized to tray.
 - When another app uses the microphone: on (default) or off, and the apps skipped with **Don't ask**, each with **Ask again** (8.3a).
