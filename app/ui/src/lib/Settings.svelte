@@ -10,6 +10,7 @@
   import { isLocked, prefs, setPref, type CaptionWho, type CaptionDelay, type Theme } from "./prefs.svelte";
   import { comboFromEvent } from "./hotkey";
   import { hotkeyState } from "./hotkeyState.svelte";
+  import type { WaveStyle } from "./waveform";
 
   let {
     model,
@@ -114,6 +115,28 @@
         ]}
         onchange={(v: Theme) => setPref("theme", v)}
         disabled={isLocked("theme")}
+      />
+      </Managed>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="row">
+      <div class="what">
+        <h3>Sound meter</h3>
+        <p class="help">How the Me and Others buttons show sound while transcribing. Both go flat when it's quiet.</p>
+      </div>
+      <Managed locked={isLocked("waveStyle")}>
+      <Segmented
+        name="waveStyle"
+        label="Sound meter"
+        value={prefs.waveStyle}
+        options={[
+          { value: "bars", text: "Nine bars" },
+          { value: "rolling", text: "Rolling bars" },
+        ]}
+        onchange={(v: WaveStyle) => setPref("waveStyle", v)}
+        disabled={isLocked("waveStyle")}
       />
       </Managed>
     </div>

@@ -26,6 +26,7 @@ const keys: Parse = (v) => {
 export const MANAGED_KEYS = {
   Theme: ["theme", oneOf("system", "light", "dark")],
   ThrowbackMode: ["throwback", bool],
+  WaveformStyle: ["waveStyle", oneOf("bars", "rolling")],
   LiveCaptions: ["captionsOn", bool],
   LiveLine: ["liveLine", bool],
   CaptionDelay: ["captionDelay", oneOf("fast", "steady", "smooth")],

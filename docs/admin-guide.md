@@ -19,7 +19,7 @@ Each key is its own value, or all of them packed in one string value named `Sett
 
 The same keys can live in `%ProgramData%\SprkNotes\policy.json`: `{"settings": {"TranscriptsRoot": {"value": "%OneDrive%\\Transcripts", "locked": true}, "Theme": {"value": "dark", "locked": false}}}`. Order, setting by setting: machine registry, then the file, then user registry. The file counts only when its folder and itself are owned by Administrators or SYSTEM and nobody else can write them; otherwise SprkNotes ignores it and writes why to `%APPDATA%\SprkNotes\admin.log`. The form's lock script sets those permissions.
 
-Window settings an admin can lock or start: `Theme` (system, light, dark), `ThrowbackMode`, `LiveCaptions`, `LiveLine`, `CaptionDelay` (fast, steady, smooth), `CaptionSpeakers` (others, both), `MicPrompt`, `Hotkey`, `HotkeyKeys` (for example `Ctrl+Alt+S`). Locked controls stay visible, greyed, with the hover text "This option is managed by your administrator."
+Window settings an admin can lock or start: `Theme` (system, light, dark), `ThrowbackMode`, `WaveformStyle` (bars, rolling), `LiveCaptions`, `LiveLine`, `CaptionDelay` (fast, steady, smooth), `CaptionSpeakers` (others, both), `MicPrompt`, `Hotkey`, `HotkeyKeys` (for example `Ctrl+Alt+S`). Locked controls stay visible, greyed, with the hover text "This option is managed by your administrator."
 
 | Key | Meaning |
 |---|---|
