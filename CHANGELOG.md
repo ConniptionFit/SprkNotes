@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Throwback Mode now changes only the app icon (window, taskbar and tray). The font and colors no longer switch, so the page no longer shifts slightly when you turn it on or off.
 - Admin form online: the install-script form is published at https://conniptionfit.github.io/SprkNotes/ so admins can open it from a link. It still runs entirely in the browser and sends nothing anywhere.
 - Save location in Settings: a new **Save transcripts to** field picks where new transcripts and the Library live, with **Use default** and **Open**. You can type `%OneDrive%\Transcripts` and the like. When your organization sets the folder, the field is read-only and says so. The folder is created when you save, so a typo shows straight away.
 - Library item menu: each transcript in the list has a **⋯** button with Open, Continue transcribing, Rename, Move to folder, Show in File Explorer, Summarize and Delete. The folder row has **Open in File Explorer**.

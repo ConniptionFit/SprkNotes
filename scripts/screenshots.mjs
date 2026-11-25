@@ -79,15 +79,8 @@ for (const scheme of ["light", "dark"]) {
     await p.context().close();
   }
 
-  // Throwback Mode (Settings, Appearance): the first look.
+  // Throwback Mode (Settings, Misc): only the app icon changes, so the window looks the same; just show the switch.
   const tb = { throwback: true };
-  p = await page(scheme, { prefs: tb });
-  await shot(p, `throwback-ready-${scheme}.png`);
-  await p.getByRole("button", { name: /start/i }).click();
-  await wait(4200);
-  await p.waitForSelector(".line.live .text");
-  await shot(p, `throwback-transcribing-${scheme}.png`);
-  await p.context().close();
   p = await page(scheme, { h: 900, prefs: tb });
   await p.getByRole("button", { name: "Settings" }).click();
   await wait(300);

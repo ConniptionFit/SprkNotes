@@ -87,25 +87,6 @@
     --warn-soft: #3a2f12;
     --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 16px rgb(0 0 0 / 0.3);
   }
-/* Throwback Mode: the first look (Segoe UI, the earlier purple). Set from Settings, Misc. Text colors are shared with the current look. */
-:root[data-brand="throwback"] {
-  --font: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
-  --accent: #5b3394;
-  --accent-hover: #4d2a80;
-  --accent-soft: #ece6f7;
-}
-@media (prefers-color-scheme: dark) {
-  :root[data-brand="throwback"]:not([data-theme="light"]) {
-    --accent: #a98bdc;
-    --accent-hover: #bda3e8;
-    --accent-soft: #2f2745;
-  }
-}
-:root[data-brand="throwback"][data-theme="dark"] {
-  --accent: #a98bdc;
-  --accent-hover: #bda3e8;
-  --accent-soft: #2f2745;
-}
 :root[data-theme="light"] { color-scheme: light; }
 
 * { box-sizing: border-box; }
