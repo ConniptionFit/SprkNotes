@@ -1,7 +1,7 @@
 import { backend } from "./api";
 
 // Small UI-only preferences, shared by the main window and the overlay through localStorage.
-// Nothing here is sensitive: a theme choice and two caption switches.
+// Nothing here is sensitive: a theme choice, caption switches, device names and which sources are on.
 export type Theme = "system" | "light" | "dark";
 export type CaptionWho = "others" | "both";
 /** How long a new word waits before it is shown, to let the engine settle it (ADR-008). */
@@ -29,6 +29,9 @@ type Prefs = {
   micDevice: string | null;
   /** Output (the sound that is looped back as Others) picked in Settings; null follows the default. */
   systemDevice: string | null;
+  /** Whether Me and Others are transcribed. Remembered across launches; both on at first run. */
+  micOn: boolean;
+  systemOn: boolean;
 };
 
 /** Caption text sizes in px for the magnifier buttons, and the step used by default. */
@@ -38,7 +41,7 @@ export const LINE_TEXT = [12, 13, 14, 15, 17, 19, 22, 26];
 export const CAPTION_LIMITS = { minW: 260, maxW: 900, minH: 64, maxH: 480 };
 
 const KEY = "sprknotes.prefs";
-const defaults: Prefs = { theme: "system", throwback: false, captionsOn: false, captionsWho: "others", captionDelay: "steady", captionW: 420, captionH: 118, captionText: 2, liveLine: true, lineText: 3, assistantOn: false, assistantTier: "light", assistantFeatures: ["title", "recap", "actions", "ask"], micDevice: null, systemDevice: null };
+const defaults: Prefs = { theme: "system", throwback: false, captionsOn: false, captionsWho: "others", captionDelay: "steady", captionW: 420, captionH: 118, captionText: 2, liveLine: true, lineText: 3, assistantOn: false, assistantTier: "light", assistantFeatures: ["title", "recap", "actions", "ask"], micDevice: null, systemDevice: null, micOn: true, systemOn: true };
 
 const clamp = (n: unknown, lo: number, hi: number, fallback: number) =>
   typeof n === "number" && Number.isFinite(n) ? Math.min(hi, Math.max(lo, Math.round(n))) : fallback;
@@ -57,6 +60,8 @@ function load(): Prefs {
     if (!Array.isArray(p.assistantFeatures)) p.assistantFeatures = defaults.assistantFeatures;
     if (typeof p.micDevice !== "string" || !p.micDevice) p.micDevice = null;
     if (typeof p.systemDevice !== "string" || !p.systemDevice) p.systemDevice = null;
+    if (typeof p.micOn !== "boolean") p.micOn = true;
+    if (typeof p.systemOn !== "boolean") p.systemOn = true;
     return p;
   } catch {
     return { ...defaults };

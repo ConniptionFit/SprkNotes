@@ -344,10 +344,10 @@ Scheduled Teams and Zoom meetings live on the user's Outlook calendar, so one lo
 **Principle:** one main window, one floating mini controller, nothing else visible. Neutral, quiet, light and dark following Windows theme.
 
 ### 8.1 Main window
-- **Top bar:** editable session name, source buttons (small icon buttons: microphone **Me**, speaker **Others**, struck through when off). Clicking one opens a menu: System default, each device found now (a saved device that is unplugged stays listed as not connected), and Turn off / Turn on. Picking a device turns that source on. The device choice is the same one as Settings. Status pill ("Transcribing", "Paused", "Ready").
+- **Top bar:** editable session name, source buttons (small icon buttons: microphone **Me**, speaker **Others**, struck through when off). Clicking one opens a menu: System default, each device found now (a saved device that is unplugged stays listed as not connected), and Turn off / Turn on. Picking a device turns that source on. The device choice is the same one as Settings. Which sources are on is remembered across launches (both on at first run). Status pill ("Transcribing", "Paused", "Ready").
 - **Controls:** Start · Pause/Resume · End. Context-aware (only valid actions enabled).
 - **Live pane:** transcript lines styled per 5.1 (timestamp muted, speaker bold, Me and Others visually distinct).
-- **Live line:** while transcribing, the newest words appear as the last line of the live pane (marked "live"), growing word by word. Words the engine is unsure of (after `stable`) are muted with a dotted underline; words that change are briefly tinted; when the committed line arrives it replaces the live line. Both speakers (Me's live words make Me as quick as Others; before, Me waited for the commit delay). The live line is display only: the saved transcript contains committed lines only, and partial text is never written to disk or logged. A toolbar above the pane has smaller/larger text (remembered) and a show/hide toggle (also in Settings, on by default).
+- **Live line:** while transcribing, the newest words appear as the last line of the live pane (marked "live"), growing word by word. Words the engine is unsure of (after `stable`) are muted with a dotted underline; words that change are briefly tinted; when the committed line arrives it replaces the live line. Both speakers, whatever the pop-out shows (Me's live words make Me as quick as Others; before, Me waited for the commit delay). Each speaker has a live row of their own: when two people talk at once, both rows grow side by side (the one who started first on top) instead of one row switching between them. The live line is display only: the saved transcript contains committed lines only, and partial text is never written to disk or logged. A toolbar above the pane has smaller/larger text (remembered) and a show/hide toggle (also in Settings, on by default).
 - **Footer:** Library, Settings, AI handoff (after End or from Library).
 
 ### 8.2 Live pane scrolling (must feel calm)
@@ -386,7 +386,7 @@ Scheduled Teams and Zoom meetings live on the user's Outlook calendar, so one lo
 - AI handoff: show Claude button, show Copilot button, edit prompt template.
 - Models (16.7): active model, installed models, Import, Switch, Roll back. Locked with a "Managed by your organization" note when policy pins a model.
 - Appearance: System, Light or Dark (the overlay stays dark unless Light is chosen).
-- Live captions: on or off, and Others only (default) or Others and Me.
+- Live captions: on or off, and Others only (default) or Others and Me in the pop-out. The transcript window's live line always shows both.
 - Startup: launch at sign-in, start minimized to tray.
 
 ---

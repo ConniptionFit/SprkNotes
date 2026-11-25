@@ -9,16 +9,17 @@
   import Settings from "./lib/Settings.svelte";
   import Library from "./lib/Library.svelte";
   import ModelDownload from "./lib/ModelDownload.svelte";
-  import { captionFlags, prefs } from "./lib/prefs.svelte";
+  import { captionFlags, prefs, setPref } from "./lib/prefs.svelte";
   import Ask from "./lib/Ask.svelte";
-  import { Rows, type Row } from "./lib/live";
+  import { Partials, Rows, type Row } from "./lib/live";
 
   let api = $state.raw<Backend | undefined>();
   let name = $state("");
   let status = $state<Status>("ready");
   let phase = $state<Phase>({ phase: "idle" });
-  let mic = $state(true);
-  let system = $state(true);
+  // Which sources are on is remembered across launches (prefs), and applied before the first Start.
+  let mic = $state(prefs.micOn);
+  let system = $state(prefs.systemOn);
   let lines = $state<Line[]>([]);
   let view = $state<"main" | "settings" | "library">("main");
   // Summarize: the transcript it will use, a pending choice between apps, and a short notice.
@@ -33,7 +34,9 @@
   let progress = $state<DownloadProgress | null>(null);
   let updateAvailable = $state(false);
   let checkMessage = $state("");
-  let partial = $state<Caption | null>(null);
+  // Speech in progress, one caption per speaker (each gets its own live row).
+  const speaking = new Partials();
+  let partials = $state<Caption[]>([]);
   // Ask Sprk: off by default. The panel and the title suggestion only exist when it is ready.
   let assistant = $state<AssistantStatus | null>(null);
   let askOpen = $state(false);
@@ -49,7 +52,8 @@
   });
   $effect(() => {
     if (status === "ready") {
-      partial = null;
+      speaking.clear();
+      partials = [];
       locked.clear();
       liveRows = [];
     }
@@ -62,7 +66,7 @@
       // Apply the saved device picks before the first session.
       b.setDevice("mic", prefs.micDevice).catch(() => {});
       b.setDevice("system", prefs.systemDevice).catch(() => {});
-      // The shell keeps which sources are off between sessions; start from what the window shows.
+      // The shell keeps which sources are off between sessions; start from the remembered choice.
       b.setSource("mic", mic).catch(() => {});
       b.setSource("system", system).catch(() => {});
       offs.push(
@@ -78,9 +82,8 @@
         await b.onCaption((c) => {
           locked.caption(c, Date.now());
           liveRows = [...locked.rows];
-          if (c.final) {
-            if (partial?.speaker === c.speaker) partial = null;
-          } else partial = c;
+          speaking.caption(c);
+          partials = [...speaking.list];
         }),
       );
       offs.push(await b.onStatus((s) => (status = s)));
@@ -104,6 +107,11 @@
     });
     return () => offs.forEach((f) => f());
   });
+
+  function setSource(s: Source, on: boolean) {
+    setPref(s === "mic" ? "micOn" : "systemOn", on);
+    api?.setSource(s, on).catch(() => {});
+  }
 
   async function syncAssistant() {
     try {
@@ -289,7 +297,7 @@
       bind:mic
       bind:system
       onrename={(n) => api?.rename(n)}
-      onsource={(s: Source, on: boolean) => api?.setSource(s, on)}
+      onsource={setSource}
     />
     {#if canTitle}
       <div class="titleidea">
@@ -302,7 +310,7 @@
         {/if}
       </div>
     {/if}
-    <LivePane {lines} {status} {partial} rows={liveRows} needsModel={!model.ready && status === "ready"}>
+    <LivePane {lines} {status} {partials} rows={liveRows} needsModel={!model.ready && status === "ready"}>
       {#snippet empty()}
         <ModelDownload
           compact

@@ -149,12 +149,12 @@
       </div>
       <div class="row">
         <div class="what">
-          <p class="plain">Whose words</p>
-          <p class="help">Others only is the default, and the quickest.</p>
+          <p class="plain">Whose words in the pop-out</p>
+          <p class="help">The pop-out's captions show Others only by default. The transcript window always shows both.</p>
         </div>
         <Segmented
           name="caption-who"
-          label="Whose words appear in captions"
+          label="Whose words appear in the pop-out captions"
           value={prefs.captionsWho}
           options={[
             { value: "others", text: "Others only" },
