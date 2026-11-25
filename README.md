@@ -35,6 +35,9 @@ It installs for you only, in `%LocalAppData%\Programs\SprkNotes`, adds **SprkNot
 - **Managed installs for a team or company:** use the [deployment form](https://conniptionfit.github.io/SprkNotes/) to build the lock and install scripts, then follow [Deployment](docs/deployment.md#admin-deployment-form). Whole-PC installs, locked channel and source, forced or disabled updates and the silent update task are in [Deployment](docs/deployment.md#updates-channels-and-locking).
 - Other ways (portable zip, MSI, MSIX, Linux): [Install](docs/install.md).
 
+## Android (in development)
+An Android version for Samsung Galaxy and other arm64 phones is being built in this repository. There is no release yet. Requirements, the planned MDM install, and how to build a test APK: [Android](docs/android.md).
+
 ## What it does
 - **Me and Others.** Your mic is labeled `Me`. Everyone you hear through the speakers is `Others`, or a name on a confirmed 1:1 call. When unsure, it says `Others` and never guesses.
 - **Crash-safe.** Every committed line is appended to the file and flushed immediately. Kill the app and the transcript is intact.
@@ -58,6 +61,7 @@ Pre-release (0.0.1, pilot builds are on the Releases page). Built so far: transc
 | **[Deployment form](https://conniptionfit.github.io/SprkNotes/)** | **Admins: build the lock and install scripts in your browser** |
 | [Features and usage](docs/features.md) | Everything the app does, with screenshots |
 | [Install](docs/install.md) | Installing on one PC: portable zip, MSI, MSIX, Linux, models, uninstall |
+| [Android](docs/android.md) | The phone app (in development): requirements, planned MDM install, test builds |
 | [Moving or forking](docs/forking.md) | Moving to another repository (such as a corporate GitHub) or forking an edition |
 | [Deployment](docs/deployment.md) | Intune, GPO, SCCM, RMM as SYSTEM, registry policy, updates and channels |
 | [Enterprise install research](docs/enterprise-install-research.md) | Installer and update options compared, with recommendations |
