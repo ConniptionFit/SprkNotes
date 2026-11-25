@@ -153,7 +153,7 @@ sprknotes/
 - **Known limitation:** people speaking in the same room as the user are labeled Me.
 
 ### 4.3 Segmentation and ASR
-- VAD (Silero or TEN-VAD via sherpa-onnx) splits each stream into utterances.
+- VAD (Silero or TEN-VAD via sherpa-onnx) splits each stream into utterances. Each utterance is cut with up to 1 s of lead-in (never into the previous utterance) and 0.3 s of tail (taken from the confirmed silence after it), so first and last words are not clipped.
 - Each utterance is decoded by the **active transcription model** (section 16), an offline English model with punctuation and casing. The app never hard-codes a model; it loads whatever the resolver selects. Candidates to benchmark in M1: **Parakeet TDT 0.6B (int8)**, **Whisper small.en / base.en**, plus a streaming model for partials if needed.
 - **Partials (optional, default on if budget allows):** re-decode the in-progress utterance about every 0.8 s and show it in muted text at the bottom of the live pane. Partials are never written to disk.
 - **Statement rules:**
