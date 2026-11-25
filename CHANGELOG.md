@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Smoother waveform: the Me and Others meters have nine bars instead of five, glide between levels instead of jumping, and fall to a flat line when there is no sound (room hiss no longer holds them a little raised). Needs a look on the laptop.
 - Save location in Settings: a new **Save transcripts to** field picks where new transcripts and the Library live, with **Use default** and **Open**. You can type `%OneDrive%\Transcripts` and the like. When your organization sets the folder, the field is read-only and says so. The folder is created when you save, so a typo shows straight away.
 - Library item menu: each transcript in the list has a **⋯** button with Open, Continue transcribing, Rename, Move to folder, Show in File Explorer, Summarize and Delete. The folder row has **Open in File Explorer**.
 - Continue transcribing: pick it on a transcript to start a session that adds to the same file. A "Transcription continued" line marks the restart and times carry on after the last line. Needs a check on the laptop.
