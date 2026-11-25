@@ -7,23 +7,8 @@
   import { prefs, setPref } from "./prefs.svelte";
   import { menuOptions, deviceLabel } from "./sources";
   import type { Source } from "./types";
-  import {
-    SLOTS,
-    ease,
-    flat,
-    gated,
-    pushLevel,
-    rollHeights,
-    rollPush,
-    rollShift,
-    rollStart,
-    rollStep,
-    rollStill,
-    settled,
-    waveform,
-    type Roll,
-  } from "./waveform";
-  import { onDestroy, untrack } from "svelte";
+  import { barRects, linePoints, meterRest, meterStart, meterStep, meterStill, type Meter } from "./waveform";
+  import { onDestroy } from "svelte";
 
   let {
     source,
@@ -38,81 +23,120 @@
     onsource: (s: Source, on: boolean) => void;
   } = $props();
 
-  // A small waveform beside the icon, in the style picked in Settings (waveform.ts): nine bars with
-  // the newest level in the middle (default), or rolling bars that slide right to left. Speech
-  // shows as movement and silence, or a muted or wrong device, settles into a flat line. Levels
-  // arrive about twenty times a second; the bars ease toward them on display frames so the motion
-  // is fluid. Frames run only while something is moving, so a quiet source costs nothing. Hidden
-  // when off or not transcribing.
+  // A small sound meter beside the icon, in the style picked in Settings (waveform.ts): nine bars
+  // with the newest level in the middle (default), or one smooth line whose swell follows the voice.
+  // Speech shows as movement and silence, or a muted or wrong device, settles into a flat line. The
+  // meter samples the newest level on its own clock, because a silence that repeats the same 0 does
+  // not reach this component again, and eases toward it on display frames so the motion is fluid.
+  // It is drawn on a small canvas snapped to whole device pixels, so the bars stay evenly spaced at
+  // any display scale. Frames run only while something is moving, so a quiet source costs nothing.
+  // With reduced motion it updates twenty times a second without easing. Hidden when off or not
+  // transcribing.
   const live = $derived(on && level !== null);
   const style = $derived(prefs.waveStyle);
-  const still = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const canAnimate = !still && typeof requestAnimationFrame === "function";
+  const snap = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const smooth = !snap && typeof requestAnimationFrame === "function";
 
-  // Bars: a short history of levels, and bar heights easing toward the shape they make.
-  let history = $state<number[]>(new Array(SLOTS).fill(0));
-  const target = $derived(waveform(history));
-  let bars = $state<number[]>(flat());
-  // Rolling: columns that enter at the right edge, and how far the row still sits to the right.
-  let roll = $state<Roll>(rollStart());
+  let meter = $state.raw<Meter>(meterStart());
   let latest = 0;
+  let canvas = $state<HTMLCanvasElement>();
 
   $effect(() => {
     if (!live) {
-      history = new Array(SLOTS).fill(0);
-      roll = rollStart();
+      stop();
+      meter = meterStart();
       latest = 0;
       return;
     }
-    const l = level ?? 0;
-    latest = l;
-    if (untrack(() => style) === "rolling") {
-      if (!canAnimate) roll = rollPush(untrack(() => roll), gated(l));
-      else wake();
-    } else {
-      history = pushLevel(untrack(() => history), l);
-    }
+    latest = level ?? 0;
+    wake();
   });
 
   let frame = 0;
+  let timer: ReturnType<typeof setTimeout> | 0 = 0;
   let last = 0;
+  function schedule() {
+    if (smooth) frame = requestAnimationFrame(tick);
+    else timer = setTimeout(() => tick(typeof performance === "object" ? performance.now() : Date.now()), 50);
+  }
   function tick(now: number) {
+    frame = 0;
+    timer = 0;
     const dt = last ? now - last : 16;
     last = now;
-    let moving: boolean;
-    if (style === "rolling") {
-      roll = rollStep(roll, latest, dt);
-      moving = !(rollStill(roll) && gated(latest) === 0);
-      if (!moving) roll = rollStart();
-    } else {
-      bars = ease(bars, target, dt);
-      moving = !settled(bars, target);
-      if (!moving) bars = target;
-    }
-    if (!moving) {
-      frame = 0;
+    const next = meterStep(meter, latest, dt, snap);
+    if (meterStill(next, latest)) {
+      meter = meterRest(next);
       last = 0;
       return;
     }
-    frame = requestAnimationFrame(tick);
+    meter = next;
+    schedule();
   }
   function wake() {
-    if (canAnimate && !frame) frame = requestAnimationFrame(tick);
+    if (!frame && !timer) schedule();
   }
+  function stop() {
+    if (frame && typeof cancelAnimationFrame === "function") cancelAnimationFrame(frame);
+    if (timer) clearTimeout(timer);
+    frame = 0;
+    timer = 0;
+    last = 0;
+  }
+  onDestroy(stop);
+
+  // Redraw on every meter step, and when the style, the colors or the display scale change.
+  let scheme = $state(0);
   $effect(() => {
-    const t = target;
-    if (!canAnimate) {
-      bars = t;
+    if (typeof matchMedia !== "function") return;
+    const q = matchMedia("(prefers-color-scheme: dark)");
+    const bump = () => scheme++;
+    q.addEventListener?.("change", bump);
+    return () => q.removeEventListener?.("change", bump);
+  });
+  $effect(() => {
+    void [meter, style, on, prefs.theme, prefs.throwback, scheme];
+    draw();
+  });
+
+  function draw() {
+    const c = canvas;
+    if (!c) return;
+    const dpr = typeof devicePixelRatio === "number" && devicePixelRatio > 0 ? devicePixelRatio : 1;
+    const w = Math.round((c.clientWidth || 34) * dpr);
+    const h = Math.round((c.clientHeight || 16) * dpr);
+    if (c.width !== w) c.width = w;
+    if (c.height !== h) c.height = h;
+    const ctx = c.getContext("2d");
+    if (!ctx) return;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    const color = getComputedStyle(c).color;
+    if (style === "line") {
+      const pts = linePoints(meter.env, meter.phase, Math.max(2, Math.round(w / dpr) + 1));
+      const mid = h / 2;
+      ctx.beginPath();
+      pts.forEach((y, i) => {
+        const x = (i / (pts.length - 1)) * w;
+        const yy = mid - y * (mid - dpr);
+        if (i) ctx.lineTo(x, yy);
+        else ctx.moveTo(x, yy);
+      });
+      ctx.lineWidth = Math.max(1, Math.round(1.5 * dpr));
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.strokeStyle = color;
+      ctx.stroke();
       return;
     }
-    wake();
-  });
-  onDestroy(() => {
-    if (frame && typeof cancelAnimationFrame === "function") cancelAnimationFrame(frame);
-  });
-  const heights = $derived(style === "rolling" ? rollHeights(roll) : bars);
-  // One column step is a bar plus its gap (2px + 1.5px).
-  const slide = $derived(style === "rolling" && canAnimate ? rollShift(roll) * 3.5 : 0);
+    ctx.fillStyle = color;
+    for (const r of barRects(meter.bars, w, h, dpr)) {
+      ctx.beginPath();
+      if (typeof ctx.roundRect === "function") ctx.roundRect(r.x, r.y, r.w, r.h, r.w / 2);
+      else ctx.rect(r.x, r.y, r.w, r.h);
+      ctx.fill();
+    }
+  }
 
   let open = $state(false);
   let found = $state<string[]>([]);
@@ -198,11 +222,7 @@
     {/if}
     {#if !on}<span class="slash" aria-hidden="true"></span>{/if}
     {#if live}
-      <span class="wave" class:rolling={style === "rolling"} aria-hidden="true">
-        <span class="row" style:transform={slide ? `translateX(${slide}px)` : undefined}>
-          {#each heights as b, i (i)}<span style:transform="scaleY({b})"></span>{/each}
-        </span>
-      </span>
+      <canvas class="wave" bind:this={canvas} aria-hidden="true"></canvas>
     {/if}
     <svg class="caret" viewBox="0 0 10 10" aria-hidden="true"><path d="M2.5 4l2.5 2.5L7.5 4" /></svg>
   </button>
@@ -249,11 +269,8 @@
   .src .caret { width: 0.6rem; height: 0.6rem; opacity: 0.7; }
   .src.on.mic { background: var(--me-soft); color: var(--me); border-color: transparent; }
   .src.on.system { background: var(--others-soft); color: var(--others); border-color: transparent; }
-  /* Nine bars of 2px with 1.5px gaps; rolling adds one bar that slides in while another slides out. */
-  .wave { display: inline-flex; justify-content: flex-end; width: 30px; height: 1rem; overflow: hidden; }
-  .wave .row { display: inline-flex; align-items: center; gap: 1.5px; height: 100%; flex: none; will-change: transform; }
-  .wave .row span { width: 2px; height: 100%; border-radius: 1px; background: currentColor; transform-origin: center; will-change: transform; }
-  @media (forced-colors: active) { .wave .row span { background: CanvasText; } }
+  /* The sound meter's box; waveform.ts places the bars on whole device pixels inside it. */
+  .wave { display: block; width: 34px; height: 1rem; }
   .slash { position: absolute; left: 0.45rem; top: 50%; width: 1.15rem; height: 1.5px; background: currentColor; transform: rotate(-45deg); }
   .src:hover { border-color: var(--accent); }
   .src:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
