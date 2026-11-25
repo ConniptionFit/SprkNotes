@@ -4313,6 +4313,7 @@ dependencies = [
 name = "sprk-config"
 version = "0.2.0-alpha.9"
 dependencies = [
+ "serde_json",
  "windows 0.58.0",
 ]
 

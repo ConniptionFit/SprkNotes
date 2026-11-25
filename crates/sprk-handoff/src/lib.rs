@@ -60,45 +60,56 @@ pub enum Step {
     Toast(String),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Plan {
     pub steps: Vec<Step>,
     /// Used when the handler is not registered or opening fails.
     pub fallback: Vec<Step>,
+    /// Used instead of the rest of `steps` when the clipboard would not take the text, so the
+    /// toast never says "copied" when nothing was.
+    pub copy_failed: Vec<Step>,
 }
 
 pub trait Launcher {
     /// Returns false when no handler is registered or the launch failed.
     fn open_url(&mut self, url: &str) -> bool;
-    fn copy(&mut self, text: &str);
+    /// Returns false when the clipboard would not take the text.
+    fn copy(&mut self, text: &str) -> bool;
     fn reveal(&mut self, path: &str);
     fn toast(&mut self, text: &str);
 }
 
-/// Run a plan; if an `OpenUrl` step fails, run the fallback instead.
+/// Run a plan. If a copy fails, run `copy_failed` instead of the rest; if an `OpenUrl` step
+/// fails, run `fallback` instead of the rest.
 pub fn run(plan: &Plan, l: &mut dyn Launcher) {
-    let mut ok = true;
     for s in &plan.steps {
-        ok &= apply(s, l);
-        if !ok {
-            break;
+        let rest = match s {
+            Step::OpenUrl(u) if !l.open_url(u) => &plan.fallback,
+            Step::CopyToClipboard(t) if !l.copy(t) => &plan.copy_failed,
+            Step::OpenUrl(_) | Step::CopyToClipboard(_) => continue,
+            Step::RevealInExplorer(p) => {
+                l.reveal(p);
+                continue;
+            }
+            Step::Toast(t) => {
+                l.toast(t);
+                continue;
+            }
+        };
+        for s in rest {
+            match s {
+                Step::OpenUrl(u) => {
+                    l.open_url(u);
+                }
+                Step::CopyToClipboard(t) => {
+                    l.copy(t);
+                }
+                Step::RevealInExplorer(p) => l.reveal(p),
+                Step::Toast(t) => l.toast(t),
+            }
         }
+        return;
     }
-    if !ok {
-        for s in &plan.fallback {
-            apply(s, l);
-        }
-    }
-}
-
-fn apply(s: &Step, l: &mut dyn Launcher) -> bool {
-    match s {
-        Step::OpenUrl(u) => return l.open_url(u),
-        Step::CopyToClipboard(t) => l.copy(t),
-        Step::RevealInExplorer(p) => l.reveal(p),
-        Step::Toast(t) => l.toast(t),
-    }
-    true
 }
 
 /// Fill `{basename}`, `{folder}`, `{title}`, `{date}` (SPEC 9.3). Unknown braces are kept.
@@ -151,33 +162,45 @@ impl HandoffTarget for Claude {
     }
     fn plan(&self, r: &Request, prompt: &str) -> Plan {
         // Everything Claude needs goes on the clipboard: the instructions and the transcript
-        // itself. A file link is not reliable (Claude often cannot see the file), and a link
-        // is cut near 2,000 characters on Windows, so the link carries only a one-line start.
+        // itself. A link cannot carry a file, and Claude warns about any prompt a link fills in
+        // ("Use caution before running this prompt"), so the link only opens a new, empty chat.
         let clip = if r.body.trim().is_empty() {
             prompt.to_string()
         } else {
             format!("{prompt}\n\n--- Transcript ---\n\n{}", r.body)
         };
-        let url = format!("claude://claude.ai/new?q={}", url_encode(START_LINE));
         Plan {
             steps: vec![
-                Step::CopyToClipboard(clip.clone()),
-                Step::OpenUrl(url),
+                Step::CopyToClipboard(clip),
+                Step::OpenUrl(CLAUDE_APP_LINK.into()),
+                Step::Toast(PASTE_INTO_CLAUDE.into()),
+            ],
+            // Claude Desktop did not open: the same empty chat in the browser.
+            fallback: vec![
+                Step::OpenUrl(CLAUDE_WEB_LINK.into()),
                 Step::Toast(
-                    "Claude opened. Click the chat box, press Ctrl+V to add your transcript, then send."
+                    "Transcript copied. Claude opened in your browser. Click the chat box, press Ctrl+V, then send."
                         .into(),
                 ),
             ],
-            fallback: vec![Step::Toast(
-                "Claude did not open. Your transcript and instructions are copied. Open Claude and paste."
-                    .into(),
-            )],
+            copy_failed: vec![
+                Step::OpenUrl(CLAUDE_APP_LINK.into()),
+                Step::RevealInExplorer(r.file.clone()),
+                Step::Toast(
+                    "The transcript could not be copied. Its file is highlighted: drag it into Claude's chat box, then send."
+                        .into(),
+                ),
+            ],
         }
     }
 }
 
-/// The one line the Claude link fills in. The pasted text follows it.
-pub const START_LINE: &str = "Please summarize this meeting transcript. It is pasted below.\n\n";
+/// A new, empty chat in Claude Desktop. Nothing is filled in (see [`Claude`]).
+pub const CLAUDE_APP_LINK: &str = "claude://claude.ai/new";
+/// The same in the browser, when Claude Desktop does not open.
+pub const CLAUDE_WEB_LINK: &str = "https://claude.ai/new";
+pub const PASTE_INTO_CLAUDE: &str =
+    "Transcript copied. In Claude, click the chat box, press Ctrl+V, then send.";
 
 /// Microsoft 365 Copilot: no file-attach link exists, so copy, open, reveal, toast.
 pub struct Copilot {
@@ -199,6 +222,8 @@ impl HandoffTarget for Copilot {
         "HandoffCopilot"
     }
     fn plan(&self, r: &Request, prompt: &str) -> Plan {
+        // Copilot's chat box is too small for a whole transcript, so the prompt is pasted and the
+        // file attached. Its link fills nothing in, so there is no prompt warning either.
         let toast = Step::Toast("Prompt copied. Attach the highlighted file and paste.".into());
         Plan {
             steps: vec![
@@ -208,6 +233,14 @@ impl HandoffTarget for Copilot {
                 toast.clone(),
             ],
             fallback: vec![Step::RevealInExplorer(r.file.clone()), toast],
+            copy_failed: vec![
+                Step::OpenUrl(self.target.clone()),
+                Step::RevealInExplorer(r.file.clone()),
+                Step::Toast(
+                    "The prompt could not be copied. Attach the highlighted file and ask for a summary."
+                        .into(),
+                ),
+            ],
         }
     }
 }
@@ -234,6 +267,7 @@ mod tests {
     #[derive(Default)]
     struct Fake {
         handler: bool,
+        no_clipboard: bool,
         log: Vec<String>,
     }
     impl Launcher for Fake {
@@ -242,8 +276,9 @@ mod tests {
                 .push(format!("open {}", u.split('?').next().unwrap_or(u)));
             self.handler
         }
-        fn copy(&mut self, _: &str) {
+        fn copy(&mut self, _: &str) -> bool {
             self.log.push("copy".into());
+            !self.no_clipboard
         }
         fn reveal(&mut self, _: &str) {
             self.log.push("reveal".into());
@@ -284,12 +319,21 @@ mod tests {
         };
         assert!(c.starts_with("instructions"));
         assert!(c.contains("**Me:** hello"));
-        let Step::OpenUrl(u) = &plan.steps[1] else {
-            panic!("expected a link")
-        };
-        assert!(u.starts_with("claude://claude.ai/new?q="));
-        assert!(!u.contains("file=") && !u.contains("folder="));
-        assert!(u.len() < 400);
+        // The link fills nothing in, so Claude shows no prompt warning.
+        assert_eq!(
+            plan.steps[1],
+            Step::OpenUrl("claude://claude.ai/new".into())
+        );
+        for s in plan
+            .steps
+            .iter()
+            .chain(&plan.fallback)
+            .chain(&plan.copy_failed)
+        {
+            if let Step::OpenUrl(u) = s {
+                assert!(!u.contains('?'), "{u} carries text");
+            }
+        }
     }
 
     #[test]
@@ -302,17 +346,37 @@ mod tests {
     }
 
     #[test]
-    fn claude_falls_back_when_no_handler() {
+    fn claude_falls_back_to_the_browser_then_to_the_file() {
         let plan = Claude.plan(&req(), "p");
-        let mut f = Fake::default();
-        run(&plan, &mut f);
-        assert_eq!(f.log, vec!["copy", "open claude://claude.ai/new", "toast"]);
         let mut ok = Fake {
             handler: true,
             ..Fake::default()
         };
         run(&plan, &mut ok);
         assert_eq!(ok.log, vec!["copy", "open claude://claude.ai/new", "toast"]);
+        // No Claude Desktop handler: the browser gets the empty chat (the fake fails it too).
+        let mut f = Fake::default();
+        run(&plan, &mut f);
+        assert_eq!(
+            f.log,
+            vec![
+                "copy",
+                "open claude://claude.ai/new",
+                "open https://claude.ai/new",
+                "toast"
+            ]
+        );
+        // Clipboard busy: never claim "copied"; highlight the file to drag in instead.
+        let mut busy = Fake {
+            handler: true,
+            no_clipboard: true,
+            ..Fake::default()
+        };
+        run(&plan, &mut busy);
+        assert_eq!(
+            busy.log,
+            vec!["copy", "open claude://claude.ai/new", "reveal", "toast"]
+        );
     }
 
     #[test]

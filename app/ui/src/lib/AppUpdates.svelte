@@ -1,4 +1,6 @@
 <script lang="ts">
+  import Managed from "./Managed.svelte";
+  import { MANAGED_TEXT } from "./managed";
   import { onMount } from "svelte";
   import { backend, type Backend } from "./api";
   import type { AppUpdateProgress, AppUpdateStatus } from "./types";
@@ -119,11 +121,11 @@
           <div class="what">
             <p class="plain">Release channel</p>
             <p class="help">
-              {#if st.channelLocked}Managed by your organization.{:else}Stable is best for most people. Beta and Alpha get new features earlier and may have rough edges.{/if}
+              {#if st.channelLocked}{MANAGED_TEXT}{:else}Stable is best for most people. Beta and Alpha get new features earlier and may have rough edges.{/if}
             </p>
           </div>
           {#if st.channelLocked}
-            <span class="chip">{st.channel}</span>
+            <Managed locked={true}><span class="chip">{st.channel}</span></Managed>
           {:else}
             <Segmented
               name="channel"
@@ -173,7 +175,7 @@
         </div>
       {/if}
       {#if message}<p class="help" role="status">{message}</p>{/if}
-      {#if locked}<p class="help">Some update settings are managed by your organization.</p>{/if}
+      {#if locked}<p class="help">Some update settings are managed by your administrator.</p>{/if}
     </div>
   </div>
 {/if}

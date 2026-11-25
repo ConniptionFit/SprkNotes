@@ -75,7 +75,7 @@ fn root(app: &AppHandle) -> Result<PathBuf, String> {
     crate::transcripts_root(app, &crate::policy())
 }
 
-fn checked(app: &AppHandle, path: &str) -> Result<PathBuf, String> {
+pub(crate) fn checked(app: &AppHandle, path: &str) -> Result<PathBuf, String> {
     library::resolve(&root(app)?, path)
         .ok_or_else(|| "That transcript is not in your library.".to_string())
 }
@@ -187,6 +187,36 @@ pub fn recovery_mark(
         .map_err(|_| "Could not mark that transcript finished.".to_string())
 }
 
+/// "Open folder": a library folder (`""` is the top) in File Explorer.
+#[tauri::command]
+pub fn library_open_folder(app: AppHandle, folder: String) -> Result<(), String> {
+    let root = root(&app)?;
+    std::fs::create_dir_all(&root).map_err(|_| "The transcripts folder could not be opened.")?;
+    let dir = if folder.trim().is_empty() {
+        root.clone()
+    } else {
+        // Only folders inside the library, never `..` or an absolute path.
+        let rel = std::path::Path::new(folder.trim());
+        if rel.is_absolute()
+            || rel
+                .components()
+                .any(|c| !matches!(c, std::path::Component::Normal(_)))
+        {
+            return Err("That folder is not in the library.".into());
+        }
+        root.join(rel)
+    };
+    if !dir.is_dir() {
+        return Err("That folder no longer exists.".into());
+    }
+    let mut l = ShellLauncher::default();
+    if l.open_url(&dir.to_string_lossy()) {
+        Ok(())
+    } else {
+        Err("File Explorer could not be opened.".into())
+    }
+}
+
 /// "View in folder".
 #[tauri::command]
 pub fn library_reveal(app: AppHandle, path: String) -> Result<(), String> {
@@ -273,7 +303,7 @@ fn read_template(app: &AppHandle, policy: &sprk_config::AppPolicy) -> String {
     let admin = policy
         .prompt_template_path
         .as_ref()
-        .and_then(|p| std::fs::read_to_string(p).ok());
+        .and_then(|p| std::fs::read_to_string(crate::save_location::expand(p)).ok());
     sprk_handoff::pick_template(user, admin)
 }
 
@@ -287,6 +317,9 @@ pub fn summarize(
     target: Option<String>,
 ) -> Result<Summarized, String> {
     let policy = crate::policy();
+    if policy.summarize_enabled == Some(false) {
+        return Err("Your organization has turned off Summarize.".into());
+    }
     let root = root(&app)?;
     let file = match path {
         Some(p) => checked(&app, &p)?,
@@ -334,6 +367,14 @@ pub fn summarize(
         },
     };
     let mut l = ShellLauncher::default();
+    #[cfg(windows)]
+    {
+        use tauri::Manager;
+        l.owner = app
+            .get_webview_window("main")
+            .and_then(|w| w.hwnd().ok())
+            .map_or(0, |h| h.0 as isize);
+    }
     sprk_handoff::run(&plan, &mut l);
     // Only on Linux can the clipboard tools be missing.
     #[cfg(not(windows))]

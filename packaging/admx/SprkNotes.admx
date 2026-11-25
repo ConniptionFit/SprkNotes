@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- First draft: app update policy only. Not yet loaded into Intune or gpedit (see docs/enterprise-install-research.md).
+<!-- First draft: app updates, the transcripts folder and the AI features. Not yet loaded into Intune or gpedit (see docs/enterprise-install-research.md).
      Keys live under Software\Policies\SprkNotes, the same place the registry examples in docs/deployment.md use. -->
 <policyDefinitions revision="1.0" schemaVersion="1.0" xmlns="http://schemas.microsoft.com/GroupPolicy/2006/07/PolicyDefinitions">
   <policyNamespaces>
@@ -9,6 +9,9 @@
   <categories>
     <category name="SprkNotes" displayName="$(string.SprkNotes)" />
     <category name="Updates" displayName="$(string.Updates)">
+      <parentCategory ref="SprkNotes" />
+    </category>
+    <category name="Transcripts" displayName="$(string.Transcripts)">
       <parentCategory ref="SprkNotes" />
     </category>
   </categories>
@@ -49,6 +52,25 @@
       <elements>
         <text id="UpdatePublicKeysValue" valueName="UpdatePublicKeys" required="true" />
       </elements>
+    </policy>
+    <policy name="TranscriptsRoot" class="Machine" displayName="$(string.TranscriptsRoot)" explainText="$(string.TranscriptsRoot_Explain)" key="Software\Policies\SprkNotes" presentation="$(presentation.TranscriptsRoot)">
+      <parentCategory ref="Transcripts" />
+      <supportedOn ref="windows:SUPPORTED_Windows7" />
+      <elements>
+        <text id="TranscriptsRootValue" valueName="TranscriptsRoot" required="true" />
+      </elements>
+    </policy>
+    <policy name="SummarizeEnabled" class="Machine" displayName="$(string.SummarizeEnabled)" explainText="$(string.SummarizeEnabled_Explain)" key="Software\Policies\SprkNotes" valueName="SummarizeEnabled">
+      <parentCategory ref="Transcripts" />
+      <supportedOn ref="windows:SUPPORTED_Windows7" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+    </policy>
+    <policy name="AssistantEnabled" class="Machine" displayName="$(string.AssistantEnabled)" explainText="$(string.AssistantEnabled_Explain)" key="Software\Policies\SprkNotes" valueName="AssistantEnabled">
+      <parentCategory ref="Transcripts" />
+      <supportedOn ref="windows:SUPPORTED_Windows7" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
     </policy>
   </policies>
 </policyDefinitions>

@@ -153,13 +153,15 @@
     if (view !== "settings") syncAssistant();
   });
   const askReady = $derived(!!assistant && assistant.enabled && assistant.state === "ready");
-  // The Ask button is always findable unless the organization turned Ask Sprk off. When it is off
-  // or has no model yet, the button leads to Settings (or the panel says what is missing).
-  const askAvailable = $derived(!!assistant && !(assistant.locked && !assistant.enabled));
+  // The Ask button shows only while the assistant and its Ask feature are on (Settings turns them on).
+  const askAvailable = $derived(!!assistant && assistant.enabled && assistant.features.includes("ask"));
   function onAsk() {
-    if (!assistant?.enabled) view = "settings";
-    else askOpen = !askOpen;
+    askOpen = !askOpen;
   }
+  // Turning Ask Sprk off closes its panel too.
+  $effect(() => {
+    if (!askAvailable) askOpen = false;
+  });
   const canTitle = $derived(askReady && !!assistant?.features.includes("title") && status !== "ready" && !name.trim() && lines.length >= 6);
 
   async function suggestTitle() {
@@ -263,6 +265,21 @@
     }
   }
 
+  // Library "Continue transcribing": the same file gets the new lines, after a "continued" note.
+  async function continueFrom(entry: LibraryEntry) {
+    view = "main";
+    lines = [];
+    name = entry.title || entry.name;
+    phase = { phase: "loading" };
+    try {
+      await api?.continueTranscript(entry.path);
+    } catch (e) {
+      say(String(e));
+    } finally {
+      phase = { phase: "idle" };
+    }
+  }
+
   async function end() {
     phase = { phase: "ending" };
     try {
@@ -305,7 +322,7 @@
     </div>
   {/if}
   {#if view === "library"}
-    <Library {api} {notice} onback={() => (view = "main")} onsummarize={(p) => summarize(p)} />
+    <Library {api} {notice} onback={() => (view = "main")} onsummarize={(p) => summarize(p)} oncontinue={continueFrom} canContinue={status === "ready"} />
   {:else if view === "settings"}
     <Settings
       {model}

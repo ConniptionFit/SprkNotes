@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { managed } from "./prefs.svelte";
   import IconButton from "./IconButton.svelte";
   let {
     onhome,
@@ -17,7 +18,7 @@
     onlibrary: () => void;
     onsettings: () => void;
     onsummarize: () => void;
-    /** Given whenever Ask Sprk is available, so people can always find it. */
+    /** Given only while Ask Sprk is turned on; the button is hidden otherwise. */
     onask?: () => void;
     askOpen?: boolean;
     homeOpen?: boolean;
@@ -45,9 +46,11 @@
       Ask Sprk
     </button>
   {/if}
-  <IconButton label={canSummarize ? "Summarize" : summarizeHint || "Summarize"} onclick={onsummarize} disabled={!canSummarize}>
-    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3l1.6 4.4L16 9l-4.4 1.6L10 15l-1.6-4.4L4 9l4.4-1.6z" /></svg>
+  {#if !managed.summarizeOff}
+  <IconButton label={canSummarize ? "Summarize the latest transcript with Claude or Copilot" : summarizeHint || "Summarize"} onclick={onsummarize} disabled={!canSummarize}>
+    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5.5 2.5h6l3 3v12h-9z" /><path d="M11.5 2.5v3h3M8 9.5h4.5M8 12h4.5M8 14.5h2.5" /></svg>
   </IconButton>
+  {/if}
 </nav>
 
 <style>

@@ -89,6 +89,76 @@ impl TranscriptWriter {
         })
     }
 
+    /// Continue an existing transcript (SPEC 6.5): the file goes back to `in-progress`, keeps
+    /// every line and gets an event line saying where transcription continued. Returns the writer
+    /// and the time (ms) the new lines start from, just after the last saved one, so the
+    /// timestamps keep counting up. `app` and `engine` are this session's.
+    pub fn reopen(
+        path: PathBuf,
+        sidecar: Option<PathBuf>,
+        app: &str,
+        engine: &str,
+    ) -> Result<(Self, u64), TranscriptError> {
+        let text = std::fs::read_to_string(&path)?;
+        strip_front_matter(&text).ok_or(TranscriptError::NotATranscript)?;
+        let side = sidecar
+            .as_ref()
+            .and_then(|p| std::fs::read_to_string(p).ok());
+        let parsed = crate::parse::Parsed::parse(&text, side.as_deref());
+        let last = parsed
+            .segments
+            .iter()
+            .map(|s| s.end_ms.max(s.start_ms))
+            .chain(parsed.events.iter().map(|e| e.t_ms))
+            .max()
+            .unwrap_or(0)
+            .max(duration_ms(&parsed.duration));
+        // Start on the next whole second so the continued lines never share the last stamp.
+        let offset = (last / 1000 + 1) * 1000;
+        let meta = Meta {
+            title: parsed.title.clone(),
+            date: parsed.date.clone(),
+            start: parsed.start.clone(),
+            end: None,
+            duration: None,
+            status: Status::InProgress,
+            sources: if parsed.sources.is_empty() {
+                vec!["mic".into(), "system".into()]
+            } else {
+                parsed.sources.clone()
+            },
+            speakers: if parsed.speakers.is_empty() {
+                vec!["Me".into(), "Others".into()]
+            } else {
+                parsed.speakers.clone()
+            },
+            name_source: NameSource::parse(&parsed.name_source),
+            engine: engine.to_string(),
+            app: app.to_string(),
+        };
+        rewrite_head(&path, &meta)?;
+        let file = open_append(&path, false)?;
+        let sidecar = match sidecar {
+            Some(p) => {
+                if let Some(dir) = p.parent() {
+                    std::fs::create_dir_all(dir)?;
+                }
+                Some(open_append(&p, false)?)
+            }
+            None => None,
+        };
+        let mut w = Self {
+            path,
+            file,
+            sidecar,
+            meta,
+            last_speaker: None,
+            next_id: parsed.segments.len() as u64 + 1,
+        };
+        w.append_event(offset, "Transcription continued")?;
+        Ok((w, offset))
+    }
+
     pub fn path(&self) -> &Path {
         &self.path
     }
@@ -188,6 +258,16 @@ impl TranscriptWriter {
         drop(self);
         rewrite_head(&path, &meta)?;
         Ok(path)
+    }
+}
+
+/// `H:MM:SS` (front matter `duration`) to ms; 0 when absent or unreadable.
+fn duration_ms(v: &str) -> u64 {
+    let parts: Vec<u64> = v.trim().split(':').filter_map(|p| p.parse().ok()).collect();
+    match parts.as_slice() {
+        [h, m, s] => (h * 3600 + m * 60 + s) * 1000,
+        [m, s] => (m * 60 + s) * 1000,
+        _ => 0,
     }
 }
 
@@ -350,6 +430,58 @@ mod tests {
         assert!(!s.contains("in-progress"));
         assert!(s.ends_with("- `00:00:04` **Me:** body stays\n"));
         assert!(!d.join("t.md.tmp").exists());
+        std::fs::remove_dir_all(d).unwrap();
+    }
+
+    #[test]
+    fn reopen_continues_after_the_last_line_and_keeps_everything() {
+        let d = tmpdir("reopen");
+        let side = d.join(".sprknotes").join("t.jsonl");
+        let mut m = meta();
+        m.name_source = NameSource::User;
+        let mut w = TranscriptWriter::create(d.join("t.md"), Some(side.clone()), m, None).unwrap();
+        w.append_statement(4_000, 6_500, "Me", "mic", "first part")
+            .unwrap();
+        let p = w
+            .finalize("2026-11-18T13:42:15-06:00", "0:00:07", Status::Complete)
+            .unwrap();
+
+        let (mut w, offset) =
+            TranscriptWriter::reopen(p.clone(), Some(side.clone()), "SprkNotes 0.0.2", "e2")
+                .unwrap();
+        assert_eq!(offset, 8_000);
+        assert_eq!(w.meta().name_source, NameSource::User);
+        let s = std::fs::read_to_string(&p).unwrap();
+        assert!(s.contains("status: in-progress"));
+        assert!(!s.contains("duration:"));
+        w.append_statement(
+            offset + 1_000,
+            offset + 2_000,
+            "Others",
+            "system",
+            "second part",
+        )
+        .unwrap();
+        let p = w
+            .finalize("2026-11-18T14:00:00-06:00", "0:00:10", Status::Complete)
+            .unwrap();
+        let s = std::fs::read_to_string(&p).unwrap();
+        assert!(s.contains("- `00:00:04` **Me:** first part"));
+        assert!(s.contains("> `00:00:08` Transcription continued"));
+        assert!(s.contains("- `00:00:09` **Others:** second part"));
+        assert!(s.contains("app: \"SprkNotes 0.0.2\""));
+        let parsed =
+            crate::parse::Parsed::parse(&s, std::fs::read_to_string(&side).ok().as_deref());
+        assert_eq!(parsed.segments.len(), 2);
+        assert_eq!(parsed.segments[1].end_ms, 10_000);
+        std::fs::remove_dir_all(d).unwrap();
+    }
+
+    #[test]
+    fn reopen_refuses_a_file_that_is_not_a_transcript() {
+        let d = tmpdir("reopen-bad");
+        std::fs::write(d.join("x.md"), "hello").unwrap();
+        assert!(TranscriptWriter::reopen(d.join("x.md"), None, "a", "e").is_err());
         std::fs::remove_dir_all(d).unwrap();
     }
 

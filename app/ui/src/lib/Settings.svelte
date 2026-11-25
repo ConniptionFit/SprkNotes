@@ -5,7 +5,9 @@
   import AssistantSettings from "./AssistantSettings.svelte";
   import AppUpdates from "./AppUpdates.svelte";
   import DevicePicker from "./DevicePicker.svelte";
-  import { prefs, setPref, type CaptionWho, type CaptionDelay, type Theme } from "./prefs.svelte";
+  import SaveLocation from "./SaveLocation.svelte";
+  import Managed from "./Managed.svelte";
+  import { isLocked, prefs, setPref, type CaptionWho, type CaptionDelay, type Theme } from "./prefs.svelte";
   import { comboFromEvent } from "./hotkey";
   import { hotkeyState } from "./hotkeyState.svelte";
 
@@ -85,6 +87,8 @@
     </div>
   </div>
 
+  <SaveLocation {sessionActive} />
+
   <DevicePicker source="mic" />
   <DevicePicker source="system" />
 
@@ -98,6 +102,7 @@
         <h3>Appearance</h3>
         <p class="help">The overlay is dark by default. Choose Light to make the overlay light too.</p>
       </div>
+      <Managed locked={isLocked("theme")}>
       <Segmented
         name="theme"
         label="Appearance"
@@ -108,7 +113,9 @@
           { value: "dark", text: "Dark" },
         ]}
         onchange={(v: Theme) => setPref("theme", v)}
+        disabled={isLocked("theme")}
       />
+      </Managed>
     </div>
   </div>
 
@@ -122,38 +129,45 @@
             transcript is unchanged.
           </p>
         </div>
+        <Managed locked={isLocked("captionsOn")}>
         <label class="switch">
           <input
             type="checkbox"
             role="switch"
             checked={prefs.captionsOn}
+            disabled={isLocked("captionsOn")}
             onchange={(e) => setPref("captionsOn", e.currentTarget.checked)}
           />
           <span class="track" aria-hidden="true"></span>
           <span class="sr-only">Show live captions on the overlay</span>
         </label>
+        </Managed>
       </div>
       <div class="row">
         <div class="what">
           <p class="plain">Live line in the transcript window</p>
           <p class="help">The newest words grow at the end of the transcript before they settle into a line.</p>
         </div>
+        <Managed locked={isLocked("liveLine")}>
         <label class="switch">
           <input
             type="checkbox"
             role="switch"
             checked={prefs.liveLine}
+            disabled={isLocked("liveLine")}
             onchange={(e) => setPref("liveLine", e.currentTarget.checked)}
           />
           <span class="track" aria-hidden="true"></span>
           <span class="sr-only">Show the live line in the transcript window</span>
         </label>
+        </Managed>
       </div>
       <div class="row">
         <div class="what">
           <p class="plain">Live text delay</p>
           <p class="help">A short wait lets words settle, so they change less. Steady is under one second.</p>
         </div>
+        <Managed locked={isLocked("captionDelay")}>
         <Segmented
           name="caption-delay"
           label="How long live text waits before it appears"
@@ -164,13 +178,16 @@
             { value: "smooth", text: "Smoothest" },
           ]}
           onchange={(v: CaptionDelay) => setPref("captionDelay", v)}
+          disabled={isLocked("captionDelay")}
         />
+        </Managed>
       </div>
       <div class="row">
         <div class="what">
           <p class="plain">Whose words in the pop-out</p>
           <p class="help">The pop-out's captions show Others only by default. The transcript window always shows both.</p>
         </div>
+        <Managed locked={isLocked("captionsWho")}>
         <Segmented
           name="caption-who"
           label="Whose words appear in the pop-out captions"
@@ -180,7 +197,9 @@
             { value: "both", text: "Others and Me" },
           ]}
           onchange={(v: CaptionWho) => setPref("captionsWho", v)}
+          disabled={isLocked("captionsWho")}
         />
+        </Managed>
       </div>
     </div>
   </div>
@@ -195,16 +214,19 @@
             has held the microphone for a few seconds.
           </p>
         </div>
+        <Managed locked={isLocked("micPromptOn")}>
         <label class="switch">
           <input
             type="checkbox"
             role="switch"
             checked={prefs.micPromptOn}
+            disabled={isLocked("micPromptOn")}
             onchange={(e) => setPref("micPromptOn", e.currentTarget.checked)}
           />
           <span class="track" aria-hidden="true"></span>
           <span class="sr-only">Offer to start when another app uses the microphone</span>
         </label>
+        </Managed>
       </div>
       {#if prefs.micPromptSkip.length > 0}
         <div class="what">
@@ -236,16 +258,19 @@
             turn it on.
           </p>
         </div>
+        <Managed locked={isLocked("hotkeyOn")}>
         <label class="switch">
           <input
             type="checkbox"
             role="switch"
             checked={prefs.hotkeyOn}
+            disabled={isLocked("hotkeyOn")}
             onchange={(e) => setPref("hotkeyOn", e.currentTarget.checked)}
           />
           <span class="track" aria-hidden="true"></span>
           <span class="sr-only">Use a keyboard shortcut to start, pause and resume</span>
         </label>
+        </Managed>
       </div>
       <div class="row">
         <div class="what">
@@ -257,14 +282,17 @@
             <p class="problem" role="alert">{hotkeyState.problem}</p>
           {/if}
         </div>
+        <Managed locked={isLocked("hotkeyKeys")}>
         <button
           class="keys"
+          disabled={isLocked("hotkeyKeys")}
           class:capturing
           aria-label={capturing ? "Press the new shortcut" : `Shortcut: ${prefs.hotkeyKeys}. Click to change`}
           onclick={() => (capturing = !capturing)}
           onkeydown={captureKey}
           onblur={() => (capturing = false)}
         >{capturing ? "Press keys" : prefs.hotkeyKeys}</button>
+        </Managed>
       </div>
     </div>
   </div>
@@ -277,16 +305,19 @@
         <p class="plain">Throwback Mode</p>
         <p class="help">Get a blast from the past. Same app, a little vintage.</p>
       </div>
+      <Managed locked={isLocked("throwback")}>
       <label class="switch">
         <input
           type="checkbox"
           role="switch"
           checked={prefs.throwback}
+          disabled={isLocked("throwback")}
           onchange={(e) => setPref("throwback", e.currentTarget.checked)}
         />
         <span class="track" aria-hidden="true"></span>
         <span class="sr-only">Turn on Throwback Mode</span>
       </label>
+      </Managed>
     </div>
     </div>
   </div>
@@ -320,6 +351,8 @@
   .track::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--muted); transition: transform 120ms, background 120ms; }
   input:checked + .track { background: var(--accent); border-color: transparent; }
   input:checked + .track::after { transform: translateX(20px); background: var(--on-accent); }
+  .switch:has(input:disabled) { opacity: 0.55; }
+  .keys:disabled { opacity: 0.55; cursor: not-allowed; }
   .switch:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 13px; }
   .help { margin: 0; color: var(--muted); font-size: 0.9rem; max-width: 34rem; }
   .skipped { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.35rem; }

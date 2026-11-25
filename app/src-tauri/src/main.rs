@@ -10,6 +10,7 @@ mod models;
 #[cfg(windows)]
 mod net;
 mod net_unix;
+mod save_location;
 mod shell;
 mod updater;
 
@@ -146,29 +147,62 @@ fn app_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
 
-/// Admin policy (SPEC 10.2): machine then user registry keys. Nothing is set off Windows.
+/// Admin policy (SPEC 10.2): machine registry, then a trusted `policy.json`, then user registry.
 fn policy() -> sprk_config::AppPolicy {
-    #[cfg(windows)]
-    {
-        sprk_config::AppPolicy::load(&sprk_config::registry::RegistryPolicy::layered())
+    sprk_config::admin_policy()
+}
+
+/// Say once per start why `%ProgramData%\SprkNotes\policy.json` was ignored, in
+/// `%APPDATA%\SprkNotes\admin.log` (SPEC 10.2a). Only file permissions are named, never content.
+fn note_policy_file() {
+    let Some(log) = models::user_data_dir().map(|d| d.join("SprkNotes").join("admin.log")) else {
+        return;
+    };
+    match sprk_config::machine_policy_file() {
+        Err(why) => {
+            if let Some(d) = log.parent() {
+                let _ = std::fs::create_dir_all(d);
+            }
+            let _ = std::fs::write(
+                &log,
+                format!("policy.json was ignored because {why}. Run the SprkNotes lock script again as SYSTEM to fix its permissions.\r\n"),
+            );
+        }
+        Ok(_) => {
+            let _ = std::fs::remove_file(&log);
+        }
     }
-    #[cfg(not(windows))]
-    {
-        sprk_config::AppPolicy::default()
+}
+
+/// Window preferences an admin set (SPEC 10.2b): `locked` values make the control read-only,
+/// `defaults` apply until the person changes that preference. Raw text; the window checks it.
+#[derive(serde::Serialize)]
+struct ManagedPrefs {
+    locked: std::collections::BTreeMap<String, String>,
+    defaults: std::collections::BTreeMap<String, String>,
+}
+
+#[tauri::command]
+fn managed_prefs() -> ManagedPrefs {
+    let m = sprk_config::admin_ui();
+    ManagedPrefs {
+        locked: m.locked,
+        defaults: m.defaults,
     }
 }
 
 fn transcripts_root(app: &AppHandle, policy: &sprk_config::AppPolicy) -> Result<PathBuf, String> {
-    if let Some(root) = &policy.transcripts_root {
-        return Ok(PathBuf::from(root));
-    }
-    default_transcripts_dir(app.path().document_dir().ok(), app.path().home_dir().ok())
+    save_location::current(app, policy)
+        .map(|(p, _)| p)
         .ok_or_else(|| "no Documents folder".to_string())
 }
 
 /// Default transcripts folder: the Documents folder, or `~/Documents` when none is configured
 /// (a fresh home on Linux has no user-dirs entry).
-fn default_transcripts_dir(documents: Option<PathBuf>, home: Option<PathBuf>) -> Option<PathBuf> {
+pub(crate) fn default_transcripts_dir(
+    documents: Option<PathBuf>,
+    home: Option<PathBuf>,
+) -> Option<PathBuf> {
     let docs = documents.or_else(|| home.map(|h| h.join("Documents")))?;
     Some(docs.join("SprkNotes").join("Transcripts"))
 }
@@ -421,7 +455,7 @@ fn emit_phase(app: &AppHandle, phase: &'static str, model: Option<String>) {
 async fn start_session(app: AppHandle, name: String) -> Result<(), String> {
     emit_phase(&app, "loading", models::active_display_name());
     let a = app.clone();
-    let r = tauri::async_runtime::spawn_blocking(move || start_session_blocking(a, name))
+    let r = tauri::async_runtime::spawn_blocking(move || start_session_blocking(a, name, None))
         .await
         .map_err(|e| e.to_string())
         .and_then(|r| r);
@@ -429,7 +463,27 @@ async fn start_session(app: AppHandle, name: String) -> Result<(), String> {
     r
 }
 
-fn start_session_blocking(app: AppHandle, name: String) -> Result<(), String> {
+/// Library "Continue transcribing": a new session that appends to an existing transcript.
+#[tauri::command]
+async fn continue_session(app: AppHandle, path: String) -> Result<(), String> {
+    let file = library::checked(&app, &path)?;
+    emit_phase(&app, "loading", models::active_display_name());
+    let a = app.clone();
+    let r = tauri::async_runtime::spawn_blocking(move || {
+        start_session_blocking(a, String::new(), Some(file))
+    })
+    .await
+    .map_err(|e| e.to_string())
+    .and_then(|r| r);
+    emit_phase(&app, "idle", None);
+    r
+}
+
+fn start_session_blocking(
+    app: AppHandle,
+    name: String,
+    continue_from: Option<PathBuf>,
+) -> Result<(), String> {
     let state = app.state::<AppState>();
     let mut slot = state.host.lock().map_err(|_| "busy".to_string())?;
     if slot.is_some() {
@@ -447,6 +501,7 @@ fn start_session_blocking(app: AppHandle, name: String) -> Result<(), String> {
             app_version: env!("CARGO_PKG_VERSION").to_string(),
             engine_label: loaded.label,
             commit: commit_config(&policy),
+            continue_from,
         },
         loaded.engine,
         loaded.make_vad,
@@ -661,6 +716,7 @@ fn main() -> anyhow::Result<()> {
         .manage(assistant::Assistant::new())
         .manage(shell::Shell::default())
         .setup(|app| {
+            note_policy_file();
             shell::init(app.handle())?;
             model_download::launch_check(app.handle().clone(), policy());
             updater::launch_check(app.handle().clone(), policy());
@@ -703,6 +759,11 @@ fn main() -> anyhow::Result<()> {
             update_set,
             update_install,
             update_now,
+            save_location::save_location_status,
+            managed_prefs,
+            save_location::save_location_set,
+            library::library_open_folder,
+            continue_session,
             assistant::assistant_status,
             assistant::assistant_set,
             assistant::assistant_cancel,

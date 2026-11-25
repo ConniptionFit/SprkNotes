@@ -5,6 +5,8 @@
   import Segmented from "./Segmented.svelte";
   import AssistantModel from "./AssistantModel.svelte";
   import { prefs, setPref } from "./prefs.svelte";
+  import Managed from "./Managed.svelte";
+  import { MANAGED_TEXT } from "./managed";
 
   let { sessionActive = false }: { sessionActive?: boolean } = $props();
 
@@ -16,7 +18,7 @@
   // A person who already turned it on can always turn it off.
   const switchDisabled = $derived(!!st?.locked || (noModel && !prefs.assistantOn));
   const switchTip = $derived(
-    st?.locked ? "Set by your organization" : noModel && !prefs.assistantOn ? "Download the model first" : undefined,
+    st?.locked ? undefined : noModel && !prefs.assistantOn ? "Download the model first" : undefined,
   );
 
   const CORE: { key: AssistantFeature; text: string; help: string }[] = [
@@ -67,7 +69,7 @@
   const allowed = (k: AssistantFeature) => !st || st.allowedFeatures.includes(k);
   const statusText = $derived(
     !st ? "" :
-    st.state === "off" ? (st.locked ? "Turned off by your organization." : "Off") :
+    st.state === "off" ? (st.locked ? `Off. ${MANAGED_TEXT}` : "Off") :
     st.state === "noModel" ? "Download the model below to use it." :
     st.state === "notEnoughMemory" ? "Not enough free memory right now." :
     "Ready",
@@ -85,6 +87,7 @@
         </p>
         {#if statusText}<p class="status" class:missing={st?.state !== "ready" && st?.state !== "off"}>{statusText}</p>{/if}
       </div>
+      <Managed locked={!!st?.locked}>
       <label class="switch" class:disabled={switchDisabled} title={switchTip}>
         <input
           type="checkbox"
@@ -97,6 +100,7 @@
         <span class="track" aria-hidden="true"></span>
         <span class="sr-only">Turn on Ask Sprk</span>
       </label>
+      </Managed>
     </div>
 
     {#if noModel && !prefs.assistantOn}

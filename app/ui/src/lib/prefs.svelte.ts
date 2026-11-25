@@ -1,4 +1,5 @@
 import { backend } from "./api";
+import { chosenKeys, effective, NOTHING_MANAGED, parseManaged, type Managed } from "./managed";
 
 // Small UI-only preferences, shared by the main window and the overlay through localStorage.
 // Nothing here is sensitive: a theme choice, caption switches, device names, which sources are on and
@@ -54,10 +55,25 @@ const defaults: Prefs = { theme: "system", throwback: false, captionsOn: false, 
 const clamp = (n: unknown, lo: number, hi: number, fallback: number) =>
   typeof n === "number" && Number.isFinite(n) ? Math.min(hi, Math.max(lo, Math.round(n))) : fallback;
 
-function load(): Prefs {
+/** What this person stored, and which of those preferences they chose themselves. */
+function readStored(): { stored: { [key: string]: unknown }; chosen: Set<string> } {
   try {
     const raw = typeof localStorage === "undefined" ? null : localStorage.getItem(KEY);
-    const p: Prefs = { ...defaults, ...(raw ? JSON.parse(raw) : {}) };
+    const stored = raw ? JSON.parse(raw) : {};
+    if (!stored || typeof stored !== "object") return { stored: {}, chosen: new Set() };
+    return { stored, chosen: chosenKeys(stored, defaults) };
+  } catch {
+    return { stored: {}, chosen: new Set() };
+  }
+}
+
+/** Administrator-managed preferences (SPEC 10.2b); empty until the app answers. */
+export const managed = $state<Managed>({ ...NOTHING_MANAGED });
+
+function load(): Prefs {
+  try {
+    const { stored, chosen } = readStored();
+    const p: Prefs = effective(defaults, stored, chosen, managed);
     // A hand-edited or older value must never break the overlay.
     p.captionW = clamp(p.captionW, CAPTION_LIMITS.minW, CAPTION_LIMITS.maxW, defaults.captionW);
     p.captionH = clamp(p.captionH, CAPTION_LIMITS.minH, CAPTION_LIMITS.maxH, defaults.captionH);
@@ -84,10 +100,20 @@ function load(): Prefs {
 
 export const prefs = $state<Prefs>(load());
 
+/** Locked by an administrator: shown, but not changeable. */
+export function isLocked(key: keyof Prefs): boolean {
+  return key in managed.locked;
+}
+
 export function setPref<K extends keyof Prefs>(key: K, value: Prefs[K]) {
+  if (isLocked(key)) return;
   prefs[key] = value;
   try {
-    localStorage.setItem(KEY, JSON.stringify(prefs));
+    // Only the person's own choices are stored, never an administrator's value.
+    const { stored, chosen } = readStored();
+    chosen.add(key);
+    stored[key] = value;
+    localStorage.setItem(KEY, JSON.stringify({ ...stored, chosen: [...chosen] }));
   } catch {
     /* storage can be blocked; the choice then lasts until the window closes */
   }
@@ -98,6 +124,14 @@ if (typeof window !== "undefined") {
   window.addEventListener("storage", (e) => {
     if (e.key === KEY) Object.assign(prefs, load());
   });
+  // What an administrator set. Both windows ask, so neither depends on the other being open.
+  backend
+    .then((b) => b.managedPrefs())
+    .then((raw) => {
+      Object.assign(managed, parseManaged(raw));
+      Object.assign(prefs, load());
+    })
+    .catch(() => {});
 }
 
 /** Keep <html data-theme> in step. The overlay is dark unless the app theme is explicitly Light. */

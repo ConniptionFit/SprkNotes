@@ -19,20 +19,34 @@ const CF_UNICODETEXT: u32 = 13;
 pub struct ShellLauncher {
     /// Toasts to display, oldest first. The app drains this after `run`.
     pub toasts: Vec<String>,
+    /// The app's window (`HWND` as a number). The clipboard needs an owner window: with none,
+    /// `EmptyClipboard` leaves it ownerless and `SetClipboardData` may fail.
+    pub owner: isize,
 }
 
 fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
-fn set_clipboard(text: &str) -> bool {
+/// Another app may hold the clipboard for a moment (clipboard managers, Remote Desktop), so
+/// opening it is tried a few times.
+fn set_clipboard(owner: HWND, text: &str) -> bool {
+    (0..10).any(|i| {
+        if i > 0 {
+            std::thread::sleep(std::time::Duration::from_millis(30));
+        }
+        set_clipboard_once(owner, text)
+    })
+}
+
+fn set_clipboard_once(owner: HWND, text: &str) -> bool {
     let data = wide(text);
     let bytes = data.len() * 2;
     // SAFETY: standard clipboard sequence. The global block is allocated movable, locked only
     // while copying `bytes` bytes into it (its size), then unlocked and handed to the clipboard,
     // which owns it after a successful SetClipboardData. The clipboard is always closed.
     unsafe {
-        if OpenClipboard(HWND::default()).is_err() {
+        if OpenClipboard(owner).is_err() {
             return false;
         }
         let ok = (|| {
@@ -71,8 +85,8 @@ impl Launcher for ShellLauncher {
         r.0 as isize > 32
     }
 
-    fn copy(&mut self, text: &str) {
-        let _ = set_clipboard(text);
+    fn copy(&mut self, text: &str) -> bool {
+        set_clipboard(HWND(self.owner as *mut core::ffi::c_void), text)
     }
 
     fn reveal(&mut self, path: &str) {

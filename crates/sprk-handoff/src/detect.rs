@@ -272,6 +272,13 @@ pub fn fallback_plan(r: &Request, prompt: &str) -> Plan {
     Plan {
         steps,
         fallback: vec![],
+        copy_failed: vec![
+            Step::RevealInExplorer(r.file.clone()),
+            Step::Toast(
+                "No Claude or Copilot app found. The file is highlighted: attach it in your assistant and ask for a summary."
+                    .into(),
+            ),
+        ],
     }
 }
 

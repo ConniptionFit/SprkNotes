@@ -1,9 +1,20 @@
+import type { ManagedPrefs, SaveLocation } from "./types";
 import type { AppUpdateInfo, AppUpdateProgress, AppUpdateStatus, AssistantRequest, AssistantModelStatus, AssistantResponse, AssistantStatus, Caption, DownloadProgress, ExportFormat, LibraryEntry, Line, ModelStatus, Phase, Source, Status, Summarized, TranscriptView, UpdateInfo } from "./types";
 import { asAsk, NO_ASK, type MicAsk } from "./micAsk";
 
 /** Typed surface between the UI and the Rust side. Every command has a matching Tauri command. */
 export interface Backend {
   start(name: string): Promise<void>;
+  /** Start a session that adds to an existing transcript (Library "Continue transcribing"). */
+  continueTranscript(path: string): Promise<void>;
+  /** Where transcripts are saved, and whether an administrator set it. */
+  saveLocation(): Promise<SaveLocation>;
+  /** Window preferences an admin set: locked ones are read-only, defaults apply until changed. */
+  managedPrefs(): Promise<ManagedPrefs>;
+  /** Save a new folder (may use %USERPROFILE%-style names); null goes back to the default. */
+  setSaveLocation(path: string | null): Promise<SaveLocation>;
+  /** Open a library folder ("" is the top) in File Explorer. */
+  libraryOpenFolder(folder: string): Promise<void>;
   pause(): Promise<void>;
   resume(): Promise<void>;
   end(): Promise<void>;
@@ -49,7 +60,7 @@ export interface Backend {
   setBrand(throwback: boolean): Promise<void>;
   /** Partial caption text while someone is still speaking (never saved). */
   onCaption(cb: (c: Caption) => void): Promise<() => void>;
-  /** Input levels for the Me and Others buttons, 0 to 1, about ten a second while transcribing. */
+  /** Input levels for the Me and Others buttons, 0 to 1, about twenty a second while transcribing. */
   onLevels(cb: (levels: [number, number]) => void): Promise<() => void>;
   /** Mini controller only: bring the main window back. */
   openApp(): Promise<void>;
@@ -142,6 +153,11 @@ async function tauri(): Promise<Backend> {
     libraryList: (query) => invoke("library_list", { query }),
     libraryOpen: (path) => invoke("library_open", { path }),
     libraryReveal: (path) => invoke("library_reveal", { path }),
+    libraryOpenFolder: (folder) => invoke("library_open_folder", { folder }),
+    continueTranscript: (path) => invoke("continue_session", { path }),
+    saveLocation: () => invoke("save_location_status"),
+    managedPrefs: () => invoke("managed_prefs"),
+    setSaveLocation: (path) => invoke("save_location_set", { path }),
     libraryExport: (path, format) => invoke("library_export", { path, format }),
     latestTranscript: () => invoke("latest_transcript"),
     summarize: (path, target) => invoke("summarize", { path, target }),
@@ -171,6 +187,22 @@ async function tauri(): Promise<Backend> {
 }
 
 const mockFolders: string[] = ["Clients", "Clients/Acme"];
+// "?save=managed" previews a folder an administrator set.
+// Preview a managed PC with ?managed=1 (captions locked on, dark theme as a starting value).
+const mockManaged: ManagedPrefs =
+  typeof location !== "undefined" && new URLSearchParams(location.search).get("managed")
+    ? { locked: { LiveCaptions: "1", CaptionSpeakers: "both" }, defaults: { Theme: "dark" } }
+    : { locked: {}, defaults: {} };
+
+const mockSave: SaveLocation = {
+  path: "C:\\Users\\you\\Documents\\SprkNotes\\Transcripts",
+  chosen: null,
+  source: "default",
+  locked: false,
+};
+if (typeof location !== "undefined" && new URLSearchParams(location.search).get("save") === "managed") {
+  Object.assign(mockSave, { path: "C:\\Users\\you\\OneDrive - Contoso\\Transcripts", source: "policy", locked: true });
+}
 
 const mockLibrary: LibraryEntry[] = [
   { path: "/mock/2026-11-19 0900 Budget sync.md", name: "2026-11-19 0900 Budget sync", title: "Budget sync", date: "2026-11-19", start: "09:00", duration: "0:32:10", status: "complete", folder: "" },
@@ -405,6 +437,23 @@ export function mockBackend(): Backend {
       ],
     }),
     libraryReveal: async () => {},
+    libraryOpenFolder: async () => {},
+    continueTranscript: async (path) => {
+      if (!mockLibrary.some((e) => e.path === path)) throw "That transcript is not in your library.";
+      t0 = Date.now() - 600_000;
+      id = 0;
+      statusCb("transcribing");
+      run();
+    },
+    saveLocation: async () => ({ ...mockSave }),
+    managedPrefs: async () => mockManaged,
+    setSaveLocation: async (path) => {
+      if (path && !/^([a-zA-Z]:\\|\\\\|%)/.test(path)) throw "Enter a full folder path, for example D:\\Transcripts.";
+      mockSave.chosen = path;
+      mockSave.path = path ?? "C:\\Users\\you\\Documents\\SprkNotes\\Transcripts";
+      mockSave.source = path ? "user" : "default";
+      return { ...mockSave };
+    },
     libraryExport: async (path, format) => `${path.split("/").pop()?.replace(/\.md$/, "")}.${format}`,
     latestTranscript: async () => mockLibrary[0] ?? null,
     // "?apps=both|claude|none" previews the three Summarize outcomes in the browser.
