@@ -62,6 +62,9 @@
       // Apply the saved device picks before the first session.
       b.setDevice("mic", prefs.micDevice).catch(() => {});
       b.setDevice("system", prefs.systemDevice).catch(() => {});
+      // The shell keeps which sources are off between sessions; start from what the window shows.
+      b.setSource("mic", mic).catch(() => {});
+      b.setSource("system", system).catch(() => {});
       offs.push(
         await b.onLine((l) => {
           lines = [...lines, l];

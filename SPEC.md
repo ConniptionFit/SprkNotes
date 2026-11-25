@@ -141,7 +141,7 @@ sprknotes/
 ### 4.1 Capture
 - **Mic:** WASAPI shared-mode capture on the user-selected input (default: system default communications device, else the console default).
 - **System:** WASAPI loopback on the user-selected output (default: the default *communications* render device, where call audio plays, else the console default). Follow default-device changes (headset plugged in, Bluetooth connects) without stopping the session.
-- Either source can be toggled off. Labels: mic = **Me**, loopback = **Others**, or the remote person's name on a confirmed 1:1 call (section 19).
+- Either source can be toggled off, before or during a session; a source turned off before Start stays off when the session begins. Labels: mic = **Me**, loopback = **Others**, or the remote person's name on a confirmed 1:1 call (section 19).
 - The two streams are never mixed: each has its own VAD and utterance queue, and the label comes from the stream. The devices in use are written to the transcript as event lines ("Microphone: ...", "Others audio: ...") at the start and whenever they change (ADR-014).
 - Convert to 16 kHz mono f32 in the pipeline, low-pass filtered first (Kaiser-windowed sinc, pass band to 7 kHz, at least 60 dB down from 8 kHz) so sound above 8 kHz does not fold into the speech band. WAV input in `sprkctl` uses the same filter. Audio stays in in-memory ring buffers only.
 
@@ -344,10 +344,10 @@ Scheduled Teams and Zoom meetings live on the user's Outlook calendar, so one lo
 **Principle:** one main window, one floating mini controller, nothing else visible. Neutral, quiet, light and dark following Windows theme.
 
 ### 8.1 Main window
-- **Top bar:** editable session name, source toggles (Me mic, Others system) with device picker on click, status pill ("Transcribing", "Paused", "Ready").
+- **Top bar:** editable session name, source buttons (small icon buttons: microphone **Me**, speaker **Others**, struck through when off). Clicking one opens a menu: System default, each device found now (a saved device that is unplugged stays listed as not connected), and Turn off / Turn on. Picking a device turns that source on. The device choice is the same one as Settings. Status pill ("Transcribing", "Paused", "Ready").
 - **Controls:** Start · Pause/Resume · End. Context-aware (only valid actions enabled).
 - **Live pane:** transcript lines styled per 5.1 (timestamp muted, speaker bold, Me and Others visually distinct).
-- **Live line:** while transcribing, the newest words appear as the last line of the live pane (marked "live"), growing word by word. Words the engine is unsure of (after `stable`) are muted with a dotted underline; words that change are briefly tinted; when the committed line arrives it replaces the live line. Others only by default, Me too when Settings says so. The live line is display only: the saved transcript contains committed lines only, and partial text is never written to disk or logged. A toolbar above the pane has smaller/larger text (remembered) and a show/hide toggle (also in Settings, on by default).
+- **Live line:** while transcribing, the newest words appear as the last line of the live pane (marked "live"), growing word by word. Words the engine is unsure of (after `stable`) are muted with a dotted underline; words that change are briefly tinted; when the committed line arrives it replaces the live line. Both speakers (Me's live words make Me as quick as Others; before, Me waited for the commit delay). The live line is display only: the saved transcript contains committed lines only, and partial text is never written to disk or logged. A toolbar above the pane has smaller/larger text (remembered) and a show/hide toggle (also in Settings, on by default).
 - **Footer:** Library, Settings, AI handoff (after End or from Library).
 
 ### 8.2 Live pane scrolling (must feel calm)

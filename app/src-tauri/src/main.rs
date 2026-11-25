@@ -27,6 +27,9 @@ struct AppState {
     host: Mutex<Option<Host>>,
     /// The microphone and output the user picked in Settings (None: the system default).
     devices: SharedChoice,
+    /// Sources the user switched off ([mic, system]). Kept between sessions so a stream turned
+    /// off before Start stays off when the session begins (it used to start with both on).
+    sources_off: Mutex<[bool; 2]>,
 }
 
 /// Payload shapes the UI expects (app/ui/src/lib/types.ts).
@@ -368,6 +371,12 @@ fn start_session_blocking(app: AppHandle, name: String) -> Result<(), String> {
         context_config(&policy),
     )
     .map_err(|e| e.to_string())?;
+    let off = state.sources_off.lock().map(|o| *o).unwrap_or_default();
+    for (source, off) in [(Source::Mic, off[0]), (Source::System, off[1])] {
+        if off {
+            let _ = host.set_source(source, false);
+        }
+    }
     *slot = Some(host);
     Ok(())
 }
@@ -400,11 +409,15 @@ fn rename_session(state: State<AppState>, name: String) -> Result<(), String> {
 
 #[tauri::command]
 fn set_source(state: State<AppState>, source: String, on: bool) -> Result<(), String> {
-    let s = match source.as_str() {
-        "mic" => Source::Mic,
-        "system" => Source::System,
-        _ => return Err("unknown source".into()),
-    };
+    let s = source_of(&source)?;
+    if let Ok(mut off) = state.sources_off.lock() {
+        off[usize::from(s == Source::System)] = !on;
+    }
+    let running = state.host.lock().map(|h| h.is_some()).unwrap_or(false);
+    if !running {
+        // Applied when the next session starts.
+        return Ok(());
+    }
     with_host(&state, |h| h.set_source(s, on))
 }
 
