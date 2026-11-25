@@ -186,9 +186,8 @@ impl Poly {
 fn dot(a: &[f32], b: &[f32]) -> f32 {
     // Four lanes so the compiler can vectorise without reassociation flags.
     let mut acc = [0.0f32; 4];
-    let (ca, cb) = (a.chunks_exact(4), b.chunks_exact(4));
-    let (ra, rb) = (ca.remainder(), cb.remainder());
-    for (x, y) in ca.zip(cb) {
+    let ((ca, ra), (cb, rb)) = (a.as_chunks::<4>(), b.as_chunks::<4>());
+    for (x, y) in ca.iter().zip(cb) {
         for k in 0..4 {
             acc[k] += x[k] * y[k];
         }
