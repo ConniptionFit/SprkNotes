@@ -4,6 +4,10 @@
 
 On-device app for Windows (x64 and ARM64), with a native Linux build, that **transcribes your microphone and the system audio together, live**, into crash-safe Markdown files. Audio is processed in memory and never written to disk. Nothing leaves the machine. Built for a HIPAA-regulated company.
 
+> [!IMPORTANT]
+> **IT admins: start with the [SprkNotes deployment form](https://conniptionfit.github.io/SprkNotes/).**
+> Choose which settings to lock or pre-set and it writes two PowerShell scripts for you: a **lock script** to run as SYSTEM (registry policy, a locked-down policy file, or both) and a **per-user install script** with your starting values baked in, ready for NinjaOne, Intune or any RMM. It runs entirely in your browser and sends nothing anywhere. Step-by-step guide: [Deployment](docs/deployment.md#admin-deployment-form).
+
 ![Main window while transcribing, with the live line at the end](docs/screenshots/main-transcribing-light.png)
 
 *Screenshots in this repo use synthetic text only. They come from the UI running against its built-in mock (`scripts/screenshots.mjs`), in light and dark.*
@@ -28,7 +32,7 @@ It installs for you only, in `%LocalAppData%\Programs\SprkNotes`, adds **SprkNot
 
 - **Updates:** SprkNotes checks the repository's releases and tells you when a newer build exists. Settings lets you pick the channel: **Stable** (default), **Beta** or **Alpha** for early builds.
 - **Early builds:** `& ([scriptblock]::Create((irm https://raw.githubusercontent.com/ConniptionFit/SprkNotes/main/install.ps1))) -Channel beta`
-- **Whole-PC or managed installs** (all users, locked channel and source, forced or disabled updates, silent update task): see [Deployment](docs/deployment.md#updates-channels-and-locking).
+- **Managed installs for a team or company:** use the [deployment form](https://conniptionfit.github.io/SprkNotes/) to build the lock and install scripts, then follow [Deployment](docs/deployment.md#admin-deployment-form). Whole-PC installs, locked channel and source, forced or disabled updates and the silent update task are in [Deployment](docs/deployment.md#updates-channels-and-locking).
 - Other ways (portable zip, MSI, MSIX, Linux): [Install](docs/install.md).
 
 ## What it does
@@ -51,6 +55,7 @@ Pre-release (0.0.1, pilot builds are on the Releases page). Built so far: transc
 ## Docs
 | Doc | For |
 |---|---|
+| **[Deployment form](https://conniptionfit.github.io/SprkNotes/)** | **Admins: build the lock and install scripts in your browser** |
 | [Features and usage](docs/features.md) | Everything the app does, with screenshots |
 | [Install](docs/install.md) | Installing on one PC: portable zip, MSI, MSIX, Linux, models, uninstall |
 | [Moving or forking](docs/forking.md) | Moving to another repository (such as a corporate GitHub) or forking an edition |
