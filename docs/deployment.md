@@ -39,8 +39,8 @@ Neither is exercised yet; these follow standard Windows Installer behavior.
 SprkNotes installs into each person's own profile (no admin rights, nothing machine-wide). Settings you lock live in the machine
 policy key or a locked-down machine file, which only administrators can change, so they hold even though the app itself is per user.
 
-1. Open `tools/admin-form/index.html` from this repository in a browser (download the repo or just that folder; it works offline
-   and sends nothing anywhere). Pick the channel, then mark each setting **Not managed**, **Starting value** or **Locked**.
+1. Open the form at https://conniptionfit.github.io/SprkNotes/, or open `tools/admin-form/index.html` from this repository in a
+   browser (it works offline). Either way it runs in your browser and sends nothing anywhere. Pick the channel, then mark each setting **Not managed**, **Starting value** or **Locked**.
    Paths can use `%OneDrive%`, `%USERPROFILE%` and similar; they are stored as written and filled in for each person.
 2. **Lock script** (`Set-SprkNotesPolicy.ps1`): add it to the NinjaOne script library with **Run As: System**, and run it on the
    devices (or a policy, so new devices get it). Choose where it writes:
