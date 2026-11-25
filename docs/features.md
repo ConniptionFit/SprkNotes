@@ -115,6 +115,7 @@ With one app installed it opens that one (Claude gets the file; for Copilot the 
 
 - **Transcription model:** status, **Download model**, **Check for updates**.
 - **Appearance:** System, Light or Dark.
+- **Sound meter:** Nine bars (default) or Rolling bars.
 - **Misc:** Throwback Mode.
 - **Live captions:** captions on the overlay, the live line in the main window, **Live text delay** (Fast, Steady, Smoothest) and whose words (Others only or Others and Me).
 
@@ -132,13 +133,7 @@ Downloads come in parts, are checked against checksums, and are blocked during a
 Speech recognition uses *Parakeet TDT 0.6B v2 by NVIDIA, licensed under CC BY 4.0*.
 
 ## Look
-The current brand is a speech bubble with a waveform, the Outfit font and a purple and ink palette. **Throwback Mode** (Settings, Misc) restores the first look: starburst icon, earlier purple and Segoe UI.
-
-| Throwback main window | Throwback settings |
-|---|---|
-| ![Throwback](screenshots/throwback-transcribing-light.png) | ![Throwback settings](screenshots/settings-throwback-light.png) |
-
-(Screenshots were taken on Linux without Segoe UI, so the throwback font differs from Windows.)
+The current brand is a speech bubble with a waveform, the Outfit font and a purple and ink palette. **Throwback Mode** (Settings, Misc) brings back the first icon, the starburst, on the window, taskbar and tray. Only the icon changes: fonts, colors and layout stay exactly the same, so nothing on the page moves.
 
 ## Files and privacy
 - Transcripts are Markdown in `Documents\SprkNotes\Transcripts`: `YYYY-MM-DD HHmm <Title>.md`, with a `.jsonl` sidecar. Each line is `` - `HH:MM:SS` **Speaker:** text ``; lines starting with `>` are events (pauses, call changes, audio sources).

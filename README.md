@@ -16,7 +16,6 @@ On-device app for Windows (x64 and ARM64), with a native Linux build, that **tra
 <tr>
 <td><img src="docs/screenshots/main-transcribing-dark.png" alt="Main window, dark"></td>
 <td><img src="docs/screenshots/settings-full-light.png" alt="Settings"></td>
-<td><img src="docs/screenshots/throwback-transcribing-light.png" alt="Throwback Mode"></td>
 </tr>
 </table>
 
