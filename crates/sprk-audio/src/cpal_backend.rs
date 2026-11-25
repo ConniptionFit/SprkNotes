@@ -72,7 +72,13 @@ impl PcmStream for CpalStream {
 
 impl Backend for CpalBackend {
     fn default_device(&self, source: Source) -> Option<String> {
-        #[cfg(not(windows))]
+        // Android: apps cannot capture other apps' audio, so a phone has the microphone only
+        // (ADR-015 Decision 4).
+        #[cfg(target_os = "android")]
+        if source == Source::System {
+            return None;
+        }
+        #[cfg(all(not(windows), not(target_os = "android")))]
         if source == Source::System {
             return monitor::default_monitor();
         }
@@ -98,7 +104,7 @@ impl Backend for CpalBackend {
         // ALSA's "default" device keeps its name when the user switches the default input, so
         // append the sound server's current default source. A switch then looks like a new
         // device and the stream is reopened (and a "Source changed" line is written).
-        #[cfg(not(windows))]
+        #[cfg(all(not(windows), not(target_os = "android")))]
         if source == Source::Mic {
             return Some(monitor::tag_device(
                 &name,
@@ -109,7 +115,13 @@ impl Backend for CpalBackend {
     }
 
     fn devices(&self, source: Source) -> Vec<String> {
-        #[cfg(not(windows))]
+        // Android: apps cannot capture other apps' audio, so a phone has the microphone only
+        // (ADR-015 Decision 4).
+        #[cfg(target_os = "android")]
+        if source == Source::System {
+            return Vec::new();
+        }
+        #[cfg(all(not(windows), not(target_os = "android")))]
         if source == Source::System {
             return Vec::new(); // Linux system audio is the default output's monitor
         }
@@ -130,7 +142,13 @@ impl Backend for CpalBackend {
     }
 
     fn open(&mut self, source: Source, name: &str) -> Result<Box<dyn PcmStream>, AudioError> {
-        #[cfg(not(windows))]
+        // Android: apps cannot capture other apps' audio, so a phone has the microphone only
+        // (ADR-015 Decision 4).
+        #[cfg(target_os = "android")]
+        if source == Source::System {
+            return Err(AudioError::Unavailable);
+        }
+        #[cfg(all(not(windows), not(target_os = "android")))]
         if source == Source::System {
             return monitor::open(name);
         }
@@ -215,7 +233,7 @@ const TAG_SEP: char = '\u{1f}';
 
 /// Linux system audio: the default output's monitor source, read through `parec` (PipeWire and
 /// PulseAudio both serve it). cpal cannot open a render device as an input off Windows.
-#[cfg(not(windows))]
+#[cfg(all(not(windows), not(target_os = "android")))]
 mod monitor {
     use super::*;
     use std::io::Read;
@@ -328,7 +346,7 @@ mod monitor {
     }
 }
 
-#[cfg(all(test, not(windows)))]
+#[cfg(all(test, not(windows), not(target_os = "android")))]
 mod tests {
     use super::*;
 

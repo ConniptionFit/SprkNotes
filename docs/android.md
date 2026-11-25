@@ -76,10 +76,11 @@ and the app shell build for phones. CI does not upload or publish it. To build a
    ```bash
    (cd app/ui && npm ci)
    cd app
-   cargo tauri android init --ci
    cargo tauri android build --debug --apk --target aarch64 --ci
    ```
-   The APK lands in `app/src-tauri/gen/android/app/build/outputs/apk/universal/debug/`.
+   The Android project is kept in `app/src-tauri/gen/android`, so there is no `init` step. Do not run
+   `cargo tauri android init` over it: that would drop the microphone permission. The APK lands in
+   `app/src-tauri/gen/android/app/build/outputs/apk/universal/debug/`.
 4. On the phone, turn on **Developer options** and **USB debugging**, connect it, and run
    `adb install -r app-universal-debug.apk`. Or run `cargo tauri android dev` to build, install and open it in one step.
 

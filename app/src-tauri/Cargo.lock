@@ -4333,6 +4333,7 @@ dependencies = [
  "sprk-asr",
  "sprk-audio",
  "sprk-config",
+ "sprk-models",
  "sprk-pipeline",
 ]
 

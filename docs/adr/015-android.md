@@ -116,9 +116,10 @@ Picked from four interactive mock-ups (A desktop twin, B bottom tabs, C control 
 
 ## Consequences
 - Moving session logic into `sprk-core` touches `main.rs`; done in small PRs with the Windows build green each time.
-- CI lints the whole workspace for `aarch64-linux-android` and builds an arm64 debug APK (`android.yml`). Until the
-  phone UI lands, `gen/android` is generated in CI rather than committed. No release or
-  signed APK is published without John's yes.
+- CI lints the whole workspace for `aarch64-linux-android` and builds an arm64 debug APK (`android.yml`).
+  `gen/android` is committed, because it carries the microphone permission and the first-start mic prompt
+  (`MainActivity.kt`); regenerate it only by hand and keep those two. No release or signed APK is published without
+  John's yes.
 - Not on phones in v1: tray, pop-out overlay, keyboard shortcut, Outlook/Teams naming, offer-to-start (Android hides
   other apps' mic use), Summarize hand-off (later via the share sheet).
 
