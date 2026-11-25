@@ -13,7 +13,7 @@ test("every setting has a unique key, a label and a known type", () => {
   }
   // Only settings with a control in the app take a starting value (InstallDefaults, UiManaged).
   const start = A.SETTINGS.filter((s) => s.start).map((s) => s.key).sort();
-  assert.deepEqual(start, ["AssistantEnabled", "CaptionDelay", "CaptionSpeakers", "Hotkey", "HotkeyKeys", "LiveCaptions", "LiveLine", "MicPrompt", "Theme", "ThrowbackMode", "TranscriptsRoot", "UpdateChannel", "UpdateMode", "UpdateProvider", "UpdateRepoUrl", "WaveformStyle"]);
+  assert.deepEqual(start, ["AssistantEnabled", "CaptionDelay", "CaptionSpeakers", "Hotkey", "HotkeyKeys", "LiveCaptions", "LiveLine", "MicPrompt", "Theme", "ThrowbackMode", "TranscriptsRoot", "UpdateChannel", "UpdateMode", "UpdateProvider", "UpdateRepoUrl"]);
 });
 
 test("bad values are reported and good ones pass", () => {

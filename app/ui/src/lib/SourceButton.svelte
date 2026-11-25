@@ -7,7 +7,7 @@
   import { prefs, setPref } from "./prefs.svelte";
   import { menuOptions, deviceLabel } from "./sources";
   import type { Source } from "./types";
-  import { barRects, linePoints, meterRest, meterStart, meterStep, meterStill, type Meter } from "./waveform";
+  import { linePoints, meterRest, meterStart, meterStep, meterStill, type Meter } from "./waveform";
   import { onDestroy } from "svelte";
 
   let {
@@ -23,17 +23,14 @@
     onsource: (s: Source, on: boolean) => void;
   } = $props();
 
-  // A small sound meter beside the icon, in the style picked in Settings (waveform.ts): nine bars
-  // with the newest level in the middle (default), or one smooth line whose swell follows the voice.
-  // Speech shows as movement and silence, or a muted or wrong device, settles into a flat line. The
-  // meter samples the newest level on its own clock, because a silence that repeats the same 0 does
-  // not reach this component again, and eases toward it on display frames so the motion is fluid.
-  // It is drawn on a small canvas snapped to whole device pixels, so the bars stay evenly spaced at
-  // any display scale. Frames run only while something is moving, so a quiet source costs nothing.
-  // With reduced motion it updates twenty times a second without easing. Hidden when off or not
-  // transcribing.
+  // A small sound meter beside the icon (waveform.ts): one smooth line whose swell follows the
+  // voice. Speech shows as movement and silence, or a muted or wrong device, settles into a flat
+  // line. The meter holds the newest level, because a silence that repeats the same 0 does not
+  // reach this component again, and eases toward it on display frames so the motion is fluid. It
+  // is drawn on a small canvas at whole device pixels. Frames run only while something is moving,
+  // so a quiet source costs nothing. With reduced motion it updates twenty times a second without
+  // easing or drift. Hidden when off or not transcribing.
   const live = $derived(on && level !== null);
-  const style = $derived(prefs.waveStyle);
   const snap = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
   const smooth = !snap && typeof requestAnimationFrame === "function";
 
@@ -85,7 +82,7 @@
   }
   onDestroy(stop);
 
-  // Redraw on every meter step, and when the style, the colors or the display scale change.
+  // Redraw on every meter step, and when the colors change.
   let scheme = $state(0);
   $effect(() => {
     if (typeof matchMedia !== "function") return;
@@ -95,7 +92,7 @@
     return () => q.removeEventListener?.("change", bump);
   });
   $effect(() => {
-    void [meter, style, on, prefs.theme, prefs.throwback, scheme];
+    void [meter, on, prefs.theme, prefs.throwback, scheme];
     draw();
   });
 
@@ -112,30 +109,20 @@
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, w, h);
     const color = getComputedStyle(c).color;
-    if (style === "line") {
-      const pts = linePoints(meter.env, meter.phase, Math.max(2, Math.round(w / dpr) + 1));
-      const mid = h / 2;
-      ctx.beginPath();
-      pts.forEach((y, i) => {
-        const x = (i / (pts.length - 1)) * w;
-        const yy = mid - y * (mid - dpr);
-        if (i) ctx.lineTo(x, yy);
-        else ctx.moveTo(x, yy);
-      });
-      ctx.lineWidth = Math.max(1, Math.round(1.5 * dpr));
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-      ctx.strokeStyle = color;
-      ctx.stroke();
-      return;
-    }
-    ctx.fillStyle = color;
-    for (const r of barRects(meter.bars, w, h, dpr)) {
-      ctx.beginPath();
-      if (typeof ctx.roundRect === "function") ctx.roundRect(r.x, r.y, r.w, r.h, r.w / 2);
-      else ctx.rect(r.x, r.y, r.w, r.h);
-      ctx.fill();
-    }
+    const pts = linePoints(meter.env, meter.phase, Math.max(2, Math.round(w / dpr) + 1));
+    const mid = h / 2;
+    ctx.beginPath();
+    pts.forEach((y, i) => {
+      const x = (i / (pts.length - 1)) * w;
+      const yy = mid - y * (mid - dpr);
+      if (i) ctx.lineTo(x, yy);
+      else ctx.moveTo(x, yy);
+    });
+    ctx.lineWidth = Math.max(1, Math.round(1.5 * dpr));
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = color;
+    ctx.stroke();
   }
 
   let open = $state(false);
@@ -269,7 +256,7 @@
   .src .caret { width: 0.6rem; height: 0.6rem; opacity: 0.7; }
   .src.on.mic { background: var(--me-soft); color: var(--me); border-color: transparent; }
   .src.on.system { background: var(--others-soft); color: var(--others); border-color: transparent; }
-  /* The sound meter's box; waveform.ts places the bars on whole device pixels inside it. */
+  /* The sound meter's box; the line is drawn at whole device pixels inside it. */
   .wave { display: block; width: 34px; height: 1rem; }
   .slash { position: absolute; left: 0.45rem; top: 50%; width: 1.15rem; height: 1.5px; background: currentColor; transform: rotate(-45deg); }
   .src:hover { border-color: var(--accent); }
