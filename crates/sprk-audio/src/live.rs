@@ -10,6 +10,28 @@ use std::collections::VecDeque;
 pub trait PcmStream {
     /// Append whatever arrived since the last call. Never blocks.
     fn read(&mut self, out: &mut Vec<f32>);
+    /// The same audio as [`read`](Self::read), split into the packets the device handed over,
+    /// each with how long before this call it arrived. Streams that cannot tell return one packet
+    /// of unknown age. Never blocks.
+    fn read_packets(&mut self, out: &mut Vec<Packet>) {
+        let mut samples = Vec::new();
+        self.read(&mut samples);
+        if !samples.is_empty() {
+            out.push(Packet {
+                samples,
+                age_ms: None,
+            });
+        }
+    }
+}
+
+/// Audio a device delivered in one go (16 kHz mono).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Packet {
+    pub samples: Vec<f32>,
+    /// Milliseconds between the device delivering this audio and the read that returned it.
+    /// None when the stream cannot tell.
+    pub age_ms: Option<u64>,
 }
 
 pub trait Backend {
@@ -85,6 +107,84 @@ struct Slot {
     /// Wall-clock ms when the current stream was opened, and the 16 kHz samples it has
     /// delivered since (including silence filled in by [`LiveCapture::poll`]).
     clock: Option<(u64, u64)>,
+    /// Timed streams: when the last packet arrived (wall-clock ms), and how far (16 kHz samples)
+    /// the audio normally runs behind its arrival while it flows (the device's buffering).
+    last_arrival: Option<u64>,
+    latency: Option<u64>,
+}
+
+impl Slot {
+    fn fill(&mut self, n: u64, frames: &mut VecDeque<Frame>) {
+        if n == 0 {
+            return;
+        }
+        if let Some((_, delivered)) = self.clock.as_mut() {
+            *delivered += n;
+        }
+        frames.push_back(Frame {
+            source: self.source,
+            samples: vec![0.0; n as usize],
+        });
+    }
+
+    /// Samples behind the clock at `at_ms` once `incoming` more samples are counted.
+    fn lag_at(&self, at_ms: u64, incoming: usize) -> Option<u64> {
+        let (opened, delivered) = self.clock?;
+        let expected = at_ms.saturating_sub(opened) * 16;
+        Some(expected.saturating_sub(delivered + incoming as u64))
+    }
+
+    /// A packet whose arrival time is unknown (or no packet: `samples` empty). If the stream is
+    /// far behind the clock it heard silence: fill most of it, leaving a margin so late real
+    /// audio does not run ahead.
+    fn place_untimed(&mut self, now_ms: u64, samples: &[f32], frames: &mut VecDeque<Frame>) {
+        if samples.is_empty() && self.last_arrival.is_some() {
+            // Timed stream: only fill once the last packet is older than the stall limit.
+            let quiet = self
+                .last_arrival
+                .is_some_and(|a| now_ms.saturating_sub(a) > STALL_FILL_AFTER_MS);
+            if !quiet {
+                return;
+            }
+        }
+        if let Some(lag) = self.lag_at(now_ms, samples.len()) {
+            if lag > STALL_FILL_AFTER_MS * 16 {
+                self.fill(lag - STALL_FILL_MARGIN_MS * 16, frames);
+            }
+        }
+        if let Some((_, delivered)) = self.clock.as_mut() {
+            *delivered += samples.len() as u64;
+        }
+    }
+
+    /// A packet that arrived at `arrived_ms`. After a silence (or as the first packet) it is placed
+    /// where it was heard, so the two streams stay lined up sample for sample: the microphone's
+    /// echo is matched against the loopback at a fixed offset, and audio placed a few hundred ms
+    /// off puts the echo where the canceller cannot see it. While audio flows, the device's
+    /// usual delay is learned.
+    fn place_timed(&mut self, arrived_ms: u64, samples: &[f32], frames: &mut VecDeque<Frame>) {
+        let latency = self.latency.unwrap_or(DEFAULT_LATENCY_MS * 16);
+        let after_gap = self
+            .last_arrival
+            .is_none_or(|a| arrived_ms.saturating_sub(a) >= GAP_MS);
+        self.last_arrival = Some(self.last_arrival.map_or(arrived_ms, |a| a.max(arrived_ms)));
+        let Some(lag) = self.lag_at(arrived_ms, samples.len()) else {
+            return;
+        };
+        if after_gap {
+            if lag > latency + PLACE_SLACK_MS * 16 {
+                self.fill(lag - latency, frames);
+            }
+        } else {
+            self.latency = Some(self.latency.map_or(lag, |l| (l * 15 + lag) / 16));
+            if lag > STALL_FILL_AFTER_MS * 16 {
+                self.fill(lag - latency, frames);
+            }
+        }
+        if let Some((_, delivered)) = self.clock.as_mut() {
+            *delivered += samples.len() as u64;
+        }
+    }
 }
 
 /// A stream that is this far behind the wall clock is treated as having heard silence.
@@ -94,6 +194,13 @@ struct Slot {
 pub const STALL_FILL_AFTER_MS: u64 = 400;
 /// How far behind the wall clock a filled stream is left, so late real audio does not push it ahead.
 const STALL_FILL_MARGIN_MS: u64 = 200;
+/// Timed streams: packets this far apart have silence between them (WASAPI loopback sends
+/// nothing while nothing plays), and the packet after the gap goes where it was heard.
+const GAP_MS: u64 = 60;
+/// Device buffering assumed until a timed stream has been seen flowing.
+const DEFAULT_LATENCY_MS: u64 = 10;
+/// A packet within this much of where it belongs is not moved.
+const PLACE_SLACK_MS: u64 = 10;
 
 pub struct LiveCapture {
     backend: Box<dyn Backend>,
@@ -114,6 +221,8 @@ impl LiveCapture {
             open: None,
             was_unavailable: false,
             clock: None,
+            last_arrival: None,
+            latency: None,
         };
         LiveCapture {
             backend,
@@ -137,6 +246,8 @@ impl LiveCapture {
         if !on {
             s.open = None; // closing the stream stops capture for that source
             s.clock = None;
+            s.last_arrival = None;
+            s.latency = None;
             s.was_unavailable = false;
         }
     }
@@ -150,6 +261,8 @@ impl LiveCapture {
         for s in &mut self.slots {
             s.open = None;
             s.clock = None;
+            s.last_arrival = None;
+            s.latency = None;
         }
         self.frames.clear();
         self.last_check_ms = None;
@@ -179,31 +292,32 @@ impl LiveCapture {
                 self.refresh(i, now_ms);
             }
         }
-        for s in &mut self.slots {
-            if let Some((_, stream)) = s.open.as_mut() {
-                let mut buf = Vec::new();
-                stream.read(&mut buf);
-                if let Some((opened, delivered)) = s.clock.as_mut() {
-                    // Silence the platform did not deliver: fill it in ahead of the real audio.
-                    let expected = now_ms.saturating_sub(*opened) * 16;
-                    let lag = expected.saturating_sub(*delivered + buf.len() as u64);
-                    if lag > STALL_FILL_AFTER_MS * 16 {
-                        let fill = (lag - STALL_FILL_MARGIN_MS * 16) as usize;
-                        *delivered += fill as u64;
-                        self.frames.push_back(Frame {
-                            source: s.source,
-                            samples: vec![0.0; fill],
-                        });
+        // System audio first: the microphone's echo canceller needs the speaker audio for a
+        // moment before the microphone audio of that moment, and after the session thread was
+        // busy (decoding) both arrive at once. Mic first would process seconds of microphone
+        // audio with no reference and let the speakers through.
+        for s in self.slots.iter_mut().rev() {
+            let Some((_, stream)) = s.open.as_mut() else {
+                continue;
+            };
+            let mut packets = Vec::new();
+            stream.read_packets(&mut packets);
+            for p in packets {
+                match p.age_ms {
+                    Some(age) => {
+                        s.place_timed(now_ms.saturating_sub(age), &p.samples, &mut self.frames)
                     }
-                    *delivered += buf.len() as u64;
+                    None => s.place_untimed(now_ms, &p.samples, &mut self.frames),
                 }
-                if !buf.is_empty() {
+                if !p.samples.is_empty() {
                     self.frames.push_back(Frame {
                         source: s.source,
-                        samples: buf,
+                        samples: p.samples,
                     });
                 }
             }
+            // Silence the platform did not deliver: keep up with the clock while it lasts.
+            s.place_untimed(now_ms, &[], &mut self.frames);
         }
     }
 
@@ -219,6 +333,8 @@ impl LiveCapture {
             (None, Some(_)) => {
                 self.slots[i].open = None;
                 self.slots[i].clock = None;
+                self.slots[i].last_arrival = None;
+                self.slots[i].latency = None;
                 self.slots[i].was_unavailable = true;
                 self.events.push(CaptureEvent::Unavailable(source));
             }
@@ -229,6 +345,8 @@ impl LiveCapture {
                     let restored = slot.was_unavailable;
                     slot.open = Some((w, stream));
                     slot.clock = Some((now_ms, 0));
+                    slot.last_arrival = None;
+                    slot.latency = None;
                     slot.was_unavailable = false;
                     if restored {
                         self.events.push(CaptureEvent::Restored(source));
@@ -393,7 +511,8 @@ mod tests {
         c.poll(0);
         let a = c.next_frame().unwrap();
         let b = c.next_frame().unwrap();
-        assert_eq!((a.source, b.source), (Source::Mic, Source::System));
+        // System audio comes first: the echo canceller needs it before the mic audio.
+        assert_eq!((a.source, b.source), (Source::System, Source::Mic));
         assert!(c.next_frame().is_none());
         assert!(c.take_events().is_empty());
     }
@@ -528,5 +647,118 @@ mod tests {
             }
         }
         assert_eq!(total, 250 * 320);
+    }
+
+    /// A device that reports when each packet arrived.
+    #[derive(Default)]
+    struct Timed {
+        now: u64,
+        packets: Vec<(Source, u64, Vec<f32>)>,
+    }
+    type SharedTimed = Arc<Mutex<Timed>>;
+    struct TimedStream(SharedTimed, Source);
+    impl PcmStream for TimedStream {
+        fn read(&mut self, _out: &mut Vec<f32>) {}
+        fn read_packets(&mut self, out: &mut Vec<Packet>) {
+            let mut t = self.0.lock().unwrap();
+            let now = t.now;
+            let me = self.1;
+            let mut keep = Vec::new();
+            for (src, at, samples) in t.packets.drain(..) {
+                if src == me {
+                    out.push(Packet {
+                        samples,
+                        age_ms: Some(now - at),
+                    });
+                } else {
+                    keep.push((src, at, samples));
+                }
+            }
+            t.packets = keep;
+        }
+    }
+    struct TimedBackend(SharedTimed);
+    impl Backend for TimedBackend {
+        fn default_device(&self, s: Source) -> Option<String> {
+            Some(format!("{s:?}"))
+        }
+        fn open(&mut self, s: Source, _d: &str) -> Result<Box<dyn PcmStream>, AudioError> {
+            Ok(Box::new(TimedStream(self.0.clone(), s)))
+        }
+    }
+
+    /// Collect the system stream's time line (16 kHz samples, filled silence included).
+    fn system_line(c: &mut LiveCapture, line: &mut Vec<f32>) {
+        while let Some(f) = c.next_frame() {
+            if f.source == Source::System {
+                line.extend(f.samples);
+            }
+        }
+    }
+
+    #[test]
+    fn loopback_that_resumes_while_the_thread_was_busy_lands_where_it_was_heard() {
+        let t: SharedTimed = Arc::default();
+        let mut c = LiveCapture::new(Box::new(TimedBackend(t.clone())));
+        let mut line = Vec::new();
+        c.poll(0);
+        // Quiet for 3 s (loopback sends nothing), polled every 20 ms.
+        for ms in (20..=3_000).step_by(20) {
+            t.lock().unwrap().now = ms;
+            c.poll(ms);
+            system_line(&mut c, &mut line);
+        }
+        // Playback starts at 3.2 s while the session thread is busy until 4.0 s.
+        {
+            let mut w = t.lock().unwrap();
+            for k in 0..80u64 {
+                w.packets
+                    .push((Source::System, 3_210 + k * 10, vec![0.5; 160]));
+            }
+            w.now = 4_000;
+        }
+        c.poll(4_000);
+        system_line(&mut c, &mut line);
+        let first = line.iter().position(|x| *x != 0.0).unwrap() as u64 / 16;
+        // Heard 3200 to 3210 ms (default device delay 10 ms): within one packet of that.
+        assert!((3_190..=3_215).contains(&first), "placed at {first} ms");
+    }
+
+    #[test]
+    fn audio_heard_before_a_quiet_stretch_is_not_pushed_later() {
+        let t: SharedTimed = Arc::default();
+        let mut c = LiveCapture::new(Box::new(TimedBackend(t.clone())));
+        let mut line = Vec::new();
+        c.poll(0);
+        // Playback flows from the start: 10 ms packets, 10 ms device delay.
+        for ms in (10..=2_000).step_by(10) {
+            let mut w = t.lock().unwrap();
+            w.packets.push((Source::System, ms, vec![0.25; 160]));
+            w.now = ms;
+            drop(w);
+            if ms % 20 == 0 {
+                c.poll(ms);
+                system_line(&mut c, &mut line);
+            }
+        }
+        // A last phrase plays until 2.5 s, then nothing; the thread was busy until 3.4 s.
+        {
+            let mut w = t.lock().unwrap();
+            for k in 1..=50u64 {
+                w.packets
+                    .push((Source::System, 2_000 + k * 10, vec![0.5; 160]));
+            }
+            w.now = 3_400;
+        }
+        c.poll(3_400);
+        system_line(&mut c, &mut line);
+        let first = line.iter().position(|x| *x == 0.5).unwrap() as u64 / 16;
+        assert!(
+            (1_990..=2_010).contains(&first),
+            "phrase placed at {first} ms"
+        );
+        // The silence after it is filled behind the phrase, not in front of it.
+        let last = line.iter().rposition(|x| *x == 0.5).unwrap() as u64 / 16;
+        assert!((2_480..=2_510).contains(&last), "phrase ends at {last} ms");
     }
 }

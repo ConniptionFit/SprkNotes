@@ -2,11 +2,12 @@
 //! render device as an input, which cpal turns into WASAPI loopback on Windows.
 //! The callback only pushes into a lock-free ring buffer: no allocation, no locks.
 //! Compiled with the `cpal-backend` feature.
-use crate::live::{Backend, PcmStream};
-use crate::{AudioError, LinearResampler, Source};
+use crate::live::{Backend, Packet, PcmStream};
+use crate::{AudioError, Resampler, Source};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use ringbuf::traits::{Consumer, Producer, Split};
 use ringbuf::HeapRb;
+use std::time::Instant;
 
 pub struct CpalBackend {
     host: cpal::Host,
@@ -24,15 +25,47 @@ struct CpalStream {
     // Dropping the stream stops capture.
     _stream: cpal::Stream,
     cons: ringbuf::HeapCons<f32>,
-    resampler: LinearResampler,
+    /// One mark per device callback: device samples pushed so far, and when the callback ran.
+    marks: ringbuf::HeapCons<(u64, Instant)>,
+    /// Device samples read so far.
+    taken: u64,
+    resampler: Resampler,
     scratch: Vec<f32>,
 }
 
 impl PcmStream for CpalStream {
     fn read(&mut self, out: &mut Vec<f32>) {
-        let n = self.cons.pop_slice(&mut self.scratch);
-        if n > 0 {
-            out.extend(self.resampler.process(&self.scratch[..n]));
+        let mut packets = Vec::new();
+        self.read_packets(&mut packets);
+        for p in packets {
+            out.extend(p.samples);
+        }
+    }
+
+    /// Packets as the device delivered them, each with its arrival time. WASAPI loopback sends
+    /// nothing while nothing plays, and the session thread may be busy decoding when playback
+    /// starts again; the arrival time says where the audio belongs on the time line.
+    fn read_packets(&mut self, out: &mut Vec<Packet>) {
+        let now = Instant::now();
+        while let Some((end, at)) = self.marks.try_pop() {
+            let mut want = end.saturating_sub(self.taken) as usize;
+            let mut samples = Vec::new();
+            while want > 0 {
+                let k = want.min(self.scratch.len());
+                let n = self.cons.pop_slice(&mut self.scratch[..k]);
+                if n == 0 {
+                    break;
+                }
+                samples.extend(self.resampler.process(&self.scratch[..n]));
+                self.taken += n as u64;
+                want -= n;
+            }
+            if !samples.is_empty() {
+                out.push(Packet {
+                    samples,
+                    age_ms: Some(now.saturating_duration_since(at).as_millis() as u64),
+                });
+            }
         }
     }
 }
@@ -123,14 +156,23 @@ impl Backend for CpalBackend {
         .map_err(|_| AudioError::Unavailable)?;
         let (rate, channels) = (cfg.sample_rate().0, usize::from(cfg.channels()).max(1));
         let (mut prod, cons) = HeapRb::<f32>::new(rate as usize * 10).split();
+        // Room for 10 s of callbacks at the usual 10 ms period; when full, the next mark covers more.
+        let (mut mark_prod, marks) = HeapRb::<(u64, Instant)>::new(1_024).split();
+        let mut pushed = 0u64;
         let err_fn = |_e| {}; // errors carry device text; the poll loop notices a dead device instead
         let stream = match cfg.sample_format() {
             cpal::SampleFormat::F32 => device.build_input_stream(
                 &cfg.config(),
                 move |data: &[f32], _| {
                     for f in data.chunks_exact(channels) {
-                        let _ = prod.try_push(f.iter().sum::<f32>() / channels as f32);
+                        if prod
+                            .try_push(f.iter().sum::<f32>() / channels as f32)
+                            .is_ok()
+                        {
+                            pushed += 1;
+                        }
                     }
+                    let _ = mark_prod.try_push((pushed, Instant::now()));
                 },
                 err_fn,
                 None,
@@ -140,8 +182,11 @@ impl Backend for CpalBackend {
                 move |data: &[i16], _| {
                     for f in data.chunks_exact(channels) {
                         let s: f32 = f.iter().map(|x| f32::from(*x) / 32768.0).sum();
-                        let _ = prod.try_push(s / channels as f32);
+                        if prod.try_push(s / channels as f32).is_ok() {
+                            pushed += 1;
+                        }
                     }
+                    let _ = mark_prod.try_push((pushed, Instant::now()));
                 },
                 err_fn,
                 None,
@@ -153,7 +198,9 @@ impl Backend for CpalBackend {
         Ok(Box::new(CpalStream {
             _stream: stream,
             cons,
-            resampler: LinearResampler::new(rate, 16_000),
+            marks,
+            taken: 0,
+            resampler: Resampler::new(rate, 16_000),
             scratch: vec![0.0; 8192],
         }))
     }
