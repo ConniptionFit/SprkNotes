@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Muted microphone stays quiet: speech too faint to be anyone talking (a muted or switched-off microphone still sends a whisper of noise) is no longer sent to the speech model, which could turn it into a stray "Okay." labelled Me. Needs a check on the laptop with the microphone muted during a call.
 - Fewer stray Me lines from the speakers: a short line of only filler words ("So,", "Okay,", "um", "yeah") that starts while the other person is talking is now treated as their voice leaking into your microphone and left out. The same words said after they stop are kept. If one already showed in the live view, it disappears when the line would have been written. Needs a check on the laptop with a real call.
 - Lines in the right order: a quick line no longer lands above a longer line from the other person that started before it (a "So," at 00:05:30 above their sentence from 00:05:29).
 - Times on new lines: lines that have finished but are still settling now show their time straight away instead of a blank time column.
