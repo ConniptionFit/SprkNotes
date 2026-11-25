@@ -359,15 +359,25 @@ impl Captioner {
     /// New audio for `source`. `finished` is true when the VAD just closed an utterance: the
     /// committed line takes over, so the in-progress text starts over.
     pub fn push(&mut self, source: Source, samples: &[f32], finished: bool) {
-        if !self.wants(source) {
-            return;
-        }
+        let wanted = self.wants(source);
         let lane = self.lane(source);
+        // Utterances are counted on every lane, wanted or not, so a final caption always names
+        // its own utterance even when that speaker's in-progress text is not being decoded.
         if finished {
             lane.reset();
             lane.utt += 1;
         }
-        lane.push(samples);
+        if wanted {
+            lane.push(samples);
+        }
+    }
+
+    /// Final captions (the committed wording of a finished utterance) cost nothing extra: the
+    /// decode already ran for the transcript. So they go out for every speaker whenever
+    /// captions are on, even a speaker whose in-progress text is not wanted. Before, a "Me"
+    /// line only reached the window when it was written, six seconds or more after the words.
+    pub fn wants_final(&self, _source: Source) -> bool {
+        self.on
     }
 
     /// The utterance that just finished on `source` (for its final caption).
@@ -396,7 +406,14 @@ impl Captioner {
     /// for the system stream.
     pub fn poll(&mut self, now_ms: u64, engine: &mut dyn Engine, remote: &Speaker) -> Vec<Caption> {
         let mut out = Vec::new();
-        for source in [Source::System, Source::Mic] {
+        // The lane that has waited longest goes first, so a long decode for one speaker never
+        // keeps pushing the other speaker's turn back (the microphone always went second).
+        let order = if self.mic.next_at_ms < self.system.next_at_ms {
+            [Source::Mic, Source::System]
+        } else {
+            [Source::System, Source::Mic]
+        };
+        for source in order {
             if !self.wants(source) {
                 continue;
             }

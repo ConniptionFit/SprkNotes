@@ -169,7 +169,7 @@ sprknotes/
 
 ### 4.4a Live captions
 
-Live captions (ADR-006) show speech in progress in the overlay. They are transient: never written to the transcript, logged or stored, and the committed lines (4.4) are unchanged. The last 10 s of audio per wanted source is re-decoded about every 0.7 s (Others by default, Me optional); the decode interval backs off when slow, and captions switch themselves off if the engine cannot keep up. Default off until the overlay's captions toggle turns them on.
+Live captions (ADR-006) show speech in progress in the overlay. They are transient: never written to the transcript, logged or stored, and the committed lines (4.4) are unchanged. The last 10 s of audio per wanted source is re-decoded about every 0.7 s (Others by default; Me when the overlay shows both speakers or the main window's live line is on); the lane that has waited longest decodes first, the decode interval backs off when slow, and captions switch themselves off if the engine cannot keep up. The finished wording of each utterance (the final caption, ADR-007) is sent for both speakers whenever captions are on, since its decode already ran for the transcript; each window filters by its own speaker choice. Default off until the overlay's captions toggle or the live line turns them on.
 
 ### 4.5 Pause / resume / end
 - **Pause:** capture stops, buffer flushes, a pause event line is written.

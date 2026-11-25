@@ -99,5 +99,7 @@ export function bindTheme(overlay: boolean) {
 
 /** What the engine should produce: (captions on, include Me). Both windows send the same answer. */
 export function captionFlags(): [boolean, boolean] {
-  return [prefs.captionsOn || prefs.liveLine, prefs.captionsWho === "both"];
+  // The main window's live line shows both speakers, so it wants Me's words as they are spoken.
+  // Without them Me only appeared once the line was written, six seconds or more later.
+  return [prefs.captionsOn || prefs.liveLine, prefs.captionsWho === "both" || prefs.liveLine];
 }
