@@ -24,10 +24,8 @@ describe("managed preferences", () => {
     expect(p.captionsOn).toBe(true); // locked
   });
 
-  it("reads the sound meter style and keeps a lock on the retired rolling style, as bars", () => {
-    expect(parseManaged({ locked: { WaveformStyle: "Line" }, defaults: {} }).locked).toEqual({ waveStyle: "line" });
-    expect(parseManaged({ locked: { WaveformStyle: "rolling" }, defaults: {} }).locked).toEqual({ waveStyle: "bars" });
-    expect(parseManaged({ locked: { WaveformStyle: "wavy" }, defaults: {} }).locked).toEqual({});
+  it("ignores the retired sound meter style in a policy", () => {
+    expect(parseManaged({ locked: { WaveformStyle: "bars" }, defaults: { WaveformStyle: "line" } })).toMatchObject({ locked: {}, defaults: {} });
   });
 
   it("an older store counts only changed values as chosen", () => {

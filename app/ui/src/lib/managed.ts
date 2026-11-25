@@ -26,8 +26,6 @@ const keys: Parse = (v) => {
 export const MANAGED_KEYS = {
   Theme: ["theme", oneOf("system", "light", "dark")],
   ThrowbackMode: ["throwback", bool],
-  // "rolling" was a style in 0.2.0-alpha.11; a policy that still says it keeps its lock, on bars.
-  WaveformStyle: ["waveStyle", (v: string) => (v.trim().toLowerCase() === "rolling" ? "bars" : oneOf("bars", "line")(v))],
   LiveCaptions: ["captionsOn", bool],
   LiveLine: ["liveLine", bool],
   CaptionDelay: ["captionDelay", oneOf("fast", "steady", "smooth")],
