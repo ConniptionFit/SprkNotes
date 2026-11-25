@@ -72,8 +72,10 @@ phones miss the speed gates. Nothing in the main install grows for it.
   - **Full:** Parakeet TDT 0.6B v2 int8 (about 460 MB download, 631 MB installed, about 1.1 GB RAM) for phones with
     8 GB RAM or more that pass the self-check.
   - **Light:** Whisper base.en int8 (154 MB installed, under 0.5 GB RAM) for everything else.
-- **Rough sizes (estimates, to confirm with the first build):** app APK 25 to 40 MB arm64-only (Rust core, sherpa-onnx,
-  onnxruntime, web UI); a universal 4-ABI APK would be about 90 to 120 MB; bundling Parakeet would push it past 500 MB.
+- **Sizes:** measured 2026-11-25 in CI, the unsigned arm64 release APK of the app shell (Tauri, web UI, shared crates,
+  no speech engine yet) is 13.5 MB. Adding sherpa-onnx and onnxruntime (about 15 MB) should land the app at 25 to
+  40 MB arm64-only, still to confirm once the engine is wired in. A universal 4-ABI APK would be about 90 to 120 MB;
+  bundling Parakeet would push it past 500 MB.
 
 ## Decision 4: Me and Others on a phone
 Android does not let an app capture another app's call audio (voice-call capture is reserved for system apps, and
@@ -105,8 +107,10 @@ Picked from four interactive mock-ups (A desktop twin, B bottom tabs, C control 
   holding the Mic button and device menu, the waveform, the timer, End and a round Start / Pause button. Library and
   Settings sit behind icons in the top bar. Same Outfit font, palette and icons as the desktop app.
 - **Dark theme by default** on phones (System and Light stay in Settings).
-- **Waveform matches the desktop:** Nine bars by default and Rolling bars as a Settings choice, flat when there is
-  no sound, sharing the desktop setting key.
+- **Waveform matches the desktop exactly:** the same small nine-bar meter inside the Mic button (shared
+  `waveform.ts`), flat when there is no sound, with Rolling bars as the same Settings choice. No large or scrolling
+  waveform strip: the screen moves as little as possible (John, 2026-11-25).
+- **Settings uses the desktop gear icon**, not a sun (a sun reads as theme or brightness) (John, 2026-11-25).
 - **No speaker labels** (Decision 4).
 
 ## Consequences
