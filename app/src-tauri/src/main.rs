@@ -2,7 +2,9 @@
 
 mod assistant;
 mod clock;
+mod hotkey;
 mod library;
+mod mic_watch;
 mod model_download;
 mod models;
 #[cfg(windows)]
@@ -13,8 +15,8 @@ mod updater;
 
 use serde::Serialize;
 use sprk_audio::cpal_backend::CpalBackend;
-use sprk_audio::live::{Preferred, SharedChoice};
 use sprk_audio::live::Backend;
+use sprk_audio::live::{Preferred, SharedChoice};
 use sprk_audio::Source;
 use sprk_pipeline::commit::Config;
 use sprk_pipeline::host::{Events, Host, StartParams, UiLine, UiStatus};
@@ -27,6 +29,9 @@ struct AppState {
     host: Mutex<Option<Host>>,
     /// The microphone and output the user picked in Settings (None: the system default).
     devices: SharedChoice,
+    /// Sources the user switched off ([mic, system]). Kept between sessions so a stream turned
+    /// off before Start stays off when the session begins (it used to start with both on).
+    sources_off: Mutex<[bool; 2]>,
 }
 
 /// Payload shapes the UI expects (app/ui/src/lib/types.ts).
@@ -95,6 +100,10 @@ impl Events for TauriEvents {
     }
     fn captions_wanted(&self) -> (bool, bool) {
         shell::captions_wanted(&self.0)
+    }
+    fn levels(&self, me: f32, others: f32) {
+        // Only the main window has the source buttons.
+        let _ = self.0.emit_to("main", "source-levels", [me, others]);
     }
     fn caption(&self, c: &sprk_pipeline::host::UiCaption) {
         let _ = self.0.emit(
@@ -368,6 +377,12 @@ fn start_session_blocking(app: AppHandle, name: String) -> Result<(), String> {
         context_config(&policy),
     )
     .map_err(|e| e.to_string())?;
+    let off = state.sources_off.lock().map(|o| *o).unwrap_or_default();
+    for (source, off) in [(Source::Mic, off[0]), (Source::System, off[1])] {
+        if off {
+            let _ = host.set_source(source, false);
+        }
+    }
     *slot = Some(host);
     Ok(())
 }
@@ -400,11 +415,15 @@ fn rename_session(state: State<AppState>, name: String) -> Result<(), String> {
 
 #[tauri::command]
 fn set_source(state: State<AppState>, source: String, on: bool) -> Result<(), String> {
-    let s = match source.as_str() {
-        "mic" => Source::Mic,
-        "system" => Source::System,
-        _ => return Err("unknown source".into()),
-    };
+    let s = source_of(&source)?;
+    if let Ok(mut off) = state.sources_off.lock() {
+        off[usize::from(s == Source::System)] = !on;
+    }
+    let running = state.host.lock().map(|h| h.is_some()).unwrap_or(false);
+    if !running {
+        // Applied when the next session starts.
+        return Ok(());
+    }
     with_host(&state, |h| h.set_source(s, on))
 }
 
@@ -452,10 +471,11 @@ fn end_session_blocking(state: &AppState) -> Result<(), String> {
 async fn end_session(app: AppHandle) -> Result<(), String> {
     emit_phase(&app, "ending", None);
     let a = app.clone();
-    let r = tauri::async_runtime::spawn_blocking(move || end_session_blocking(&a.state::<AppState>()))
-        .await
-        .map_err(|e| e.to_string())
-        .and_then(|r| r);
+    let r =
+        tauri::async_runtime::spawn_blocking(move || end_session_blocking(&a.state::<AppState>()))
+            .await
+            .map_err(|e| e.to_string())
+            .and_then(|r| r);
     emit_phase(&app, "idle", None);
     r
 }
@@ -483,6 +503,31 @@ fn set_brand(app: AppHandle, throwback: bool) {
 #[tauri::command]
 fn set_captions(app: AppHandle, on: bool, me: bool) {
     shell::set_captions(&app, on, me);
+}
+
+/// Whether "Start a transcript?" is up in the mini, and which apps it is about (SPEC 8.3a).
+#[tauri::command]
+fn mic_prompt_pending(app: AppHandle) -> shell::MicAsk {
+    shell::mic_prompt_state(&app)
+}
+
+/// The background shortcut (SPEC 8.6): on or off, and its keys ("Ctrl+Alt+S"). Returns the keys
+/// as registered; errors with "invalid", "taken", "failed" or "unsupported".
+#[tauri::command]
+fn set_hotkey(app: AppHandle, enabled: bool, keys: String) -> Result<String, String> {
+    hotkey::set(&app, enabled, &keys)
+}
+
+/// Settings for "Start a transcript?": on or off, and the apps not to ask about.
+#[tauri::command]
+fn set_mic_prompt(app: AppHandle, enabled: bool, skipped: Vec<String>) {
+    shell::set_mic_prompt(&app, enabled, skipped);
+}
+
+/// The answer to "Start a transcript?": Start begins a session, Dismiss takes it down.
+#[tauri::command]
+fn mic_prompt_answer(app: AppHandle, start: bool) {
+    shell::answer_mic_prompt(&app, start);
 }
 
 /// Bring the main window back (also hides the mini controller).
@@ -539,6 +584,7 @@ fn main() -> anyhow::Result<()> {
             model_download::launch_check(app.handle().clone(), policy());
             updater::launch_check(app.handle().clone(), policy());
             app.state::<assistant::Assistant>().start_idle_timer();
+            mic_watch::start(app.handle().clone());
             Ok(())
         })
         .on_window_event(|window, event| match window.label() {
@@ -559,6 +605,10 @@ fn main() -> anyhow::Result<()> {
             mini_resize,
             mini_flipped,
             set_captions,
+            mic_prompt_pending,
+            mic_prompt_answer,
+            set_mic_prompt,
+            set_hotkey,
             set_brand,
             open_app,
             model_status,

@@ -1,10 +1,16 @@
 //! Read-only inspection seams. Titles and participant names are PHI-grade:
 //! they never appear in logs or error strings.
 pub mod activity;
+pub mod hotkey;
 pub mod labeling;
+pub mod mic_use;
 pub mod sources;
 #[cfg(windows)]
 pub mod win;
+#[cfg(windows)]
+pub mod win_hotkey;
+#[cfg(windows)]
+pub mod win_mic;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Window {

@@ -1,7 +1,8 @@
 import { backend } from "./api";
 
 // Small UI-only preferences, shared by the main window and the overlay through localStorage.
-// Nothing here is sensitive: a theme choice and two caption switches.
+// Nothing here is sensitive: a theme choice, caption switches, device names, which sources are on and
+// the names of apps the user said not to be asked about.
 export type Theme = "system" | "light" | "dark";
 export type CaptionWho = "others" | "both";
 /** How long a new word waits before it is shown, to let the engine settle it (ADR-008). */
@@ -29,7 +30,17 @@ type Prefs = {
   micDevice: string | null;
   /** Output (the sound that is looped back as Others) picked in Settings; null follows the default. */
   systemDevice: string | null;
+  /** Whether Me and Others are transcribed. Remembered across launches; both on at first run. */
+  micOn: boolean;
+  systemOn: boolean;
+  /** Offer to start when another app uses the microphone (SPEC 8.3a), and the apps not to ask about. */
+  micPromptOn: boolean;
+  micPromptSkip: SkippedApp[];
+  /** A keyboard shortcut that starts, pauses and resumes from anywhere (SPEC 8.6). Off by default. */
+  hotkeyOn: boolean;
+  hotkeyKeys: string;
 };
+export type SkippedApp = { id: string; name: string };
 
 /** Caption text sizes in px for the magnifier buttons, and the step used by default. */
 export const CAPTION_TEXT = [13, 15, 17, 19, 22, 26, 30, 36];
@@ -38,7 +49,7 @@ export const LINE_TEXT = [12, 13, 14, 15, 17, 19, 22, 26];
 export const CAPTION_LIMITS = { minW: 260, maxW: 900, minH: 64, maxH: 480 };
 
 const KEY = "sprknotes.prefs";
-const defaults: Prefs = { theme: "system", throwback: false, captionsOn: false, captionsWho: "others", captionDelay: "steady", captionW: 420, captionH: 118, captionText: 2, liveLine: true, lineText: 3, assistantOn: false, assistantTier: "light", assistantFeatures: ["title", "recap", "actions", "ask"], micDevice: null, systemDevice: null };
+const defaults: Prefs = { theme: "system", throwback: false, captionsOn: false, captionsWho: "others", captionDelay: "steady", captionW: 420, captionH: 118, captionText: 2, liveLine: true, lineText: 3, assistantOn: false, assistantTier: "light", assistantFeatures: ["title", "recap", "actions", "ask"], micDevice: null, systemDevice: null, micOn: true, systemOn: true, micPromptOn: true, micPromptSkip: [], hotkeyOn: false, hotkeyKeys: "Ctrl+Alt+S" };
 
 const clamp = (n: unknown, lo: number, hi: number, fallback: number) =>
   typeof n === "number" && Number.isFinite(n) ? Math.min(hi, Math.max(lo, Math.round(n))) : fallback;
@@ -57,6 +68,14 @@ function load(): Prefs {
     if (!Array.isArray(p.assistantFeatures)) p.assistantFeatures = defaults.assistantFeatures;
     if (typeof p.micDevice !== "string" || !p.micDevice) p.micDevice = null;
     if (typeof p.systemDevice !== "string" || !p.systemDevice) p.systemDevice = null;
+    if (typeof p.micOn !== "boolean") p.micOn = true;
+    if (typeof p.systemOn !== "boolean") p.systemOn = true;
+    if (typeof p.micPromptOn !== "boolean") p.micPromptOn = true;
+    p.micPromptSkip = Array.isArray(p.micPromptSkip)
+      ? p.micPromptSkip.filter((a) => a && typeof a.id === "string" && a.id && typeof a.name === "string")
+      : [];
+    if (typeof p.hotkeyOn !== "boolean") p.hotkeyOn = false;
+    if (typeof p.hotkeyKeys !== "string" || !p.hotkeyKeys) p.hotkeyKeys = defaults.hotkeyKeys;
     return p;
   } catch {
     return { ...defaults };
@@ -99,5 +118,7 @@ export function bindTheme(overlay: boolean) {
 
 /** What the engine should produce: (captions on, include Me). Both windows send the same answer. */
 export function captionFlags(): [boolean, boolean] {
-  return [prefs.captionsOn || prefs.liveLine, prefs.captionsWho === "both"];
+  // The main window's live line shows both speakers, so it wants Me's words as they are spoken.
+  // Without them Me only appeared once the line was written, six seconds or more later.
+  return [prefs.captionsOn || prefs.liveLine, prefs.captionsWho === "both" || prefs.liveLine];
 }

@@ -6,6 +6,7 @@ pub mod capture;
 pub mod commit;
 pub mod dedupe;
 pub mod host;
+pub mod meter;
 pub mod rules;
 pub mod session;
 

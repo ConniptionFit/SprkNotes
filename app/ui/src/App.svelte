@@ -9,16 +9,19 @@
   import Settings from "./lib/Settings.svelte";
   import Library from "./lib/Library.svelte";
   import ModelDownload from "./lib/ModelDownload.svelte";
-  import { captionFlags, prefs } from "./lib/prefs.svelte";
+  import { captionFlags, prefs, setPref } from "./lib/prefs.svelte";
   import Ask from "./lib/Ask.svelte";
-  import { Rows, type Row } from "./lib/live";
+  import { Partials, Rows, type Row } from "./lib/live";
+  import { hotkeyProblem } from "./lib/hotkey";
+  import { hotkeyState } from "./lib/hotkeyState.svelte";
 
   let api = $state.raw<Backend | undefined>();
   let name = $state("");
   let status = $state<Status>("ready");
   let phase = $state<Phase>({ phase: "idle" });
-  let mic = $state(true);
-  let system = $state(true);
+  // Which sources are on is remembered across launches (prefs), and applied before the first Start.
+  let mic = $state(prefs.micOn);
+  let system = $state(prefs.systemOn);
   let lines = $state<Line[]>([]);
   let view = $state<"main" | "settings" | "library">("main");
   // Summarize: the transcript it will use, a pending choice between apps, and a short notice.
@@ -33,7 +36,11 @@
   let progress = $state<DownloadProgress | null>(null);
   let updateAvailable = $state(false);
   let checkMessage = $state("");
-  let partial = $state<Caption | null>(null);
+  // Speech in progress, one caption per speaker (each gets its own live row).
+  const speaking = new Partials();
+  let partials = $state<Caption[]>([]);
+  // Input levels for the Me and Others buttons, while transcribing.
+  let levels = $state<[number, number]>([0, 0]);
   // Ask Sprk: off by default. The panel and the title suggestion only exist when it is ready.
   let assistant = $state<AssistantStatus | null>(null);
   let askOpen = $state(false);
@@ -47,9 +54,26 @@
   $effect(() => {
     api?.setCaptions(...captionFlags()).catch(() => {});
   });
+  // The background shortcut (SPEC 8.6). Only this window registers it.
+  $effect(() => {
+    const on = prefs.hotkeyOn;
+    const keys = prefs.hotkeyKeys;
+    if (!api) return;
+    api
+      .setHotkey(on, keys)
+      .then(() => (hotkeyState.problem = ""))
+      .catch((e) => (hotkeyState.problem = hotkeyProblem(e)));
+  });
+  // "Start a transcript?" settings (SPEC 8.3a): on or off, and the apps not to ask about.
+  $effect(() => {
+    const ids = prefs.micPromptSkip.map((a) => a.id);
+    api?.setMicPrompt(prefs.micPromptOn, ids).catch(() => {});
+  });
   $effect(() => {
     if (status === "ready") {
-      partial = null;
+      speaking.clear();
+      partials = [];
+      levels = [0, 0];
       locked.clear();
       liveRows = [];
     }
@@ -62,6 +86,9 @@
       // Apply the saved device picks before the first session.
       b.setDevice("mic", prefs.micDevice).catch(() => {});
       b.setDevice("system", prefs.systemDevice).catch(() => {});
+      // The shell keeps which sources are off between sessions; start from the remembered choice.
+      b.setSource("mic", mic).catch(() => {});
+      b.setSource("system", system).catch(() => {});
       offs.push(
         await b.onLine((l) => {
           lines = [...lines, l];
@@ -75,11 +102,11 @@
         await b.onCaption((c) => {
           locked.caption(c, Date.now());
           liveRows = [...locked.rows];
-          if (c.final) {
-            if (partial?.speaker === c.speaker) partial = null;
-          } else partial = c;
+          speaking.caption(c);
+          partials = [...speaking.list];
         }),
       );
+      offs.push(await b.onLevels((l) => (levels = l)));
       offs.push(await b.onStatus((s) => (status = s)));
       offs.push(await b.onPhase((p) => (phase = p)));
       offs.push(await b.onProblem((kind) => say(problemText(kind))));
@@ -101,6 +128,11 @@
     });
     return () => offs.forEach((f) => f());
   });
+
+  function setSource(s: Source, on: boolean) {
+    setPref(s === "mic" ? "micOn" : "systemOn", on);
+    api?.setSource(s, on).catch(() => {});
+  }
 
   async function syncAssistant() {
     try {
@@ -285,8 +317,9 @@
       {status}
       bind:mic
       bind:system
+      levels={status === "transcribing" ? levels : null}
       onrename={(n) => api?.rename(n)}
-      onsource={(s: Source, on: boolean) => api?.setSource(s, on)}
+      onsource={setSource}
     />
     {#if canTitle}
       <div class="titleidea">
@@ -299,7 +332,7 @@
         {/if}
       </div>
     {/if}
-    <LivePane {lines} {status} {partial} rows={liveRows} needsModel={!model.ready && status === "ready"}>
+    <LivePane {lines} {status} {partials} rows={liveRows} needsModel={!model.ready && status === "ready"}>
       {#snippet empty()}
         <ModelDownload
           compact

@@ -94,6 +94,8 @@ pub struct Session {
     final_captions: Vec<Caption>,
     /// Echo canceller on the microphone, fed by the system stream (SPEC 4.2 layer 2).
     echo: Option<EchoPath>,
+    /// Input levels for the source buttons: [Me, Others].
+    meters: [crate::meter::Meter; 2],
 }
 
 impl Session {
@@ -127,6 +129,7 @@ impl Session {
             stats: Stats::default(),
             captions: Captioner::new(),
             final_captions: Vec::new(),
+            meters: Default::default(),
             echo: None,
         }
     }
@@ -206,10 +209,22 @@ impl Session {
         self.remote = if s == Speaker::Me { Speaker::Others } else { s };
     }
 
+    /// Input levels since the last call, 0 to 1: `[Me, Others]`. Both 0 while paused.
+    pub fn levels(&mut self) -> [f32; 2] {
+        [self.meters[0].take(), self.meters[1].take()]
+    }
+
     /// Feed 16 kHz mono samples that arrived for `source`. Ignored unless running.
     pub fn feed(&mut self, source: Source, samples: &[f32]) {
         if self.state != State::Running {
             return;
+        }
+        // The buttons' meters show what the device delivers, before echo removal, so a muted or
+        // wrong device shows as flat. A source that is off shows nothing.
+        match source {
+            Source::Mic if self.mic.enabled => self.meters[0].push(samples),
+            Source::System if self.system.enabled => self.meters[1].push(samples),
+            _ => {}
         }
         if !self.echo_active() {
             self.ingest(source, samples);
@@ -265,7 +280,7 @@ impl Session {
                 Ok(segs) => {
                     // The committed decode is also the final caption (ADR-007): same text,
                     // shown now instead of after the commit delay. Never stored by the captions.
-                    if self.captions.wants(source) {
+                    if self.captions.wants_final(source) {
                         let text = segs
                             .iter()
                             .map(|s| s.text.trim())
@@ -649,6 +664,123 @@ mod tests {
         assert!(log.0.lock().unwrap().is_empty(), "nothing written yet");
         s.pause(2_000).unwrap();
         assert!(s.captions(10_000).is_empty(), "none while paused");
+    }
+
+    /// Closes an utterance after half a second of quiet, like the real detector
+    /// (`min_silence_duration` 0.5 s), so timing tests see realistic utterance ends.
+    struct QuietVad {
+        buf: Vec<f32>,
+        start: u64,
+        seen: u64,
+        quiet: u64,
+    }
+    impl Vad for QuietVad {
+        fn accept(&mut self, s: &[f32]) -> Vec<Utterance> {
+            let loud = s.iter().any(|x| x.abs() > 0.01);
+            if loud && self.buf.is_empty() {
+                self.start = self.seen;
+            }
+            self.seen += s.len() as u64;
+            if loud {
+                self.quiet = 0;
+                self.buf.extend_from_slice(s);
+            } else if !self.buf.is_empty() {
+                self.quiet += s.len() as u64;
+                self.buf.extend_from_slice(s);
+                if self.quiet >= 8_000 {
+                    self.quiet = 0;
+                    return vec![Utterance {
+                        start_sample: self.start,
+                        samples: std::mem::take(&mut self.buf),
+                    }];
+                }
+            }
+            vec![]
+        }
+        fn flush(&mut self) -> Vec<Utterance> {
+            vec![]
+        }
+        fn pending_since(&self) -> Option<u64> {
+            (!self.buf.is_empty()).then_some(self.start)
+        }
+    }
+
+    /// Any decode gives the same words.
+    struct Words;
+    impl Engine for Words {
+        fn transcribe(&mut self, s: &[f32]) -> Result<Vec<AsrSeg>, AsrError> {
+            Ok(vec![AsrSeg {
+                start_ms: 0,
+                end_ms: (s.len() as u64) * 1000 / 16_000,
+                text: "i will share my screen now".into(),
+            }])
+        }
+    }
+
+    /// When does "Me" first reach the window? Two seconds of speech on the microphone, then
+    /// quiet, read every 20 ms like the session thread. Returns (first live words, first
+    /// finished wording, first written line) in ms after the speech began.
+    fn me_timeline(want_me_live: bool) -> (Option<u64>, Option<u64>, Option<u64>) {
+        let log = Log::default();
+        let mut s = Session::new(
+            Box::new(Words),
+            Box::new(|| {
+                Box::new(QuietVad {
+                    buf: Vec::new(),
+                    start: 0,
+                    seen: 0,
+                    quiet: 0,
+                })
+            }),
+            Box::new(log.clone()),
+            Config::default(),
+        );
+        s.set_captions(true, want_me_live);
+        let (mut live, mut fin, mut line) = (None, None, None);
+        let speech = [0.1f32; 320];
+        let quiet = [0.0f32; 320];
+        for step in 0..600u64 {
+            let now = step * 20;
+            s.feed(Source::Mic, if now < 2_000 { &speech } else { &quiet });
+            s.feed(Source::System, &quiet);
+            for c in s.captions(now) {
+                if c.speaker == Speaker::Me {
+                    if c.is_final {
+                        fin.get_or_insert(now);
+                    } else {
+                        live.get_or_insert(now);
+                    }
+                }
+            }
+            if now % 1_000 == 0 {
+                s.tick(now).unwrap();
+            }
+            if line.is_none() && !log.0.lock().unwrap().is_empty() {
+                line = Some(now);
+            }
+        }
+        (live, fin, line)
+    }
+
+    #[test]
+    fn me_reaches_the_window_while_speaking_not_after_the_commit_delay() {
+        // The overlay's old default asked for Others only: Me showed up only as a written line.
+        let (live, fin, line) = me_timeline(false);
+        let line = line.expect("the line is written");
+        assert!(
+            line >= 8_000,
+            "written after the 6 s commit delay ({line} ms)"
+        );
+        assert_eq!(live, None, "no live words for Me when not wanted");
+        // The finished wording now goes out anyway, half a second after the speech ends.
+        let fin = fin.expect("final caption for Me");
+        assert!(fin <= 2_600, "final Me caption at {fin} ms");
+        // With Me wanted (the main window's live line), words show while still speaking.
+        let (live, fin, _) = me_timeline(true);
+        let live = live.expect("live Me words");
+        assert!(live <= 700, "first live Me words at {live} ms");
+        assert!(fin.is_some_and(|f| f <= 2_600));
+        eprintln!("me timeline: live {live} ms, final {fin:?} ms, written {line} ms");
     }
 
     #[test]

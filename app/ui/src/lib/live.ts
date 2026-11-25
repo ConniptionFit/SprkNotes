@@ -149,3 +149,109 @@ export function droppedLead(prevShown: string[], next: string[]): number {
   }
   return 0;
 }
+
+/**
+ * Speech in progress, one live caption per speaker, so two people talking at once each keep a
+ * row of their own instead of taking turns in one row (which flickered between them). A
+ * speaker keeps their place while the same utterance goes on; a new utterance goes last, under
+ * whoever is already speaking. A final caption ends that speaker's row.
+ */
+export class Partials {
+  list: Caption[] = [];
+
+  caption(c: Caption): void {
+    const i = this.list.findIndex((p) => p.speaker === c.speaker);
+    if (c.final) {
+      if (i >= 0) this.list.splice(i, 1);
+      return;
+    }
+    if (i >= 0 && this.list[i].utt === c.utt) this.list[i] = c;
+    else {
+      if (i >= 0) this.list.splice(i, 1);
+      this.list.push(c);
+    }
+  }
+
+  clear(): void {
+    this.list = [];
+  }
+}
+
+/** One word of a live row as drawn: typed part, the part still to type, and whether it may change. */
+export type Shown = { w: string; soft: boolean; hide: string };
+
+/**
+ * The typing state of one live row (one speaker): gate, hold, then typed out a few characters at
+ * a time. Corrections swap a word in place; they never delete and retype the tail.
+ */
+export class Typist {
+  shown: Shown[] = [];
+  /** Keep the row in place briefly when it empties, so the transcript does not drop and rise. */
+  recent = false;
+  private gateState: GateWord[] = [];
+  private held: string[] = [];
+  private shorterSince: number | null = null;
+  private typedChars = 0;
+  private lastKey = "";
+  private lastUtt: number | undefined;
+  private lastLive = 0;
+
+  /** Advance one frame. Returns true when what is drawn changed. */
+  step(c: Caption | null, now: number, dt: number, gateMs: number, instant: boolean): boolean {
+    const words = c ? c.text.split(/\s+/).filter(Boolean) : [];
+    if (c && c.utt !== this.lastUtt) {
+      // A new utterance starts a fresh row.
+      this.lastUtt = c.utt;
+      this.held = [];
+      this.gateState = [];
+      this.typedChars = 0;
+    }
+    if (!c) {
+      this.held = [];
+      this.gateState = [];
+      this.typedChars = 0;
+      this.shorterSince = null;
+    }
+    // Sentences that locked left the live row: drop them from what is shown, keep the rest typed.
+    const k = droppedLead(this.held, words);
+    if (k > 0) {
+      this.typedChars = Math.max(0, this.typedChars - this.held.slice(0, k).join(" ").length - 1);
+      this.held = this.held.slice(k);
+      this.gateState = this.gateState.slice(k);
+    }
+    const stable = c?.stable ?? 0;
+    const g = gate(this.gateState, words, stable, now, gateMs);
+    this.gateState = g.next;
+    const h = hold(this.held, g.next, stable, now, gateMs, this.shorterSince);
+    this.shorterSince = h.shorterSince;
+    const text = h.shown.join(" ");
+    this.held = h.shown;
+    this.typedChars = Math.min(this.typedChars, text.length);
+    this.typedChars = instant ? text.length : typed(this.typedChars, text.length, dt);
+    const upto = Math.floor(this.typedChars);
+    // Layout reserves the whole word being typed, so a word never jumps to the next line mid-way.
+    const out: Shown[] = [];
+    let pos = 0;
+    for (let i = 0; i < h.shown.length; i++) {
+      const w = h.shown[i];
+      if (pos >= upto) break;
+      const n = Math.min(w.length, upto - pos);
+      out.push({ w: w.slice(0, n), hide: w.slice(n), soft: i >= stable });
+      pos += w.length + 1;
+    }
+    let changed = false;
+    const key = out.map((o) => o.w + "\u0001" + o.hide + (o.soft ? "s" : "")).join("|");
+    if (key !== this.lastKey) {
+      this.lastKey = key;
+      this.shown = out;
+      changed = true;
+    }
+    if (out.length > 0) this.lastLive = now;
+    const r = !!c && now - this.lastLive < 1200;
+    if (r !== this.recent) {
+      this.recent = r;
+      changed = true;
+    }
+    return changed;
+  }
+}

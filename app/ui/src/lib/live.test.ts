@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Rows, commonPrefix, droppedLead, gate, hold, sentences, typed, type GateWord } from "./live";
+import { Partials, Rows, Typist, commonPrefix, droppedLead, gate, hold, sentences, typed, type GateWord } from "./live";
 
 const cap = (o: Partial<Parameters<Rows["caption"]>[0]>) => ({ speaker: "Others", text: "", stable: 0, final: false, ...o });
 
@@ -103,5 +103,58 @@ describe("calm live row", () => {
   it("finds words that locked out of the live row", () => {
     expect(droppedLead(["so", "see", "what", "sox", "wants"], ["sox", "wants", "to"])).toBe(3);
     expect(droppedLead(["so", "see"], ["so", "see", "what"])).toBe(0);
+  });
+});
+
+describe("one live row per speaker", () => {
+  const cap = (speaker: string, utt: number, text: string, final = false) => ({ speaker, utt, text, stable: 0, final });
+
+  it("keeps both speakers when they talk at once, in the order they started", () => {
+    const p = new Partials();
+    p.caption(cap("Others", 1, "so the plan"));
+    p.caption(cap("Me", 2, "right"));
+    p.caption(cap("Others", 1, "so the plan is"));
+    expect(p.list.map((c) => [c.speaker, c.text])).toEqual([
+      ["Others", "so the plan is"],
+      ["Me", "right"],
+    ]);
+  });
+
+  it("ends a speaker's row on their final caption and leaves the other alone", () => {
+    const p = new Partials();
+    p.caption(cap("Others", 1, "so the plan"));
+    p.caption(cap("Me", 2, "right"));
+    p.caption(cap("Others", 1, "So the plan.", true));
+    expect(p.list.map((c) => c.speaker)).toEqual(["Me"]);
+  });
+
+  it("moves a speaker's new utterance under whoever is already speaking", () => {
+    const p = new Partials();
+    p.caption(cap("Me", 1, "hello"));
+    p.caption(cap("Others", 2, "hi there"));
+    p.caption(cap("Me", 3, "anyway"));
+    expect(p.list.map((c) => c.speaker)).toEqual(["Others", "Me"]);
+  });
+});
+
+describe("typing one live row", () => {
+  it("types a caption out and stays put after it empties, briefly", () => {
+    const t = new Typist();
+    const c = { speaker: "Me", utt: 1, text: "hello there", stable: 2, final: false };
+    t.step(c, 0, 16, 0, true);
+    expect(t.shown.map((w) => w.w).join(" ")).toBe("hello there");
+    expect(t.recent).toBe(true);
+    t.step(null, 50, 16, 0, true);
+    expect(t.shown).toEqual([]);
+    expect(t.recent).toBe(false);
+  });
+
+  it("keeps two typists independent", () => {
+    const a = new Typist();
+    const b = new Typist();
+    a.step({ speaker: "Me", utt: 1, text: "one two", stable: 2, final: false }, 0, 16, 0, true);
+    b.step({ speaker: "Others", utt: 2, text: "three", stable: 1, final: false }, 0, 16, 0, true);
+    expect(a.shown.map((w) => w.w)).toEqual(["one", "two"]);
+    expect(b.shown.map((w) => w.w)).toEqual(["three"]);
   });
 });

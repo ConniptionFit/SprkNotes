@@ -1,4 +1,5 @@
 import type { AppUpdateInfo, AppUpdateStatus, AssistantRequest, AssistantModelStatus, AssistantResponse, AssistantStatus, Caption, DownloadProgress, ExportFormat, LibraryEntry, Line, ModelStatus, Phase, Source, Status, Summarized, TranscriptView, UpdateInfo } from "./types";
+import { asAsk, NO_ASK, type MicAsk } from "./micAsk";
 
 /** Typed surface between the UI and the Rust side. Every command has a matching Tauri command. */
 export interface Backend {
@@ -28,12 +29,23 @@ export interface Backend {
   miniFlipped(): Promise<boolean>;
   /** Overlay only: the host moved the pill to the other half of the screen. */
   onMiniFlip(cb: (flipped: boolean) => void): Promise<() => void>;
+  /** "Start a transcript?" while another app holds the microphone and the app is in the
+   * background (SPEC 8.3a): whether it is up now, changes to it, and the answer. */
+  micPromptPending(): Promise<MicAsk>;
+  onMicPrompt(cb: (ask: MicAsk) => void): Promise<() => void>;
+  micPromptAnswer(start: boolean): Promise<void>;
+  /** Turn the question on or off, and set the apps (ids) it should not ask about. */
+  setMicPrompt(enabled: boolean, skipped: string[]): Promise<void>;
+  /** The background shortcut: on or off, and its keys. Rejects with "invalid", "taken", "failed" or "unsupported". */
+  setHotkey(enabled: boolean, keys: string): Promise<string>;
   /** Tell the engine which caption sources are wanted, so unused ones cost nothing. */
   setCaptions(on: boolean, me: boolean): Promise<void>;
   /** Swap the tray and window icons between the current brand and Throwback Mode. */
   setBrand(throwback: boolean): Promise<void>;
   /** Partial caption text while someone is still speaking (never saved). */
   onCaption(cb: (c: Caption) => void): Promise<() => void>;
+  /** Input levels for the Me and Others buttons, 0 to 1, about ten a second while transcribing. */
+  onLevels(cb: (levels: [number, number]) => void): Promise<() => void>;
   /** Mini controller only: bring the main window back. */
   openApp(): Promise<void>;
   /** Library: transcripts newest first; the query matches names and full text. */
@@ -108,9 +120,15 @@ async function tauri(): Promise<Backend> {
     miniResize: (width, height, flipped) => invoke("mini_resize", { width, height, flipped }),
     miniFlipped: () => invoke<boolean>("mini_flipped"),
     onMiniFlip: (cb) => listen<boolean>("mini-flip", (e) => cb(e.payload)),
+    micPromptPending: () => invoke<unknown>("mic_prompt_pending").then(asAsk),
+    onMicPrompt: (cb) => listen<unknown>("mic-prompt", (e) => cb(asAsk(e.payload))),
+    micPromptAnswer: (start) => invoke("mic_prompt_answer", { start }),
+    setMicPrompt: (enabled, skipped) => invoke("set_mic_prompt", { enabled, skipped }),
+    setHotkey: (enabled, keys) => invoke<string>("set_hotkey", { enabled, keys }),
     setCaptions: (on, me) => invoke("set_captions", { on, me }),
     setBrand: (throwback) => invoke("set_brand", { throwback }),
     onCaption: (cb) => listen<Caption>("caption", (e) => cb(e.payload)),
+    onLevels: (cb) => listen<[number, number]>("source-levels", (e) => cb(e.payload)),
     openApp: () => invoke("open_app"),
     libraryList: (query) => invoke("library_list", { query }),
     libraryOpen: (path) => invoke("library_open", { path }),
@@ -338,9 +356,19 @@ export function mockBackend(): Backend {
     // "?flip" lets the browser preview show the drawer above the pill.
     miniFlipped: async () => typeof location !== "undefined" && location.search.includes("flip"),
     onMiniFlip: async () => () => {},
+    // Preview the question with ?mic in the overlay's address.
+    micPromptPending: async () =>
+      typeof location !== "undefined" && location.search.includes("mic")
+        ? { up: true, apps: [{ id: "zoom.exe", name: "Zoom" }] }
+        : NO_ASK,
+    onMicPrompt: async () => () => {},
+    micPromptAnswer: async () => {},
+    setMicPrompt: async () => {},
+    setHotkey: async (enabled, keys) => (enabled ? keys : ""),
     setCaptions: async () => {},
     setBrand: async () => {},
     onCaption: async (cb) => ((capCb = cb), () => {}),
+    onLevels: async () => () => {},
     openApp: async () => {},
     libraryList: async (q) => mockLibrary.filter((e) => (e.title + e.name).toLowerCase().includes(q.trim().toLowerCase())),
     libraryOpen: async (path) => ({

@@ -5,6 +5,8 @@
   import { prefs, setPref, captionFlags, CAPTION_TEXT, CAPTION_LIMITS } from "./prefs.svelte";
   import Light from "./Light.svelte";
   import IconButton from "./IconButton.svelte";
+  import CaptionWords from "./CaptionWords.svelte";
+  import { askText, skipLabel, withSkipped, NO_ASK, type MicAsk } from "./micAsk";
 
   // Plenty of history for a tall drawer; whatever does not fit is clipped at the top.
   const MAX_LINES = 12;
@@ -55,6 +57,23 @@
     } finally {
       catchBusy = false;
     }
+  }
+
+  // Another app has held the microphone for a while and SprkNotes is in the background.
+  let micAsk = $state<MicAsk>(NO_ASK);
+  function answerMic(start: boolean) {
+    micAsk = NO_ASK;
+    api?.micPromptAnswer(start).catch(() => {});
+  }
+  // "Don't ask for <App>": remember the app (kept in the app settings on this PC), tell the
+  // shell, then take the question down.
+  function skipMicApps() {
+    const skip = withSkipped(prefs.micPromptSkip, micAsk.apps);
+    setPref("micPromptSkip", skip);
+    api
+      ?.setMicPrompt(prefs.micPromptOn, skip.map((a) => a.id))
+      .catch(() => {})
+      .finally(() => answerMic(false));
   }
 
   let nextId = 0;
@@ -116,6 +135,8 @@
         }),
       );
       offs.push(await b.onMiniFlip((f) => (flipped = f)));
+      offs.push(await b.onMicPrompt((a) => (micAsk = a)));
+      b.micPromptPending().then((a) => (micAsk = a)).catch(() => {});
       b.assistantStatus().then((a) => (assistant = a)).catch(() => {});
       flipped = await b.miniFlipped();
     });
@@ -294,6 +315,18 @@
       {/if}
     </div>
 
+    {#if micAsk.up && status === "ready"}
+      <div class="ask" role="alertdialog" aria-labelledby="mic-ask">
+        <p id="mic-ask">{askText(micAsk.apps)}</p>
+        <div class="ask-buttons">
+          <button class="go" onclick={() => answerMic(true)}>Start</button>
+          <button onclick={() => answerMic(false)}>Dismiss</button>
+        </div>
+        {#if micAsk.apps.length > 0}
+          <button class="skip" onclick={skipMicApps}>{skipLabel(micAsk.apps)}</button>
+        {/if}
+      </div>
+    {/if}
     {#if catchUp}
       <div class="catchup" role="status">
         <button class="close" onclick={() => (catchUp = null)} aria-label="Close">×</button>
@@ -309,7 +342,7 @@
           <p class="cl old">{#if prefs.captionsWho === "both"}<b class="chip" class:me={l.speaker === "Me"}>{l.speaker}</b>{/if}{l.text}</p>
         {/each}
         {#if livePartial}
-          <p class="cl live">{#if prefs.captionsWho === "both"}<b class="chip" class:me={livePartial.speaker === "Me"}>{livePartial.speaker}</b>{/if}{#each wordsOf(livePartial) as w, i (i)}<span class="w" class:tent={i >= livePartial.stable} style="--d: {delay(livePartial, i)}ms">{w} </span>{/each}<i class="caret"></i></p>
+          <p class="cl live">{#if prefs.captionsWho === "both"}<b class="chip" class:me={livePartial.speaker === "Me"}>{livePartial.speaker}</b>{/if}<CaptionWords words={wordsOf(livePartial)} stable={livePartial.stable} delay={(i) => delay(livePartial!, i)} /><i class="caret"></i></p>
         {:else if shown.length === 0}
           <p class="cl hint">Captions appear here as people speak.</p>
         {/if}
@@ -418,16 +451,30 @@
   .cl { margin: 0; line-height: 1.4; }
   .cl.old { color: var(--muted); }
   .cl.live { color: var(--text); }
-  .w { animation: wordin 160ms ease-out both; animation-delay: var(--d, 0ms); }
-  .w.tent { opacity: 0.72; }
+  .cl :global(.w) { animation: wordin 160ms ease-out both; animation-delay: var(--d, 0ms); }
+  .cl :global(.w.tent) { opacity: 0.72; }
   @keyframes wordin { from { opacity: 0; transform: translateY(2px); } }
-  @media (prefers-reduced-motion: reduce) { .w { animation: none; } }
+  @media (prefers-reduced-motion: reduce) { .cl :global(.w) { animation: none; } }
   .cl.hint { color: var(--muted); font-size: 0.9em; }
   .chip { display: inline-block; margin-right: 0.5em; padding: 0 0.5em; border-radius: 999px; font-size: 0.7em; font-weight: 700; background: var(--others-soft); color: var(--others); }
   .chip.me { background: var(--me-soft); color: var(--me); }
   .caret { display: inline-block; width: 2px; height: 1em; margin-left: 3px; vertical-align: -2px; background: var(--accent); animation: blink 1s steps(2) infinite; }
   @keyframes blink { 50% { opacity: 0; } }
   @media (forced-colors: active) { .orb, .drawer, .zoom { border: 1px solid CanvasText; } }
+  .ask {
+    display: flex; align-items: center; gap: 0.75rem; max-width: 26rem; padding: 0.55rem 0.6rem 0.55rem 0.9rem;
+    border: 1px solid var(--border); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow);
+    flex-wrap: wrap; font-size: 0.92rem; animation: drawer-in 180ms ease-out;
+  }
+  .ask p { margin: 0; }
+  .ask-buttons { display: flex; gap: 0.35rem; flex: none; }
+  .ask button { padding: 0.35rem 0.8rem; border-radius: 999px; border: 1px solid var(--border); background: transparent; color: var(--text); font: inherit; font-weight: 600; cursor: pointer; }
+  .ask button:hover { background: var(--surface-2); }
+  .ask button.go { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+  .ask button.go:hover { background: var(--accent-hover); }
+  .ask button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .ask button.skip { flex-basis: 100%; text-align: left; border: none; padding: 0.15rem 0.3rem; font-weight: 400; color: var(--muted); text-decoration: underline; text-underline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { .ask { animation: none; } }
   .catchup {
     position: relative; max-width: 26rem; margin-top: 0.4rem; padding: 0.6rem 1.8rem 0.6rem 0.8rem;
     border-radius: 12px; background: rgba(20, 16, 30, 0.86); color: #fff; font-size: 0.95rem; display: grid; gap: 0.3rem;

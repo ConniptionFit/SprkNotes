@@ -141,7 +141,7 @@ sprknotes/
 ### 4.1 Capture
 - **Mic:** WASAPI shared-mode capture on the user-selected input (default: system default communications device, else the console default).
 - **System:** WASAPI loopback on the user-selected output (default: the default *communications* render device, where call audio plays, else the console default). Follow default-device changes (headset plugged in, Bluetooth connects) without stopping the session.
-- Either source can be toggled off. Labels: mic = **Me**, loopback = **Others**, or the remote person's name on a confirmed 1:1 call (section 19).
+- Either source can be toggled off, before or during a session; a source turned off before Start stays off when the session begins. Labels: mic = **Me**, loopback = **Others**, or the remote person's name on a confirmed 1:1 call (section 19).
 - The two streams are never mixed: each has its own VAD and utterance queue, and the label comes from the stream. The devices in use are written to the transcript as event lines ("Microphone: ...", "Others audio: ...") at the start and whenever they change (ADR-014).
 - Convert to 16 kHz mono f32 in the pipeline, low-pass filtered first (Kaiser-windowed sinc, pass band to 7 kHz, at least 60 dB down from 8 kHz) so sound above 8 kHz does not fold into the speech band. WAV input in `sprkctl` uses the same filter. Audio stays in in-memory ring buffers only.
 
@@ -169,7 +169,7 @@ sprknotes/
 
 ### 4.4a Live captions
 
-Live captions (ADR-006) show speech in progress in the overlay. They are transient: never written to the transcript, logged or stored, and the committed lines (4.4) are unchanged. The last 10 s of audio per wanted source is re-decoded about every 0.7 s (Others by default, Me optional); the decode interval backs off when slow, and captions switch themselves off if the engine cannot keep up. Default off until the overlay's captions toggle turns them on.
+Live captions (ADR-006) show speech in progress in the overlay. They are transient: never written to the transcript, logged or stored, and the committed lines (4.4) are unchanged. The last 10 s of audio per wanted source is re-decoded about every 0.7 s (Others by default; Me when the overlay shows both speakers or the main window's live line is on); the lane that has waited longest decodes first, the decode interval backs off when slow, and captions switch themselves off if the engine cannot keep up. The finished wording of each utterance (the final caption, ADR-007) is sent for both speakers whenever captions are on, since its decode already ran for the transcript; each window filters by its own speaker choice. Default off until the overlay's captions toggle or the live line turns them on.
 
 ### 4.5 Pause / resume / end
 - **Pause:** capture stops, buffer flushes, a pause event line is written.
@@ -344,10 +344,10 @@ Scheduled Teams and Zoom meetings live on the user's Outlook calendar, so one lo
 **Principle:** one main window, one floating mini controller, nothing else visible. Neutral, quiet, light and dark following Windows theme.
 
 ### 8.1 Main window
-- **Top bar:** editable session name, source toggles (Me mic, Others system) with device picker on click, status pill ("Transcribing", "Paused", "Ready").
+- **Top bar:** editable session name, source buttons (small icon buttons: microphone **Me**, speaker **Others**, struck through when off). Clicking one opens a menu: System default, each device found now (a saved device that is unplugged stays listed as not connected), and Turn off / Turn on. Picking a device turns that source on. The device choice is the same one as Settings. Which sources are on is remembered across launches (both on at first run). While transcribing, each button that is on shows a small level meter beside its name: the peak input level about ten times a second, on a loudness scale from -60 dBFS to full scale, measured before echo removal so a muted or wrong device reads flat. Only the number reaches the window; no audio is kept or logged. Status pill ("Transcribing", "Paused", "Ready").
 - **Controls:** Start · Pause/Resume · End. Context-aware (only valid actions enabled).
 - **Live pane:** transcript lines styled per 5.1 (timestamp muted, speaker bold, Me and Others visually distinct).
-- **Live line:** while transcribing, the newest words appear as the last line of the live pane (marked "live"), growing word by word. Words the engine is unsure of (after `stable`) are muted with a dotted underline; words that change are briefly tinted; when the committed line arrives it replaces the live line. Others only by default, Me too when Settings says so. The live line is display only: the saved transcript contains committed lines only, and partial text is never written to disk or logged. A toolbar above the pane has smaller/larger text (remembered) and a show/hide toggle (also in Settings, on by default).
+- **Live line:** while transcribing, the newest words appear as the last line of the live pane (marked "live"), growing word by word. Words the engine is unsure of (after `stable`) are muted with a dotted underline; words that change are briefly tinted; when the committed line arrives it replaces the live line. Both speakers, whatever the pop-out shows (Me's live words make Me as quick as Others; before, Me waited for the commit delay). Each speaker has a live row of their own: when two people talk at once, both rows grow side by side (the one who started first on top) instead of one row switching between them. The live line is display only: the saved transcript contains committed lines only, and partial text is never written to disk or logged. A toolbar above the pane has smaller/larger text (remembered) and a show/hide toggle (also in Settings, on by default).
 - **Footer:** Library, Settings, AI handoff (after End or from Library).
 
 ### 8.2 Live pane scrolling (must feel calm)
@@ -366,6 +366,14 @@ Scheduled Teams and Zoom meetings live on the user's Outlook calendar, so one lo
 - Close hides the main window to the system tray and the session keeps running; if the desktop has no tray, Close minimizes instead. The tray icon mirrors state with the same actions. On Linux the app runs through XWayland by default so the overlay can be positioned and stay on top (set `SPRKNOTES_WAYLAND=1` to opt out).
 - Optional global hotkeys: start/pause and open app (configurable, off by default).
 
+### 8.3a Offer to start when another app uses the microphone
+- While SprkNotes is in the background (main window minimized or closed to the tray) and no session is running, it checks every 2 s whether another app holds a microphone, using the per-user Windows microphone privacy data (`CapabilityAccessManager\ConsentStore\microphone`, the data behind the taskbar microphone icon). Read-only; SprkNotes' own entries are skipped, and an entry that started more than 12 hours ago with no stop is treated as stale.
+- After 5 s of continuous use the overlay appears with "<App> is using your microphone. Start a transcript?" (two or three apps are listed by name) and three buttons: **Start** (begins a session; the overlay stays as its controller), **Dismiss**, and **Don't ask for <App>** ("these apps" for more than one).
+- An app is known by its privacy-data entry: the package family for a Store app, the file name of the executable for any other (its folder holds user and version names, so it is dropped). Its shown name comes from that id (`Microsoft.Teams_8wekyb3d8bbwe` reads "Microsoft Teams", `Zoom.exe` reads "Zoom").
+- One question per hold: answered or dismissed, it is not asked again until the other app lets go of the microphone. A hold during which a session ran counts as answered. The question is taken down if the other app lets go first, a session starts, or the main window comes back.
+- **Don't ask for <App>** adds the app to a skip list; an app on it never starts the 5 s count. Settings has a switch, **When another app uses the microphone** (on by default), that turns the question off altogether, and lists the skipped apps by name with **Ask again** for each. Both are kept in the app's settings on this PC, so they last across restarts. Turning the switch off, or skipping the apps a question is about, takes that question down.
+- App ids and names are kept in memory while the question is up; only the skip list the user builds is stored. They are never logged.
+
 ### 8.4 Library
 - List of transcripts (newest first): name, date, duration, folder. Search by name and full text.
 - Folder tree for user subfolders: create, rename, move transcripts (drag or menu).
@@ -380,8 +388,16 @@ Scheduled Teams and Zoom meetings live on the user's Outlook calendar, so one lo
 - AI handoff: show Claude button, show Copilot button, edit prompt template.
 - Models (16.7): active model, installed models, Import, Switch, Roll back. Locked with a "Managed by your organization" note when policy pins a model.
 - Appearance: System, Light or Dark (the overlay stays dark unless Light is chosen).
-- Live captions: on or off, and Others only (default) or Others and Me.
+- Live captions: on or off, and Others only (default) or Others and Me in the pop-out. The transcript window's live line always shows both.
 - Startup: launch at sign-in, start minimized to tray.
+- When another app uses the microphone: on (default) or off, and the apps skipped with **Don't ask**, each with **Ask again** (8.3a).
+- Keyboard shortcut: off (default) or on, and its keys (8.6).
+
+### 8.6 Keyboard shortcut
+- One system-wide key combination, off by default. Settings turns it on and sets the keys (default Ctrl+Alt+S): click the keys, press the new combination, Esc cancels.
+- A press starts a transcript when none runs (the same as the tray's Start), pauses a running one and resumes a paused one. Presses less than 0.75 s apart count once; holding the keys does not repeat.
+- A combination needs Ctrl, Alt or Win with a letter, a digit, F1 to F24 or Space, so it never takes a key typed on its own or with Shift.
+- Windows registers it (RegisterHotKey); if another app holds the combination, Settings says so and asks for other keys, and nothing else changes. It is kept in the app's settings and set again at each launch. Other platforms do not offer it.
 
 ---
 

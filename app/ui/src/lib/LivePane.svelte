@@ -3,94 +3,54 @@
   import type { Caption, Line, Status } from "./types";
   import { prefs, setPref, LINE_TEXT, DELAY_MS } from "./prefs.svelte";
   import { isNearBottom, initialFollow, onScroll, onLines, returnToLive, UP_KEYS, USER_INPUT_WINDOW_MS } from "./follow";
-  import { gate, hold, droppedLead, typed, type GateWord, type Row } from "./live";
+  import { Typist, type Row, type Shown } from "./live";
 
   let {
     lines,
     status = "ready",
     needsModel = false,
     empty,
-    partial = null,
+    partials = [],
     rows = [],
-  }: { lines: Line[]; status?: Status; needsModel?: boolean; empty?: Snippet; partial?: Caption | null; rows?: Row[] } = $props();
+  }: { lines: Line[]; status?: Status; needsModel?: boolean; empty?: Snippet; partials?: Caption[]; rows?: Row[] } = $props();
 
-  // The live row: the sentence being spoken, typed out at the bottom of the transcript.
-  // Locked sentences (`rows`) sit above it; only the last word or two are soft (ADR-008).
-  const wanted = (speaker: string) => prefs.captionsWho === "both" || speaker !== "Me";
-  const liveOn = $derived(prefs.liveLine && status !== "ready" && partial !== null && wanted(partial.speaker));
-  const shownRows = $derived(rows.filter((r) => wanted(r.speaker)));
+  // Live rows: the sentence each speaker is saying, typed out at the bottom of the transcript, one
+  // row per speaker so two people talking at once never take turns in one row. Locked sentences
+  // (`rows`) sit above them; only the last word or two are soft (ADR-008). The main window shows
+  // both speakers: it is the transcript, and Me waiting for the commit delay felt broken.
+  const liveOn = $derived(prefs.liveLine && status !== "ready");
   const size = $derived(LINE_TEXT[prefs.lineText]);
   const bump = (d: number) => setPref("lineText", Math.min(LINE_TEXT.length - 1, Math.max(0, prefs.lineText + d)));
 
-  // What is visible of the live row right now: gated words, typed a few characters at a time.
-  // Corrections swap a word in place (with a short fade); they never delete and retype the tail.
-  type Shown = { w: string; soft: boolean; hide: string };
-  let shownWords = $state<Shown[]>([]);
-  let gateState: GateWord[] = [];
-  let held: string[] = [];
-  let shorterSince: number | null = null;
-  let typedChars = 0;
+  type LiveRow = { speaker: string; words: Shown[] };
+  let liveRows = $state<LiveRow[]>([]);
+  const typists = new Map<string, Typist>();
   let lastFrame = 0;
-  let lastKey = "";
-  let lastUtt: number | undefined;
-  let lastLive = 0;
-  // Keep the live row in place briefly when it empties, so the transcript does not drop and rise a line.
-  let recent = $state(false);
   const reduce = typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   function frame(now: number) {
     const dt = lastFrame ? Math.min(100, now - lastFrame) : 16;
     lastFrame = now;
-    const c = liveOn ? partial : null;
-    const words = c ? c.text.split(/\s+/).filter(Boolean) : [];
-    if (c && c.utt !== lastUtt) {
-      // A new utterance starts a fresh row.
-      lastUtt = c.utt;
-      held = [];
-      gateState = [];
-      typedChars = 0;
+    const current = liveOn ? partials : [];
+    let changed = false;
+    for (const speaker of typists.keys()) {
+      if (!current.some((c) => c.speaker === speaker)) {
+        typists.delete(speaker);
+        changed = true;
+      }
     }
-    if (!c) {
-      held = [];
-      gateState = [];
-      typedChars = 0;
-      shorterSince = null;
+    const next: LiveRow[] = [];
+    for (const c of current) {
+      let t = typists.get(c.speaker);
+      if (!t) {
+        t = new Typist();
+        typists.set(c.speaker, t);
+        changed = true;
+      }
+      if (t.step(c, now, dt, DELAY_MS[prefs.captionDelay], reduce)) changed = true;
+      if (t.shown.length > 0 || t.recent) next.push({ speaker: c.speaker, words: t.shown });
     }
-    // Sentences that locked left the live row: drop them from what is shown, keep the rest typed.
-    const k = droppedLead(held, words);
-    if (k > 0) {
-      typedChars = Math.max(0, typedChars - held.slice(0, k).join(" ").length - 1);
-      held = held.slice(k);
-      gateState = gateState.slice(k);
-    }
-    const stable = c?.stable ?? 0;
-    const g = gate(gateState, words, stable, now, DELAY_MS[prefs.captionDelay]);
-    gateState = g.next;
-    const h = hold(held, g.next, stable, now, DELAY_MS[prefs.captionDelay], shorterSince);
-    shorterSince = h.shorterSince;
-    const text = h.shown.join(" ");
-    held = h.shown;
-    typedChars = Math.min(typedChars, text.length);
-    typedChars = reduce ? text.length : typed(typedChars, text.length, dt);
-    const upto = Math.floor(typedChars);
-    // Layout reserves the whole word being typed, so a word never jumps to the next line mid-way.
-    const out: Shown[] = [];
-    let pos = 0;
-    for (let i = 0; i < h.shown.length; i++) {
-      const w = h.shown[i];
-      if (pos >= upto) break;
-      const n = Math.min(w.length, upto - pos);
-      out.push({ w: w.slice(0, n), hide: w.slice(n), soft: i >= stable });
-      pos += w.length + 1;
-    }
-    const key = out.map((o) => o.w + "\u0001" + o.hide + (o.soft ? "s" : "")).join("|");
-    if (key !== lastKey) {
-      lastKey = key;
-      shownWords = out;
-    }
-    if (out.length > 0) lastLive = now;
-    const r = !!c && now - lastLive < 1200;
-    if (r !== recent) recent = r;
+    if (changed || next.length !== liveRows.length || next.some((r, i) => r.speaker !== liveRows[i].speaker)) liveRows = next;
   }
 
   onMount(() => {
@@ -229,7 +189,7 @@
         <p class="line event"><time>{l.t}</time><span class="text">{l.text}</span></p>
       {/if}
     {:else}
-      {#if !liveOn && shownRows.length === 0}
+      {#if liveRows.length === 0 && rows.length === 0}
       <div class="empty">
         <svg viewBox="0 0 48 32" aria-hidden="true"><rect x="4" y="12" width="5" height="8" rx="2.5" /><rect x="13" y="6" width="5" height="20" rx="2.5" /><rect x="22" y="1" width="5" height="30" rx="2.5" /><rect x="31" y="8" width="5" height="16" rx="2.5" /><rect x="40" y="12" width="5" height="8" rx="2.5" /></svg>
         {#if needsModel}
@@ -246,17 +206,17 @@
       </div>
       {/if}
     {/each}
-    {#each shownRows as r (r.uid)}
+    {#each rows as r (r.uid)}
       <p class="line row" class:me={r.speaker === "Me"} class:others={r.speaker !== "Me"}>
         <time></time><strong>{r.speaker}</strong><span class="text">{r.text}</span>
       </p>
     {/each}
-    {#if liveOn && partial && (shownWords.length > 0 || recent)}
-      <p class="line live" class:me={partial.speaker === "Me"} class:others={partial.speaker !== "Me"}>
-        <time>live</time><strong>{partial.speaker}</strong>
-        <span class="text">{#each shownWords as w, i (i + ":" + w.w + w.hide)}<span class="w" class:soft={w.soft}>{w.w}<span class="rest">{w.hide}</span>{" "}</span>{/each}<i class="caret"></i></span>
+    {#each liveRows as lr (lr.speaker)}
+      <p class="line live" class:me={lr.speaker === "Me"} class:others={lr.speaker !== "Me"}>
+        <time>live</time><strong>{lr.speaker}</strong>
+        <span class="text">{#each lr.words as w, i (i + ":" + w.w + w.hide)}<span class="w" class:soft={w.soft}>{w.w}<span class="rest">{w.hide}</span>{" "}</span>{/each}<i class="caret"></i></span>
       </p>
-    {/if}
+    {/each}
     </div>
   </div>
   {#if !fs.follow}

@@ -72,6 +72,9 @@ pub trait Events: Send + Sync {
     /// Live caption for speech in progress or just finished (ADR-006, ADR-007). `speaker` is
     /// `Me` or `Others`. Never stored or logged by the host. Default: ignore.
     fn caption(&self, _c: &UiCaption) {}
+    /// Input levels, 0 to 1, for Me and Others, about ten times a second while a session runs.
+    /// A number only; never audio. Default: ignore.
+    fn levels(&self, _me: f32, _others: f32) {}
     /// What the UI wants now: `(captions on, include Me)`. Polled by the session thread.
     fn captions_wanted(&self) -> (bool, bool) {
         (false, false)
@@ -94,6 +97,9 @@ pub struct UiCaption {
     /// Which utterance this belongs to.
     pub utt: u64,
 }
+
+/// How often the source buttons' meters are updated.
+const LEVELS_EVERY_MS: u64 = 100;
 
 fn emit_captions(events: &dyn Events, session: &mut Session, now_ms: u64) {
     for c in session.captions(now_ms) {
@@ -384,6 +390,7 @@ fn run(
         Session::new(engine, make_vad, Box::new(sink), commit).with_echo_cancellation(true);
     let now_ms = |s: &Instant| s.elapsed().as_millis() as u64;
     let mut last_tick = 0u64;
+    let mut last_levels = 0u64;
     let mut title: Option<(String, NameSource)> = None;
     let mut last_device: [Option<String>; 2] = [None, None];
     events.status(UiStatus::Transcribing);
@@ -450,6 +457,11 @@ fn run(
         let (cap_on, cap_me) = events.captions_wanted();
         session.set_captions(cap_on, cap_me);
         emit_captions(events.as_ref(), &mut session, t);
+        if t.saturating_sub(last_levels) >= LEVELS_EVERY_MS {
+            last_levels = t;
+            let [me, others] = session.levels();
+            events.levels(me, others);
+        }
         if let Some(c) = ctx.as_mut() {
             if session.state() == crate::session::State::Running {
                 c.poll(t, &mut session);
@@ -751,8 +763,12 @@ mod tests {
         lines: Mutex<Vec<UiLine>>,
         statuses: Mutex<Vec<UiStatus>>,
         problems: Mutex<Vec<String>>,
+        levels: Mutex<Vec<(f32, f32)>>,
     }
     impl Events for Collect {
+        fn levels(&self, me: f32, others: f32) {
+            self.levels.lock().unwrap().push((me, others));
+        }
         fn line(&self, l: UiLine) {
             self.lines.lock().unwrap().push(l);
         }
@@ -797,6 +813,21 @@ mod tests {
             .map(|e| e.path())
             .filter(|p| p.extension().is_some_and(|e| e == "md"))
             .collect()
+    }
+
+    #[test]
+    fn levels_reach_the_ui_for_the_source_that_has_sound() {
+        let (host, ev, _dir) = launch("Levels", &["hello"]);
+        std::thread::sleep(Duration::from_millis(400));
+        host.end().unwrap();
+        let levels = ev.levels.lock().unwrap().clone();
+        assert!(levels.len() >= 2, "about ten a second: {levels:?}");
+        // The fake mic delivers one second at 0.1 (-20 dBFS); there is no system device.
+        assert!(
+            levels.iter().any(|&(me, _)| (me - 2.0 / 3.0).abs() < 0.01),
+            "{levels:?}"
+        );
+        assert!(levels.iter().all(|&(_, others)| others == 0.0));
     }
 
     #[test]
