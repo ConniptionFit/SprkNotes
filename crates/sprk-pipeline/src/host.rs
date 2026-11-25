@@ -638,6 +638,7 @@ fn apply(
         match c {
             Captured::Frame(f) => session.feed(f.source, &f.samples),
             Captured::Event(ev) => {
+                session.capture_changed();
                 let text = match ev {
                     CaptureEvent::DeviceChanged(s) => format!("Source changed: {}", label(s)),
                     CaptureEvent::Unavailable(s) => format!("Source unavailable: {}", label(s)),

@@ -107,6 +107,10 @@ pub struct EchoPath {
     /// Mic samples; the flag marks silence we inserted to hold the mic back (never emitted).
     mic: VecDeque<(f32, bool)>,
     reference: VecDeque<f32>,
+    /// Reference samples whose time has already been processed without them (the mic could
+    /// not wait any longer). They are dropped when they arrive, so the two streams stay lined
+    /// up sample for sample instead of the reference slipping later each time.
+    ref_debt: usize,
     out: Vec<f32>,
     // Envelopes (one value per frame) of what AEC3 was given and what it returned.
     env_mic: VecDeque<f32>,
@@ -151,6 +155,7 @@ impl EchoPath {
             apm,
             mic,
             reference: VecDeque::new(),
+            ref_debt: 0,
             out: Vec::new(),
             env_mic: VecDeque::new(),
             env_ref: VecDeque::new(),
@@ -167,7 +172,9 @@ impl EchoPath {
 
     /// 16 kHz mono samples that went to the speakers (the loopback stream).
     pub fn push_reference(&mut self, samples: &[f32]) {
-        self.reference.extend(samples);
+        let skip = self.ref_debt.min(samples.len());
+        self.ref_debt -= skip;
+        self.reference.extend(&samples[skip..]);
         self.pump();
     }
 
@@ -207,6 +214,13 @@ impl EchoPath {
                 for (d, s) in r.iter_mut().zip(self.reference.drain(..FRAME)) {
                     *d = s;
                 }
+            } else {
+                // Whatever reference is here belongs to this frame's time: use it, and owe the rest.
+                let got = self.reference.len();
+                for (d, s) in r.iter_mut().zip(self.reference.drain(..)) {
+                    *d = s;
+                }
+                self.ref_debt += FRAME - got;
             }
             let mut m = [0.0f32; FRAME];
             let mut injected = [false; FRAME];
@@ -470,6 +484,22 @@ mod tests {
             "only {first} released"
         );
         assert_eq!(first + e.flush().len(), 16_000);
+    }
+
+    #[test]
+    fn reference_that_comes_late_stays_lined_up_with_the_mic() {
+        // The mic waited as long as it may and was processed without its reference. When the
+        // reference for that time arrives, it must not be matched with later mic audio.
+        let mut e = EchoPath::new();
+        e.push_mic(&vec![0.0; 16_000]);
+        let processed = e.take().len() + (TARGET_DELAY_MS * 16) as usize;
+        assert!(processed > 0);
+        assert_eq!(e.ref_debt, processed - processed % FRAME);
+        e.push_reference(&vec![0.1; 16_000]);
+        assert_eq!(e.ref_debt, 0);
+        // Same amount of audio on both sides: what is still queued differs by the hold alone,
+        // so each mic sample meets the reference sample of its own moment.
+        assert_eq!(e.mic.len() - e.reference.len(), e.hold);
     }
 
     /// Mic that hears the reference `ms` later (negative: the mic runs ahead of the reference),
