@@ -27,6 +27,8 @@ const DEFAULT_CHECK_HOURS: u64 = 24;
 const BUILTIN_UPDATE_KEYS: &[&str] = &[];
 
 static BUSY: AtomicBool = AtomicBool::new(false);
+/// "Update now" already handed the installer over, so the exit handler must not run it again.
+static HANDED_OVER: AtomicBool = AtomicBool::new(false);
 
 #[derive(Serialize, Deserialize, Default, Clone)]
 struct UserChoice {
@@ -143,6 +145,15 @@ pub struct UpdateStatus {
     pub ready_to_install: bool,
     /// Per-machine installs are updated by the scheduled task, not by this app.
     pub managed_install: bool,
+}
+
+/// Progress of an update, for Settings: `stage` is "download" or "install"; `percent` is set while
+/// downloading when the size is known.
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateProgress {
+    pub stage: &'static str,
+    pub percent: Option<u8>,
 }
 
 #[derive(Serialize, Clone)]
@@ -333,17 +344,16 @@ fn check_due(p: &AppPolicy) -> bool {
 }
 
 /// Download and verify the installer. It is left as `pending.msi`; nothing runs yet.
-fn download(f: &dyn Fetcher, u: &Update) -> Result<PathBuf, String> {
+fn download(
+    f: &dyn Fetcher,
+    u: &Update,
+    progress: &mut dyn FnMut(u64, Option<u64>),
+) -> Result<PathBuf, String> {
     let dir = pending_dir().ok_or("No folder for the update.")?;
     std::fs::create_dir_all(&dir).map_err(|_| "The update folder is not writable.".to_string())?;
     let part = dir.join("pending.part");
-    f.get_to_file(
-        &u.url,
-        &part,
-        sprk_update::MAX_PACKAGE_BYTES,
-        &mut |_, _| {},
-    )
-    .map_err(|_| "The update download did not finish.".to_string())?;
+    f.get_to_file(&u.url, &part, sprk_update::MAX_PACKAGE_BYTES, progress)
+        .map_err(|_| "The update download did not finish.".to_string())?;
     let bytes =
         std::fs::read(&part).map_err(|_| "The update could not be read back.".to_string())?;
     if let Err(e) = sprk_update::verify_download(u, &bytes) {
@@ -358,13 +368,21 @@ fn download(f: &dyn Fetcher, u: &Update) -> Result<PathBuf, String> {
 
 /// Check, then download and verify when there is something newer. Returns the new version.
 pub fn fetch_update(p: &AppPolicy) -> Result<Option<String>, String> {
+    fetch_update_with(p, &mut |_, _| {})
+}
+
+/// The same, reporting download progress as `(bytes done, total)`.
+pub fn fetch_update_with(
+    p: &AppPolicy,
+    progress: &mut dyn FnMut(u64, Option<u64>),
+) -> Result<Option<String>, String> {
     if BUSY.swap(true, Ordering::SeqCst) {
         return Err("An update is already in progress.".into());
     }
     let r = (|| {
         let f = fetcher();
         match check(&f, p)? {
-            Some(u) => download(&f, &u).map(|_| Some(u.version)),
+            Some(u) => download(&f, &u, progress).map(|_| Some(u.version)),
             None => Ok(None),
         }
     })();
@@ -408,14 +426,70 @@ pub fn install_pending(_quiet_ui: bool, _wait: bool) -> bool {
 }
 
 /// At exit: when the mode allows it, hand a verified installer to msiexec so the new build is
-/// there next launch. Never runs mid-session and never on a per-machine install.
+/// there next launch. Windows Installer shows its own progress window (no questions asked), so
+/// the update is visible instead of running unseen. Never runs mid-session and never on a
+/// per-machine install.
 pub fn on_exit(p: &AppPolicy) {
+    if HANDED_OVER.load(Ordering::SeqCst) {
+        return;
+    }
     let e = effective(p);
     prune_pending();
     let wanted = matches!(e.mode.as_str(), "auto" | "force") || install_requested();
     if wanted && e.mode != "off" && !machine_install() {
-        install_pending(true, false);
+        install_pending(false, false);
     }
+}
+
+/// Can "Update now" run here? Not when updates are off or IT updates a per-machine install.
+pub fn can_update_now(p: &AppPolicy) -> Result<(), String> {
+    if effective(p).mode == "off" {
+        return Err("Updates are turned off by your organization.".into());
+    }
+    if machine_install() {
+        return Err("Your IT team keeps this PC up to date.".into());
+    }
+    Ok(())
+}
+
+/// "Update now", after the app has decided to close: hand the verified installer to a small
+/// command that waits for SprkNotes to exit, runs the installer with its progress window, then
+/// starts SprkNotes again. Returns false when nothing could be started (the installer then waits
+/// for the next exit as before).
+#[cfg(windows)]
+pub fn install_and_relaunch() -> bool {
+    use std::os::windows::process::CommandExt;
+    let Some(msi) = pending_path().filter(|p| p.is_file()) else {
+        return false;
+    };
+    let log = msi.with_file_name("install.log");
+    let exe = std::env::current_exe().ok();
+    let line = exe.as_ref().and_then(|exe| {
+        sprk_update::install_then_relaunch(
+            &msi.to_string_lossy(),
+            &log.to_string_lossy(),
+            &exe.to_string_lossy(),
+        )
+    });
+    let started = match line {
+        Some(line) => std::process::Command::new("cmd.exe")
+            .args(["/d", "/s", "/c"])
+            .raw_arg(line)
+            .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
+            .spawn()
+            .is_ok(),
+        // A path cmd cannot carry safely: install with progress, without the relaunch.
+        None => install_pending(false, false),
+    };
+    if started {
+        HANDED_OVER.store(true, Ordering::SeqCst);
+    }
+    started
+}
+
+#[cfg(not(windows))]
+pub fn install_and_relaunch() -> bool {
+    false
 }
 
 /// Start of the app: a silent check on the admin's interval. In `auto` and `force` modes the

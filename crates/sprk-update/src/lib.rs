@@ -424,6 +424,30 @@ pub fn verify_download(update: &Update, bytes: &[u8]) -> Result<(), UpdateError>
 
 // ---------- tests ----------
 
+/// The command line that installs an update and starts the app again ("Update now"). It runs in
+/// `cmd.exe /d /s /c` after SprkNotes has exited: wait a moment for the app's files to close,
+/// run the installer with Windows Installer's own progress window (`/passive`: a bar, no
+/// questions), wait for it, then start the app. The app starts again even if the install failed
+/// (Windows Installer rolls back), so the user is never left without it. `None` when a path holds
+/// a character cmd would read as syntax (`"` or `%`); the caller then installs without relaunch.
+pub fn install_then_relaunch(msi: &str, log: &str, exe: &str) -> Option<String> {
+    if [msi, log, exe]
+        .iter()
+        .any(|p| p.is_empty() || p.contains(['"', '%', '\n', '\r']))
+    {
+        return None;
+    }
+    Some(format!(
+        "\"ping -n 3 127.0.0.1 >nul & start \"\" /wait msiexec.exe /i \"{msi}\" /passive /norestart /l*v \"{log}\" & start \"\" \"{exe}\"\""
+    ))
+}
+
+/// Download progress as a whole percent, or `None` when the size is unknown.
+pub fn percent(done: u64, total: Option<u64>) -> Option<u8> {
+    let t = total.filter(|t| *t > 0)?;
+    Some((done.min(t) * 100 / t) as u8)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -660,5 +684,30 @@ mod tests {
         assert!(Manifest::parse(&base("../a.msi", &sha)).is_err());
         assert!(Manifest::parse(&base("a\\b.msi", &sha)).is_err());
         assert!(Manifest::parse(&base("a.msi", "zz")).is_err());
+    }
+
+    #[test]
+    fn relaunch_line_waits_installs_with_progress_then_starts_the_app() {
+        let line = install_then_relaunch(
+            r"C:\Users\Jo Smith\AppData\Roaming\SprkNotes\updates\pending.msi",
+            r"C:\Users\Jo Smith\AppData\Roaming\SprkNotes\updates\install.log",
+            r"C:\Users\Jo Smith\AppData\Local\SprkNotes\SprkNotes.exe",
+        )
+        .unwrap();
+        assert!(line.starts_with("\"ping -n 3 127.0.0.1 >nul & start \"\" /wait msiexec.exe /i "));
+        assert!(line.contains("\"C:\\Users\\Jo Smith\\AppData\\Roaming\\SprkNotes\\updates\\pending.msi\" /passive /norestart"));
+        assert!(line.ends_with(
+            "& start \"\" \"C:\\Users\\Jo Smith\\AppData\\Local\\SprkNotes\\SprkNotes.exe\"\""
+        ));
+        assert_eq!(install_then_relaunch(r"C:\100%\a.msi", "l", "e"), None);
+        assert_eq!(install_then_relaunch("a.msi", "l", ""), None);
+    }
+
+    #[test]
+    fn percent_is_bounded_and_needs_a_size() {
+        assert_eq!(percent(50, Some(200)), Some(25));
+        assert_eq!(percent(300, Some(200)), Some(100));
+        assert_eq!(percent(5, None), None);
+        assert_eq!(percent(5, Some(0)), None);
     }
 }

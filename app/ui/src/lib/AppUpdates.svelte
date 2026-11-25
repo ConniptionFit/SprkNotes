@@ -1,14 +1,16 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { backend, type Backend } from "./api";
-  import type { AppUpdateStatus } from "./types";
+  import type { AppUpdateProgress, AppUpdateStatus } from "./types";
   import Segmented from "./Segmented.svelte";
+  import { progressText, progressValue } from "./appUpdate";
 
   let api = $state.raw<Backend | undefined>();
   let st = $state<AppUpdateStatus | null>(null);
   let message = $state("");
   let working = $state(false);
   let found = $state<string | null>(null);
+  let progress = $state<AppUpdateProgress | null>(null);
 
   async function refresh() {
     try {
@@ -19,10 +21,13 @@
   }
 
   onMount(() => {
+    let stop: (() => void) | undefined;
     backend.then(async (b) => {
       api = b;
+      stop = await b.onAppUpdateProgress((p) => (progress = p));
       await refresh();
     });
+    return () => stop?.();
   });
 
   async function change(c: { channel?: string; mode?: string }) {
@@ -55,7 +60,9 @@
     message = "";
     try {
       const v = await api?.appUpdateInstall();
-      message = v ? "The update is ready. It installs when you close SprkNotes." : "You have the latest version.";
+      message = v
+        ? "The update is ready. It installs when you close SprkNotes, with a progress window."
+        : "You have the latest version.";
       found = null;
     } catch (e) {
       message = String(e);
@@ -65,6 +72,26 @@
     }
   }
 
+  async function updateNow() {
+    working = true;
+    message = "";
+    progress = null;
+    try {
+      const v = await api?.appUpdateNow();
+      if (!v) {
+        progress = null;
+        message = "You have the latest version.";
+        found = null;
+      }
+    } catch (e) {
+      progress = null;
+      message = String(e);
+      working = false;
+      await refresh();
+    }
+  }
+
+  const bar = $derived(progressValue(progress));
   const locked = $derived(!!st && (st.channelLocked || st.modeLocked));
 </script>
 
@@ -113,14 +140,37 @@
         </div>
       {/if}
 
-      {#if found && !st.managedInstall}
+      {#if (found || st.readyToInstall) && !st.managedInstall && st.mode !== "off"}
         <div class="row">
-          <p class="plain">Version {found} is available.</p>
-          <button class="btn primary" onclick={install} disabled={working}>Update when I close the app</button>
+          <div class="what">
+            <p class="plain">{found ? `Version ${found} is available.` : "An update is ready."}</p>
+            <p class="help">
+              Update now closes SprkNotes, installs and opens it again.
+              {#if st.readyToInstall}Otherwise it installs when you close SprkNotes.{/if}
+            </p>
+          </div>
+          <div class="actions">
+            {#if found && !st.readyToInstall}
+              <button class="btn" onclick={install} disabled={working}>Update when I close</button>
+            {/if}
+            <button class="btn primary" onclick={updateNow} disabled={working}>Update now</button>
+          </div>
         </div>
       {/if}
-      {#if st.readyToInstall}
-        <p class="help">An update is ready and installs when you close SprkNotes.</p>
+      {#if progress}
+        <div class="progress" role="status">
+          <div
+            class="track"
+            role="progressbar"
+            aria-label="Update progress"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow={bar ?? undefined}
+          >
+            <div class="fill" class:busy={bar == null} style:width={bar == null ? "35%" : `${bar}%`}></div>
+          </div>
+          <p class="help">{progressText(progress)}</p>
+        </div>
       {/if}
       {#if message}<p class="help" role="status">{message}</p>{/if}
       {#if locked}<p class="help">Some update settings are managed by your organization.</p>{/if}
@@ -140,5 +190,12 @@
   .btn { padding: 0.5rem 1rem; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-2); font-weight: 600; cursor: pointer; }
   .btn.primary { background: var(--accent); color: var(--on-accent); border-color: transparent; }
   .btn:disabled { opacity: 0.6; cursor: default; }
+  .actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+  .progress { display: grid; gap: 0.4rem; }
+  .track { height: 0.45rem; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); overflow: hidden; }
+  .fill { height: 100%; background: var(--accent); transition: width 0.3s ease; }
+  .fill.busy { animation: slide 1.2s ease-in-out infinite alternate; }
+  @keyframes slide { from { margin-left: 0; } to { margin-left: 65%; } }
+  @media (prefers-reduced-motion: reduce) { .fill, .fill.busy { transition: none; animation: none; } }
   .chip { padding: 0.35rem 0.9rem; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); font-weight: 600; text-transform: capitalize; }
 </style>

@@ -28,8 +28,10 @@ the app at install time, and keep per-machine installs current without prompts.
    `LOCK_UPDATES=1`, as **policy** (`HKMU\Software\Policies\SprkNotes`, locked). Per-machine installs write HKLM, which standard users cannot change.
    Precedence: policy, then the user's choice, then installer defaults, then built-in defaults (stable, notify, github.com).
 6. **Per-user installs update from the app.** At launch (spaced by `UpdateCheckHours`, default 24) the app checks. `notify`
-   shows the version and lets the user choose "Update when I close the app". `auto` and `force` download and verify in the
-   background and install silently when the app closes. Never mid-session.
+   shows the version and lets the user choose **Update now** or "Update when I close". `auto` and `force` download and verify in the
+   background and install when the app closes. Never mid-session. The install shows Windows Installer's own progress window
+   (`/passive`: progress only, no questions), so an update is never invisible. **Update now** (not during a session) downloads
+   with a progress bar in Settings, closes the app, installs with that progress window, then starts SprkNotes again.
 7. **Per-machine installs update from a SYSTEM scheduled task.** The MSI registers `SprkNotes\Update` (every 6 hours, SYSTEM, no window)
    that runs `SprkNotes.exe --update`. It checks, downloads, verifies, and installs only when the mode is `auto` or `force` and no
    SprkNotes window is open; otherwise the verified installer waits for the next run. Per-machine installs default to `auto`. `UPDATE_TASK=0`
