@@ -12,7 +12,7 @@ Pick the shortest path that fits. All paths install the same build and never tou
 | [MSIX](#c-full-install-msix) | No (after trust is set up) | Yes, trusted by the PC | Intune and managed fleets |
 | [Linux](#d-linux-native-build) | No | No | CachyOS, Arch and other desktops; built from source |
 
-For fleets see [deployment.md](deployment.md).
+For fleets see [deployment.md](deployment.md). For phones see [Android](android.md) (in development, no release yet).
 
 ## Quick install (one line, per user)
 ```powershell

@@ -1,0 +1,62 @@
+name: Android
+# Debug build of the phone app (ADR-015) plus an unsigned release build to measure the install
+# size: arm64 only, nothing uploaded or published. It proves the shared crates and the app shell build for Android on every change.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  CARGO_TERM_COLOR: always
+jobs:
+  debug-apk:
+    name: debug APK (arm64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Rust toolchain
+        run: |
+          curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal -t aarch64-linux-android
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Android NDK
+        run: |
+          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+          echo "NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin/cargo-tauri
+            app/src-tauri/target
+          key: android-${{ hashFiles('app/src-tauri/Cargo.lock', 'Cargo.lock') }}
+      # The cargo-installed CLI, not the npm one: Gradle calls the CLI back from app/src-tauri,
+      # where there is no package.json, and `cargo tauri` works from any folder.
+      - name: Tauri CLI
+        run: command -v cargo-tauri || cargo install tauri-cli --version '^2' --locked
+      - name: UI dependencies
+        working-directory: app/ui
+        run: npm ci
+      # gen/android is generated here until the phone UI lands; then it is committed (ADR-015).
+      - name: Generate the Android project
+        working-directory: app
+        run: cargo tauri android init --ci
+      - name: Build the debug APK
+        working-directory: app
+        run: cargo tauri android build --debug --apk --target aarch64 --ci
+      # Size check only (ADR-015 Decision 3): an unsigned release build, never uploaded or published.
+      - name: Release APK size (unsigned, arm64)
+        working-directory: app
+        run: |
+          cargo tauri android build --apk --target aarch64 --ci
+          find src-tauri/gen/android -name '*.apk' -exec ls -l {} \;

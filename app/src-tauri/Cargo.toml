@@ -5,21 +5,24 @@ edition = "2021"
 license = "MIT"
 description = "SprkNotes app shell (Tauri v2)"
 
+# Phones start from the library (src/lib.rs, ADR-015); the desktop app starts from src/main.rs.
+[lib]
+name = "sprknotes_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = ["tray-icon", "image-png"] }
 anyhow = "1"
-# A second launch focuses the running window instead of starting another copy.
-tauri-plugin-single-instance = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 sprk-pipeline = { path = "../../crates/sprk-pipeline" }
 sprk-assistant = { path = "../../crates/sprk-assistant" }
 sprk-asr = { path = "../../crates/sprk-asr" }
-sprk-audio = { path = "../../crates/sprk-audio", features = ["cpal-backend"] }
+sprk-audio = { path = "../../crates/sprk-audio" }
 sprk-config = { path = "../../crates/sprk-config" }
 sprk-context = { path = "../../crates/sprk-context" }
 sprk-handoff = { path = "../../crates/sprk-handoff" }
@@ -36,6 +39,12 @@ engine-shared = ["sprk-asr/sherpa-shared"]
 [lints.clippy]
 unwrap_used = "deny"
 expect_used = "deny"
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+# A second launch focuses the running window instead of starting another copy.
+tauri-plugin-single-instance = "2"
+# Desktop capture: WASAPI mic + loopback. Phones get their own mic backend (ADR-015).
+sprk-audio = { path = "../../crates/sprk-audio", features = ["cpal-backend"] }
 
 [target.'cfg(windows)'.dependencies]
 # WinHTTP: the model download uses the system proxy and certificate store (ADR-005).

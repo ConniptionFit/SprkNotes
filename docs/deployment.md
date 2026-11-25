@@ -85,6 +85,9 @@ powershell.exe -ExecutionPolicy Bypass -File .\Install-SprkModel.ps1 -Pack .\<id
 ```
 Exit codes: the app script returns the `msiexec` exit code (0 success, 3010 reboot requested). `Install-SprkModel.ps1` returns `sprkctl` codes (10 verify failed, 12 incompatible, 20 not elevated). Uninstall: `Install-SprkNotes.ps1 -Uninstall`. Everything logs under `%ProgramData%\SprkNotes`.
 
+## Android phones
+The Android app is in development and has no release yet. The planned path is a private app pushed by your MDM or managed Google Play, with the model pack pushed too or downloaded on the phone. See [Android](android.md#installing-on-a-managed-phone-planned).
+
 ## Models at scale
 - **Download model button (default on).** The light build gets its model from the Settings pane and checks for a newer one at launch (details in ADR-005). Allow https to the model host in your firewall, or run an internal mirror: publish `models-index.json` and the packs on an internal web server and set `ModelIndexUrl` to its https address. `ModelDownload=0` turns all model network use off; `ModelUpdateCheck=0` stops only the launch check. Use a `with-model` build or `Install-SprkModel.ps1` on locked-down PCs.
 - One default model can be bundled with the app, or shipped as a pack with `Install-SprkModel.ps1` (machine scope).

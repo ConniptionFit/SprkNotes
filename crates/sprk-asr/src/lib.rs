@@ -1,4 +1,5 @@
 //! Engine trait. The pipeline never branches on a specific engine or model.
+pub mod tune;
 pub mod wav;
 pub mod wer;
 
