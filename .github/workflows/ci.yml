@@ -14,11 +14,13 @@ jobs:
       - uses: actions/checkout@v4
       - name: Rust toolchain
         run: |
-          curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal -c clippy,rustfmt -t x86_64-pc-windows-msvc,aarch64-pc-windows-msvc
+          curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal -c clippy,rustfmt -t x86_64-pc-windows-msvc,aarch64-pc-windows-msvc,aarch64-linux-android
       - run: . "$HOME/.cargo/env" && cargo fmt --all --check
       - run: . "$HOME/.cargo/env" && cargo clippy --workspace --all-targets -- -D warnings
       - run: . "$HOME/.cargo/env" && cargo clippy --workspace --all-targets --target x86_64-pc-windows-msvc -- -D warnings
       - run: . "$HOME/.cargo/env" && cargo clippy --workspace --all-targets --target aarch64-pc-windows-msvc -- -D warnings
+      # Android phones (ADR-015): the shared crates must keep building for arm64 Android.
+      - run: . "$HOME/.cargo/env" && cargo clippy --workspace --all-targets --target aarch64-linux-android -- -D warnings
       - run: . "$HOME/.cargo/env" && cargo test --workspace
       - run: . "$HOME/.cargo/env" && cargo test -p sprk-assistant --features fake-engine
       - run: scripts/check-terms.sh

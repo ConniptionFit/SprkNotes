@@ -1,6 +1,6 @@
 # ADR-015: SprkNotes for Android (Samsung phones)
 
-Status: **proposed** (2026-11-25). The look waits on John's design picks; no Android code ships until then.
+Status: **proposed** (2026-11-25). John picked the look (Decision 6); accepted when this merges. No Android build is published without his yes.
 Related: ADR-001 (stack), ADR-003 (default model), ADR-005 (model download), ADR-014 (streams).
 
 ## Context
@@ -80,9 +80,15 @@ Android does not let an app capture another app's call audio (voice-call capture
 playback capture excludes voice communication). So a phone has **one** source: the microphone (built-in, wired or
 Bluetooth headset).
 - The source button reads **Mic** with the same device menu; there is no computer-sound button.
-- Labels follow rule 13: when unsure who spoke, **Others**. v1 offers John a choice (design pick): label every line
-  Others, or label turns Speaker 1, 2... with on-device speaker change detection. A later option is an opt-in voice
-  sample so the owner's lines read Me; that needs its own ADR (voiceprints are biometric data, kept on the phone only).
+- **No speaker labels on phones in v1** (John, 2026-11-25). With one mic and no second stream the app cannot
+  tell people apart reliably, so lines carry a time and no name: not Me, not Others, not Speaker 1. This is the
+  mobile reading of rule 13: when the app cannot know who spoke, it says nothing rather than guess. Transcript
+  files from a phone leave the speaker field empty.
+- **Person 1, 2 later, only if accurate.** On-device diarization exists (sherpa-onnx ships it for Android), but the
+  best open models still misattribute about 11 to 20% of speech on benchmark audio, and a phone on a table with
+  crosstalk will do worse. It is built as a hidden test, measured on real Galaxy audio, and turned on only when John
+  approves the numbers. An opt-in voice sample so the owner's lines read Me needs its own ADR (voiceprints are
+  biometric data, kept on the phone only).
 - Echo removal and bleed rules are skipped on mobile (there is no second stream to subtract).
 
 ## Decision 5: Android specifics
@@ -93,9 +99,20 @@ Bluetooth headset).
   Whether NinjaOne can push a private APK to Samsung phones is still unconfirmed; Knox/managed Play is the fallback.
 - App updates use the same signed manifest idea as ADR-011 only where the MDM does not handle updates.
 
+## Decision 6: the look (John's picks, 2026-11-25)
+Picked from four interactive mock-ups (A desktop twin, B bottom tabs, C control dock, D conversation):
+- **Layout D, conversation:** the transcript reads as message bubbles, newest at the bottom, with a slim bottom bar
+  holding the Mic button and device menu, the waveform, the timer, End and a round Start / Pause button. Library and
+  Settings sit behind icons in the top bar. Same Outfit font, palette and icons as the desktop app.
+- **Dark theme by default** on phones (System and Light stay in Settings).
+- **Waveform matches the desktop:** Nine bars by default and Rolling bars as a Settings choice, flat when there is
+  no sound, sharing the desktop setting key.
+- **No speaker labels** (Decision 4).
+
 ## Consequences
 - Moving session logic into `sprk-core` touches `main.rs`; done in small PRs with the Windows build green each time.
-- CI adds an Android job: `cargo check` for `aarch64-linux-android` and a debug APK build with the NDK. No release or
+- CI lints the whole workspace for `aarch64-linux-android` (in place now); a debug APK build with the NDK follows
+  with the app shell split. No release or
   signed APK is published without John's yes.
 - Not on phones in v1: tray, pop-out overlay, keyboard shortcut, Outlook/Teams naming, offer-to-start (Android hides
   other apps' mic use), Summarize hand-off (later via the share sheet).
@@ -103,4 +120,4 @@ Bluetooth headset).
 ## Open items
 1. Speed and RAM of both tiers on a real Galaxy (which models does Lifespark hand out?).
 2. NinjaOne private APK support, or managed Google Play.
-3. John's design picks (mock-ups) before any UI code.
+3. Accuracy bar for turning on Person 1, 2 (John decides on measured numbers).
