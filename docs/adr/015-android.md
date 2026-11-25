@@ -111,8 +111,8 @@ Picked from four interactive mock-ups (A desktop twin, B bottom tabs, C control 
 
 ## Consequences
 - Moving session logic into `sprk-core` touches `main.rs`; done in small PRs with the Windows build green each time.
-- CI lints the whole workspace for `aarch64-linux-android` (in place now); a debug APK build with the NDK follows
-  with the app shell split. No release or
+- CI lints the whole workspace for `aarch64-linux-android` and builds an arm64 debug APK (`android.yml`). Until the
+  phone UI lands, `gen/android` is generated in CI rather than committed. No release or
   signed APK is published without John's yes.
 - Not on phones in v1: tray, pop-out overlay, keyboard shortcut, Outlook/Teams naming, offer-to-start (Android hides
   other apps' mic use), Summarize hand-off (later via the share sheet).
