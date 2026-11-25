@@ -36,6 +36,8 @@ export interface Backend {
   micPromptAnswer(start: boolean): Promise<void>;
   /** Turn the question on or off, and set the apps (ids) it should not ask about. */
   setMicPrompt(enabled: boolean, skipped: string[]): Promise<void>;
+  /** The background shortcut: on or off, and its keys. Rejects with "invalid", "taken", "failed" or "unsupported". */
+  setHotkey(enabled: boolean, keys: string): Promise<string>;
   /** Tell the engine which caption sources are wanted, so unused ones cost nothing. */
   setCaptions(on: boolean, me: boolean): Promise<void>;
   /** Swap the tray and window icons between the current brand and Throwback Mode. */
@@ -122,6 +124,7 @@ async function tauri(): Promise<Backend> {
     onMicPrompt: (cb) => listen<unknown>("mic-prompt", (e) => cb(asAsk(e.payload))),
     micPromptAnswer: (start) => invoke("mic_prompt_answer", { start }),
     setMicPrompt: (enabled, skipped) => invoke("set_mic_prompt", { enabled, skipped }),
+    setHotkey: (enabled, keys) => invoke<string>("set_hotkey", { enabled, keys }),
     setCaptions: (on, me) => invoke("set_captions", { on, me }),
     setBrand: (throwback) => invoke("set_brand", { throwback }),
     onCaption: (cb) => listen<Caption>("caption", (e) => cb(e.payload)),
@@ -361,6 +364,7 @@ export function mockBackend(): Backend {
     onMicPrompt: async () => () => {},
     micPromptAnswer: async () => {},
     setMicPrompt: async () => {},
+    setHotkey: async (enabled, keys) => (enabled ? keys : ""),
     setCaptions: async () => {},
     setBrand: async () => {},
     onCaption: async (cb) => ((capCb = cb), () => {}),

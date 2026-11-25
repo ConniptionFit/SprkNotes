@@ -12,6 +12,8 @@
   import { captionFlags, prefs, setPref } from "./lib/prefs.svelte";
   import Ask from "./lib/Ask.svelte";
   import { Partials, Rows, type Row } from "./lib/live";
+  import { hotkeyProblem } from "./lib/hotkey";
+  import { hotkeyState } from "./lib/hotkeyState.svelte";
 
   let api = $state.raw<Backend | undefined>();
   let name = $state("");
@@ -51,6 +53,16 @@
   // Ask the engine for partial captions whenever either window wants them.
   $effect(() => {
     api?.setCaptions(...captionFlags()).catch(() => {});
+  });
+  // The background shortcut (SPEC 8.6). Only this window registers it.
+  $effect(() => {
+    const on = prefs.hotkeyOn;
+    const keys = prefs.hotkeyKeys;
+    if (!api) return;
+    api
+      .setHotkey(on, keys)
+      .then(() => (hotkeyState.problem = ""))
+      .catch((e) => (hotkeyState.problem = hotkeyProblem(e)));
   });
   // "Start a transcript?" settings (SPEC 8.3a): on or off, and the apps not to ask about.
   $effect(() => {

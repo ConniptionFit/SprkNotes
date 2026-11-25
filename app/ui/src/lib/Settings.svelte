@@ -6,6 +6,8 @@
   import AppUpdates from "./AppUpdates.svelte";
   import DevicePicker from "./DevicePicker.svelte";
   import { prefs, setPref, type CaptionWho, type CaptionDelay, type Theme } from "./prefs.svelte";
+  import { comboFromEvent } from "./hotkey";
+  import { hotkeyState } from "./hotkeyState.svelte";
 
   let {
     model,
@@ -27,8 +29,25 @@
     onback: () => void;
   } = $props();
 
+  // Picking the shortcut: the button listens for the next combination; Escape cancels.
+  let capturing = $state(false);
   function key(e: KeyboardEvent) {
+    if (capturing) return;
     if (e.key === "Escape") onback();
+  }
+  function captureKey(e: KeyboardEvent) {
+    if (!capturing) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.key === "Escape") {
+      capturing = false;
+      return;
+    }
+    const combo = comboFromEvent(e);
+    if (combo) {
+      capturing = false;
+      setPref("hotkeyKeys", combo);
+    }
   }
 </script>
 
@@ -209,6 +228,49 @@
 
   <div class="panel">
     <div class="stack">
+      <div class="row">
+        <div class="what">
+          <h3>Keyboard shortcut</h3>
+          <p class="help">
+            Start a transcript from any app, and pause or resume it, with one key combination. Off until you
+            turn it on.
+          </p>
+        </div>
+        <label class="switch">
+          <input
+            type="checkbox"
+            role="switch"
+            checked={prefs.hotkeyOn}
+            onchange={(e) => setPref("hotkeyOn", e.currentTarget.checked)}
+          />
+          <span class="track" aria-hidden="true"></span>
+          <span class="sr-only">Use a keyboard shortcut to start, pause and resume</span>
+        </label>
+      </div>
+      <div class="row">
+        <div class="what">
+          <p class="plain">Keys</p>
+          <p class="help">
+            {#if capturing}Press the new combination, with Ctrl, Alt or Win. Esc cancels.{:else}Click to change.{/if}
+          </p>
+          {#if prefs.hotkeyOn && hotkeyState.problem}
+            <p class="problem" role="alert">{hotkeyState.problem}</p>
+          {/if}
+        </div>
+        <button
+          class="keys"
+          class:capturing
+          aria-label={capturing ? "Press the new shortcut" : `Shortcut: ${prefs.hotkeyKeys}. Click to change`}
+          onclick={() => (capturing = !capturing)}
+          onkeydown={captureKey}
+          onblur={() => (capturing = false)}
+        >{capturing ? "Press keys" : prefs.hotkeyKeys}</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="stack">
       <h3>Misc</h3>
     <div class="row">
       <div class="what">
@@ -268,4 +330,12 @@
   }
   .small:hover { background: var(--surface-2); }
   .small:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .keys {
+    min-width: 8.5rem; padding: 0.4rem 0.9rem; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface-2); color: var(--text); font: inherit; font-weight: 600; cursor: pointer;
+    font-variant-numeric: tabular-nums;
+  }
+  .keys.capturing { border-color: var(--accent); color: var(--accent); }
+  .keys:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .problem { margin: 0; color: var(--warn); font-size: 0.9rem; }
 </style>

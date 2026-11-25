@@ -36,6 +36,9 @@ type Prefs = {
   /** Offer to start when another app uses the microphone (SPEC 8.3a), and the apps not to ask about. */
   micPromptOn: boolean;
   micPromptSkip: SkippedApp[];
+  /** A keyboard shortcut that starts, pauses and resumes from anywhere (SPEC 8.6). Off by default. */
+  hotkeyOn: boolean;
+  hotkeyKeys: string;
 };
 export type SkippedApp = { id: string; name: string };
 
@@ -46,7 +49,7 @@ export const LINE_TEXT = [12, 13, 14, 15, 17, 19, 22, 26];
 export const CAPTION_LIMITS = { minW: 260, maxW: 900, minH: 64, maxH: 480 };
 
 const KEY = "sprknotes.prefs";
-const defaults: Prefs = { theme: "system", throwback: false, captionsOn: false, captionsWho: "others", captionDelay: "steady", captionW: 420, captionH: 118, captionText: 2, liveLine: true, lineText: 3, assistantOn: false, assistantTier: "light", assistantFeatures: ["title", "recap", "actions", "ask"], micDevice: null, systemDevice: null, micOn: true, systemOn: true, micPromptOn: true, micPromptSkip: [] };
+const defaults: Prefs = { theme: "system", throwback: false, captionsOn: false, captionsWho: "others", captionDelay: "steady", captionW: 420, captionH: 118, captionText: 2, liveLine: true, lineText: 3, assistantOn: false, assistantTier: "light", assistantFeatures: ["title", "recap", "actions", "ask"], micDevice: null, systemDevice: null, micOn: true, systemOn: true, micPromptOn: true, micPromptSkip: [], hotkeyOn: false, hotkeyKeys: "Ctrl+Alt+S" };
 
 const clamp = (n: unknown, lo: number, hi: number, fallback: number) =>
   typeof n === "number" && Number.isFinite(n) ? Math.min(hi, Math.max(lo, Math.round(n))) : fallback;
@@ -71,6 +74,8 @@ function load(): Prefs {
     p.micPromptSkip = Array.isArray(p.micPromptSkip)
       ? p.micPromptSkip.filter((a) => a && typeof a.id === "string" && a.id && typeof a.name === "string")
       : [];
+    if (typeof p.hotkeyOn !== "boolean") p.hotkeyOn = false;
+    if (typeof p.hotkeyKeys !== "string" || !p.hotkeyKeys) p.hotkeyKeys = defaults.hotkeyKeys;
     return p;
   } catch {
     return { ...defaults };

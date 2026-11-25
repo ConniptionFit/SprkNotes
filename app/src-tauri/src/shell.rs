@@ -324,6 +324,16 @@ fn build_menu(app: &AppHandle, status: &str) -> tauri::Result<Menu<tauri::Wry>> 
 }
 
 /// Run a tray action off the UI thread (starting a session loads the model).
+/// Session state as the UI sees it, for the background shortcut.
+pub fn status(app: &AppHandle) -> String {
+    status_of(app)
+}
+
+/// Run a tray action from elsewhere (the background shortcut): "start", "pause", "resume", "end".
+pub fn run_action(app: &AppHandle, id: &str) {
+    act(app, id);
+}
+
 fn act(app: &AppHandle, id: &str) {
     match id {
         "open" => open_main(app),

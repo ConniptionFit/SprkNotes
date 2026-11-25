@@ -390,6 +390,14 @@ Scheduled Teams and Zoom meetings live on the user's Outlook calendar, so one lo
 - Appearance: System, Light or Dark (the overlay stays dark unless Light is chosen).
 - Live captions: on or off, and Others only (default) or Others and Me in the pop-out. The transcript window's live line always shows both.
 - Startup: launch at sign-in, start minimized to tray.
+- When another app uses the microphone: on (default) or off, and the apps skipped with **Don't ask**, each with **Ask again** (8.3a).
+- Keyboard shortcut: off (default) or on, and its keys (8.6).
+
+### 8.6 Keyboard shortcut
+- One system-wide key combination, off by default. Settings turns it on and sets the keys (default Ctrl+Alt+S): click the keys, press the new combination, Esc cancels.
+- A press starts a transcript when none runs (the same as the tray's Start), pauses a running one and resumes a paused one. Presses less than 0.75 s apart count once; holding the keys does not repeat.
+- A combination needs Ctrl, Alt or Win with a letter, a digit, F1 to F24 or Space, so it never takes a key typed on its own or with Shift.
+- Windows registers it (RegisterHotKey); if another app holds the combination, Settings says so and asks for other keys, and nothing else changes. It is kept in the app's settings and set again at each launch. Other platforms do not offer it.
 
 ---
 

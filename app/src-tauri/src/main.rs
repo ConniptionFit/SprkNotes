@@ -2,6 +2,7 @@
 
 mod assistant;
 mod clock;
+mod hotkey;
 mod library;
 mod mic_watch;
 mod model_download;
@@ -510,6 +511,13 @@ fn mic_prompt_pending(app: AppHandle) -> shell::MicAsk {
     shell::mic_prompt_state(&app)
 }
 
+/// The background shortcut (SPEC 8.6): on or off, and its keys ("Ctrl+Alt+S"). Returns the keys
+/// as registered; errors with "invalid", "taken", "failed" or "unsupported".
+#[tauri::command]
+fn set_hotkey(app: AppHandle, enabled: bool, keys: String) -> Result<String, String> {
+    hotkey::set(&app, enabled, &keys)
+}
+
 /// Settings for "Start a transcript?": on or off, and the apps not to ask about.
 #[tauri::command]
 fn set_mic_prompt(app: AppHandle, enabled: bool, skipped: Vec<String>) {
@@ -600,6 +608,7 @@ fn main() -> anyhow::Result<()> {
             mic_prompt_pending,
             mic_prompt_answer,
             set_mic_prompt,
+            set_hotkey,
             set_brand,
             open_app,
             model_status,
