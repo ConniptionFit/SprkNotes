@@ -37,18 +37,23 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
+            ~/.cargo/bin/cargo-tauri
             app/src-tauri/target
           key: android-${{ hashFiles('app/src-tauri/Cargo.lock', 'Cargo.lock') }}
+      # The cargo-installed CLI, not the npm one: Gradle calls the CLI back from app/src-tauri,
+      # where there is no package.json, and `cargo tauri` works from any folder.
+      - name: Tauri CLI
+        run: command -v cargo-tauri || cargo install tauri-cli --version '^2' --locked
       - name: UI dependencies
         working-directory: app/ui
         run: npm ci
       # gen/android is generated here until the phone UI lands; then it is committed (ADR-015).
       - name: Generate the Android project
         working-directory: app
-        run: ui/node_modules/.bin/tauri android init --ci
+        run: cargo tauri android init --ci
       - name: Build the debug APK
         working-directory: app
-        run: ui/node_modules/.bin/tauri android build --debug --apk --target aarch64 --ci
+        run: cargo tauri android build --debug --apk --target aarch64 --ci
       - name: APK size
         working-directory: app
         run: find src-tauri/gen/android -name '*.apk' -exec ls -l {} \;
