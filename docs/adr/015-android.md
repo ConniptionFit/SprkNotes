@@ -108,8 +108,8 @@ Picked from four interactive mock-ups (A desktop twin, B bottom tabs, C control 
   Settings sit behind icons in the top bar. Same Outfit font, palette and icons as the desktop app.
 - **Dark theme by default** on phones (System and Light stay in Settings).
 - **Sound meter matches the desktop exactly:** the same small meter inside the Mic button (shared `waveform.ts`),
-  flat when there is no sound. Nine bars by default, with Line wave (one smooth stroke that swells with the voice) as
-  the other Settings choice; Rolling bars is dropped on both apps. No large or scrolling waveform strip: the screen
+  flat when there is no sound. Line wave only (one smooth stroke that swells with the voice), with no Settings
+  choice: Nine bars and Rolling bars are dropped on both apps. No large or scrolling waveform strip: the screen
   moves as little as possible (John, 2026-11-25).
 - **Settings uses the desktop gear icon**, not a sun (a sun reads as theme or brightness) (John, 2026-11-25).
 - **No speaker labels** (Decision 4).

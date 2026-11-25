@@ -8,7 +8,6 @@
   import Segmented from "../Segmented.svelte";
   import SourceButton from "../SourceButton.svelte";
   import type { Line, Phase, Status } from "../types";
-  import type { WaveStyle } from "../waveform";
   import { CLOCK_START, elapsed, hms, hold, run, type Clock } from "./clock";
 
   let api: Backend | null = null;
@@ -61,6 +60,9 @@
   const offs: (() => void)[] = [];
   let ticker: ReturnType<typeof setInterval> | undefined;
   onMount(async () => {
+    // The phone's sound meter is the Line wave, with no other style (John, 2026-11-25). Not stored,
+    // so it never overrides a choice the desktop may still offer.
+    prefs.waveStyle = "line";
     const b = await backend;
     api = b;
     b.setDevice("mic", prefs.micDevice).catch(() => {});
@@ -130,10 +132,6 @@
     { value: "light", text: "Light" },
     { value: "dark", text: "Dark" },
   ];
-  const meters: { value: WaveStyle; text: string }[] = [
-    { value: "bars", text: "Nine bars" },
-    { value: "line", text: "Line wave" },
-  ];
 </script>
 
 <div class="phone">
@@ -198,7 +196,6 @@
       <p class="sec">Appearance</p>
       <div class="card">
         <div class="set"><span class="lbl">Theme</span><Segmented name="theme" label="Theme" options={themes} value={prefs.theme} onchange={(v) => setPref("theme", v)} /></div>
-        <div class="set"><span class="lbl">Sound meter</span><Segmented name="meter" label="Sound meter" options={meters} value={prefs.waveStyle} onchange={(v) => setPref("waveStyle", v)} /></div>
       </div>
       <p class="sec">Transcripts</p>
       <div class="card">
