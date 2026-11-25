@@ -28,6 +28,11 @@ export interface Backend {
   miniFlipped(): Promise<boolean>;
   /** Overlay only: the host moved the pill to the other half of the screen. */
   onMiniFlip(cb: (flipped: boolean) => void): Promise<() => void>;
+  /** "Start a transcript?" while another app holds the microphone and the app is in the
+   * background (SPEC 8.3a): whether it is up now, changes to it, and the answer. */
+  micPromptPending(): Promise<boolean>;
+  onMicPrompt(cb: (up: boolean) => void): Promise<() => void>;
+  micPromptAnswer(start: boolean): Promise<void>;
   /** Tell the engine which caption sources are wanted, so unused ones cost nothing. */
   setCaptions(on: boolean, me: boolean): Promise<void>;
   /** Swap the tray and window icons between the current brand and Throwback Mode. */
@@ -108,6 +113,9 @@ async function tauri(): Promise<Backend> {
     miniResize: (width, height, flipped) => invoke("mini_resize", { width, height, flipped }),
     miniFlipped: () => invoke<boolean>("mini_flipped"),
     onMiniFlip: (cb) => listen<boolean>("mini-flip", (e) => cb(e.payload)),
+    micPromptPending: () => invoke<boolean>("mic_prompt_pending"),
+    onMicPrompt: (cb) => listen<boolean>("mic-prompt", (e) => cb(e.payload)),
+    micPromptAnswer: (start) => invoke("mic_prompt_answer", { start }),
     setCaptions: (on, me) => invoke("set_captions", { on, me }),
     setBrand: (throwback) => invoke("set_brand", { throwback }),
     onCaption: (cb) => listen<Caption>("caption", (e) => cb(e.payload)),
@@ -338,6 +346,10 @@ export function mockBackend(): Backend {
     // "?flip" lets the browser preview show the drawer above the pill.
     miniFlipped: async () => typeof location !== "undefined" && location.search.includes("flip"),
     onMiniFlip: async () => () => {},
+    // Preview the question with ?mic in the overlay's address.
+    micPromptPending: async () => typeof location !== "undefined" && location.search.includes("mic"),
+    onMicPrompt: async () => () => {},
+    micPromptAnswer: async () => {},
     setCaptions: async () => {},
     setBrand: async () => {},
     onCaption: async (cb) => ((capCb = cb), () => {}),

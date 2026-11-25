@@ -366,6 +366,12 @@ Scheduled Teams and Zoom meetings live on the user's Outlook calendar, so one lo
 - Close hides the main window to the system tray and the session keeps running; if the desktop has no tray, Close minimizes instead. The tray icon mirrors state with the same actions. On Linux the app runs through XWayland by default so the overlay can be positioned and stay on top (set `SPRKNOTES_WAYLAND=1` to opt out).
 - Optional global hotkeys: start/pause and open app (configurable, off by default).
 
+### 8.3a Offer to start when another app uses the microphone
+- While SprkNotes is in the background (main window minimized or closed to the tray) and no session is running, it checks every 2 s whether another app holds a microphone, using the per-user Windows microphone privacy data (`CapabilityAccessManager\ConsentStore\microphone`, the data behind the taskbar microphone icon). Read-only; SprkNotes' own entries are skipped, and an entry that started more than 12 hours ago with no stop is treated as stale.
+- After 5 s of continuous use the overlay appears with "Your microphone is in use. Start a transcript?" and two buttons: **Start** (begins a session; the overlay stays as its controller) and **Dismiss**.
+- One question per hold: answered or dismissed, it is not asked again until the other app lets go of the microphone. A hold during which a session ran counts as answered. The question is taken down if the other app lets go first, a session starts, or the main window comes back.
+- Which app holds the microphone is never shown, stored or logged.
+
 ### 8.4 Library
 - List of transcripts (newest first): name, date, duration, folder. Search by name and full text.
 - Folder tree for user subfolders: create, rename, move transcripts (drag or menu).

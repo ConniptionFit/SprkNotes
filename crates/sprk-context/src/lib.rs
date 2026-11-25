@@ -2,9 +2,12 @@
 //! they never appear in logs or error strings.
 pub mod activity;
 pub mod labeling;
+pub mod mic_use;
 pub mod sources;
 #[cfg(windows)]
 pub mod win;
+#[cfg(windows)]
+pub mod win_mic;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Window {

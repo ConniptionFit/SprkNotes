@@ -3,6 +3,7 @@
 mod assistant;
 mod clock;
 mod library;
+mod mic_watch;
 mod model_download;
 mod models;
 #[cfg(windows)]
@@ -13,8 +14,8 @@ mod updater;
 
 use serde::Serialize;
 use sprk_audio::cpal_backend::CpalBackend;
-use sprk_audio::live::{Preferred, SharedChoice};
 use sprk_audio::live::Backend;
+use sprk_audio::live::{Preferred, SharedChoice};
 use sprk_audio::Source;
 use sprk_pipeline::commit::Config;
 use sprk_pipeline::host::{Events, Host, StartParams, UiLine, UiStatus};
@@ -465,10 +466,11 @@ fn end_session_blocking(state: &AppState) -> Result<(), String> {
 async fn end_session(app: AppHandle) -> Result<(), String> {
     emit_phase(&app, "ending", None);
     let a = app.clone();
-    let r = tauri::async_runtime::spawn_blocking(move || end_session_blocking(&a.state::<AppState>()))
-        .await
-        .map_err(|e| e.to_string())
-        .and_then(|r| r);
+    let r =
+        tauri::async_runtime::spawn_blocking(move || end_session_blocking(&a.state::<AppState>()))
+            .await
+            .map_err(|e| e.to_string())
+            .and_then(|r| r);
     emit_phase(&app, "idle", None);
     r
 }
@@ -496,6 +498,18 @@ fn set_brand(app: AppHandle, throwback: bool) {
 #[tauri::command]
 fn set_captions(app: AppHandle, on: bool, me: bool) {
     shell::set_captions(&app, on, me);
+}
+
+/// Whether "Start a transcript?" is up in the mini (SPEC 8.3a).
+#[tauri::command]
+fn mic_prompt_pending(app: AppHandle) -> bool {
+    shell::mic_prompt_up(&app)
+}
+
+/// The answer to "Start a transcript?": Start begins a session, Dismiss takes it down.
+#[tauri::command]
+fn mic_prompt_answer(app: AppHandle, start: bool) {
+    shell::answer_mic_prompt(&app, start);
 }
 
 /// Bring the main window back (also hides the mini controller).
@@ -552,6 +566,7 @@ fn main() -> anyhow::Result<()> {
             model_download::launch_check(app.handle().clone(), policy());
             updater::launch_check(app.handle().clone(), policy());
             app.state::<assistant::Assistant>().start_idle_timer();
+            mic_watch::start(app.handle().clone());
             Ok(())
         })
         .on_window_event(|window, event| match window.label() {
@@ -572,6 +587,8 @@ fn main() -> anyhow::Result<()> {
             mini_resize,
             mini_flipped,
             set_captions,
+            mic_prompt_pending,
+            mic_prompt_answer,
             set_brand,
             open_app,
             model_status,
