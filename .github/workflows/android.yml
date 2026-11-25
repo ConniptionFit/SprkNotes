@@ -1,6 +1,6 @@
 name: Android
-# Debug build of the phone app (ADR-015): arm64 only, unsigned debug key, nothing uploaded or
-# published. It proves the shared crates and the app shell build for Android on every change.
+# Debug build of the phone app (ADR-015) plus an unsigned release build to measure the install
+# size: arm64 only, nothing uploaded or published. It proves the shared crates and the app shell build for Android on every change.
 on:
   push:
     branches: [main]
@@ -54,6 +54,9 @@ jobs:
       - name: Build the debug APK
         working-directory: app
         run: cargo tauri android build --debug --apk --target aarch64 --ci
-      - name: APK size
+      # Size check only (ADR-015 Decision 3): an unsigned release build, never uploaded or published.
+      - name: Release APK size (unsigned, arm64)
         working-directory: app
-        run: find src-tauri/gen/android -name '*.apk' -exec ls -l {} \;
+        run: |
+          cargo tauri android build --apk --target aarch64 --ci
+          find src-tauri/gen/android -name '*.apk' -exec ls -l {} \;
