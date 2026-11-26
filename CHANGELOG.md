@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Ask Sprk download sizes in Settings now match the published models: about 0.5 GB for Titles only, 1.3 GB for Light and 2.7 GB for Standard (was 0.6 and 1.5 GB). All three sizes now have a download.
 - Line wave is the sound meter: the Me and Others buttons now always show the smooth line that swells with the voice. Nine bars is retired and its code archived (see docs/archive/nine-bars.md), so the **Sound meter** setting is gone, and so is the admin key `WaveformStyle`; a saved choice or a policy that still sets it is ignored. Needs a look on the laptop.
 - Nine bars fix (Nine bars is now retired, see above): after someone stops talking, every bar now walks down to the flat line (before, the outer bars could stay raised until the next sound), and the bars and gaps are drawn on whole screen pixels so the spacing is even at 100, 125, 150 or 200 percent. Needs a look on the laptop.
 - Smoother waveform: the Me and Others meters have nine bars instead of five, glide between levels instead of jumping, and fall to a flat line when there is no sound (room hiss no longer holds them a little raised). Needs a look on the laptop.
