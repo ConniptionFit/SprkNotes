@@ -311,6 +311,13 @@ Exports are generated on demand from the `.md` file plus the JSONL sidecar.
 ### 6.5 Crash dumps
 - Disable full/heap Windows Error Reporting dumps for the app (memory may hold audio or text). Panics log a redacted message only.
 
+### 6.6 Retention (keep transcripts for)
+- Settings, **Keep transcripts for**: Forever (default), 30 days, 90 days or 1 year. Kept in the app's `settings.json` (10.1). Admin policy `TranscriptRetentionDays` (10.2) sets and locks it: any whole number of days up to 3650, `0` meaning forever; it can also be an installer starting value. Order: policy, then the person's choice, then the starting value, then Forever.
+- When the app starts (about 20 s in, once the window is up) and once a day while it runs (the wall clock is checked every 10 minutes, so a PC that slept still gets its daily pass), every transcript under the transcripts root whose age is past the setting is removed with its sidecar: to the Recycle Bin when it can take the file, otherwise deleted for good, without a prompt (the background pass has no one to ask). Summaries and exports next to it stay, as with a Library delete.
+- Age counts in whole local days from the day the transcript last ended (`end`, so a continued transcript counts from its newest session), else the day it started, else its `date`. With 30 days, a transcript that ended on the 1st is kept through the 31st. One without a readable date, or dated in the future, is kept.
+- Never touched: the running session's file (the session lock is held for the whole pass, so no session can start on or continue a transcript while it is being removed), the transcript open in the Library, and any transcript still marked `status: in-progress` (being written, or waiting for crash recovery, 6.4).
+- A change in Settings applies at the next start or daily pass, never at once, so a slip of the mouse can be put back first. After a pass that removed something the window shows one notice with the count; no names, titles or paths are logged or shown.
+
 ---
 
 ## 7. Calendar and meeting integration: Outlook, Teams, Zoom (optional, off by default)
@@ -389,6 +396,7 @@ Scheduled Teams and Zoom meetings live on the user's Outlook calendar, so one lo
 - Outlook: provider, context prompt behavior (Ask / Always / Never).
 - Context: detect audio sources (on/off, merge window), Teams call context (on/off, poll interval), name 1:1 speakers (on/off), excluded apps/title patterns.
 - Files: transcripts root, default export format.
+- Keep transcripts for: Forever (default), 30 days, 90 days or 1 year (6.6). Read-only with a quiet line ("Your organization keeps transcripts for 90 days.") when policy sets it.
 - AI handoff: show Claude button, show Copilot button, edit prompt template.
 - Models (16.7): active model, installed models, Import, Switch, Roll back. Locked with a "Managed by your organization" note when policy pins a model.
 - Appearance: System, Light or Dark (the overlay stays dark unless Light is chosen).
@@ -465,7 +473,7 @@ Admin values win over user settings and lock the matching UI control. Sources, s
 - `HKCU\Software\Policies\SprkNotes` (user registry).
 - Values may also arrive packed in one string value named `Settings` (`Key=Value;Key=Value`, `|` between the items of a list), which is what the MSI switches `POLICY` and `DEFAULTS` write (10.2a). A separate value of the same name wins over the packed one.
 - Path values (`TranscriptsRoot`, `PromptTemplatePath`) are expanded per user at runtime (6.1).
-- Keys: `TranscriptsRoot`, `CalendarProvider` (`com`/`off`), `ContextPrompt`, `SummarizeEnabled` (0 removes Summarize, 9), `ShowClaudeHandoff`, `ShowCopilotHandoff`, `CopilotTarget`, `PromptTemplatePath`, `FillerRemoval`, `CommitDelaySeconds`.
+- Keys: `TranscriptsRoot`, `TranscriptRetentionDays` (0 to 3650, 0 keeps forever, 6.6), `CalendarProvider` (`com`/`off`), `ContextPrompt`, `SummarizeEnabled` (0 removes Summarize, 9), `ShowClaudeHandoff`, `ShowCopilotHandoff`, `CopilotTarget`, `PromptTemplatePath`, `FillerRemoval`, `CommitDelaySeconds`.
 - Model keys (section 16): `PinnedModel` (`id@version`), `AllowUserModels` (0/1), `AllowedModelHashes` (multi-string, SHA-256 of `model.json`), `RequireSignedModels` (0/1; forced on from 1.0), `ModelPublicKeys` (multi-string, OpenSSH `allowed_signers` lines for Ed25519 keys), `KeepModelVersions` (default 2).
 - Context keys (sections 18, 19): `AudioSourceDetection` (0/1), `AudioMergeWindowSeconds`, `CallMergeWindowSeconds`, `AudioSourceExcludePatterns` (multi-string: process names or title regexes), `CallContext` (0/1), `CallPollSeconds`, `NameOneToOneSpeakers` (0/1), `TeamsLocalApi` (0/1, default 1: probed silently at session start).
 
@@ -474,7 +482,7 @@ An offline page in the repository (`tools/admin-form/index.html`, no network use
 - **Lock script** (PowerShell, run as SYSTEM). The admin picks where it writes: the registry (`HKLM\Software\Policies\SprkNotes`, typed string, DWORD and multi-string values through the 64-bit view; by default it replaces all SprkNotes registry policy, so it can run again safely), the file (`%ProgramData%\SprkNotes\policy.json`, always written whole, starting values included as unlocked), or both (the registry wins). For the file it first makes Administrators the owner of the folder and sets a protected access list (SYSTEM and Administrators full control, Users read and execute, nothing inherited), then writes the file as UTF-8 and gives it the same access list. Users cannot change either, so this locks even when SprkNotes is installed per user.
 - **User install script** (PowerShell, run as the signed-in user, for example a NinjaOne self-service item): finds the newest release on the chosen channel (or a pinned tag) on GitHub, or an MSI in a folder or share, checks the SHA-256 against the release's `SHA256SUMS.txt`, and installs per user with the starting values in `DEFAULTS`. It refuses to run as SYSTEM.
 - **Per-machine line** (`msiexec ... ALLUSERS=1 POLICY="..." DEFAULTS="..."`) for Intune, SCCM or GPO.
-Starting values are possible for settings with a control in the window: `TranscriptsRoot`, the update settings, `AssistantEnabled` and the window preferences (10.2b). Everything else can only be locked. Upgrades keep `POLICY` and `DEFAULTS`. `packaging/admx` has a Group Policy template for the update settings, `TranscriptsRoot`, `SummarizeEnabled` and `AssistantEnabled`.
+Starting values are possible for settings with a control in the window: `TranscriptsRoot`, `TranscriptRetentionDays`, the update settings, `AssistantEnabled` and the window preferences (10.2b). Everything else can only be locked. Upgrades keep `POLICY` and `DEFAULTS`. `packaging/admx` has a Group Policy template for the update settings, `TranscriptsRoot`, `TranscriptRetentionDays`, `SummarizeEnabled` and `AssistantEnabled`.
 
 ### 10.2b Managed window preferences
 `UI_KEYS` are preferences the window keeps (`Theme`, `ThrowbackMode`, `LiveCaptions`, `LiveLine`, `CaptionDelay`, `CaptionSpeakers`, `MicPrompt`, `Hotkey`, `HotkeyKeys`), plus `AssistantEnabled`. The app hands the window their raw locked and starting values from every source above; the window drops values that don't fit (an unknown theme, a shortcut without Ctrl, Alt or Win).
@@ -521,6 +529,7 @@ One release = one version = all artifacts, built by `scripts/release.ps1` from t
 - [ ] WER heap dumps disabled for the app.
 - [ ] Tauri CSP strict, no remote content, capabilities minimal per window.
 - [ ] File access scoped to transcripts root, settings and models.
+- [ ] Retention (6.6): with `TranscriptRetentionDays` set, transcripts past it leave the folder within a day; the running and the open transcript never do.
 - [ ] Third-party licenses collected into `THIRD_PARTY_NOTICES.md`.
 - [ ] Repo scan for secrets, IDs and real names before each push.
 - [ ] Model packs: hashes verified on every load; signature required from 1.0 (pilot: hash allow-list); packs never execute code; zip extraction blocks path traversal and size bombs.

@@ -114,6 +114,7 @@ With one app installed it opens that one (Claude gets the file; for Copilot the 
 ![Settings](screenshots/settings-full-light.png)
 
 - **Transcription model:** status, **Download model**, **Check for updates**.
+- **Keep transcripts for:** Forever (default), 30 days, 90 days or 1 year. Older transcripts go to the Recycle Bin at start and once a day; open or running ones are never touched. Admins can lock it (`TranscriptRetentionDays`).
 - **Appearance:** System, Light or Dark.
 - **Misc:** Throwback Mode.
 - **Live captions:** captions on the overlay, the live line in the main window, **Live text delay** (Fast, Steady, Smoothest) and whose words (Others only or Others and Me).

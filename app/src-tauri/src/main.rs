@@ -10,6 +10,7 @@ mod models;
 #[cfg(windows)]
 mod net;
 mod net_unix;
+mod retention;
 mod save_location;
 mod shell;
 mod updater;
@@ -33,6 +34,8 @@ struct AppState {
     /// Sources the user switched off ([mic, system]). Kept between sessions so a stream turned
     /// off before Start stays off when the session begins (it used to start with both on).
     sources_off: Mutex<[bool; 2]>,
+    /// The transcript open in the Library, which retention (SPEC 6.6) leaves alone.
+    viewing: Mutex<Option<PathBuf>>,
 }
 
 /// Payload shapes the UI expects (app/ui/src/lib/types.ts).
@@ -722,6 +725,7 @@ fn main() -> anyhow::Result<()> {
             updater::launch_check(app.handle().clone(), policy());
             app.state::<assistant::Assistant>().start_idle_timer();
             mic_watch::start(app.handle().clone());
+            retention::start(app.handle().clone());
             Ok(())
         })
         .on_window_event(|window, event| match window.label() {
@@ -762,6 +766,8 @@ fn main() -> anyhow::Result<()> {
             save_location::save_location_status,
             managed_prefs,
             save_location::save_location_set,
+            retention::retention_status,
+            retention::retention_set,
             library::library_open_folder,
             continue_session,
             assistant::assistant_status,
@@ -770,6 +776,7 @@ fn main() -> anyhow::Result<()> {
             assistant::assistant_run,
             library::library_list,
             library::library_open,
+            library::library_close,
             library::library_reveal,
             library::recovery_scan,
             library::recovery_mark,

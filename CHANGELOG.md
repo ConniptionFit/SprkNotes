@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Keep transcripts for: Settings has a new choice, **Keep transcripts for**: Forever (the default, nothing changes), 30 days, 90 days or 1 year. Older transcripts go to the Recycle Bin when SprkNotes starts and once a day (or are deleted if the Recycle Bin can't take them). A transcript that is open in the Library or still being written is never touched, and a change applies at the next start, so you can undo a slip first. Your organization can set and lock it with the new admin setting `TranscriptRetentionDays` (0 keeps transcripts forever); Settings then says so. Needs a look on the laptop.
 - Line wave is the sound meter: the Me and Others buttons now always show the smooth line that swells with the voice. Nine bars is retired and its code archived (see docs/archive/nine-bars.md), so the **Sound meter** setting is gone, and so is the admin key `WaveformStyle`; a saved choice or a policy that still sets it is ignored. Needs a look on the laptop.
 - Nine bars fix (Nine bars is now retired, see above): after someone stops talking, every bar now walks down to the flat line (before, the outer bars could stay raised until the next sound), and the bars and gaps are drawn on whole screen pixels so the spacing is even at 100, 125, 150 or 200 percent. Needs a look on the laptop.
 - Smoother waveform: the Me and Others meters have nine bars instead of five, glide between levels instead of jumping, and fall to a flat line when there is no sound (room hiss no longer holds them a little raised). Needs a look on the laptop.

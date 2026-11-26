@@ -13,6 +13,7 @@
   import Ask from "./lib/Ask.svelte";
   import { Partials, Rows, type Row } from "./lib/live";
   import { hotkeyProblem } from "./lib/hotkey";
+  import { retentionText } from "./lib/retention";
   import { hotkeyState } from "./lib/hotkeyState.svelte";
 
   let api = $state.raw<Backend | undefined>();
@@ -116,6 +117,13 @@
       offs.push(await b.onStatus((s) => (status = s)));
       offs.push(await b.onPhase((p) => (phase = p)));
       offs.push(await b.onProblem((kind) => say(problemText(kind))));
+      offs.push(
+        await b.onRetentionRemoved(({ removed, days }) =>
+          say(
+            `Removed ${removed === 1 ? "1 transcript" : `${removed} transcripts`} older than ${retentionText(days).toLowerCase()}, as set in Keep transcripts for. Look in the Recycle Bin to restore one.`,
+          ),
+        ),
+      );
       b.recoveryScan()
         .then((r) => (recovered = r))
         .catch(() => {});

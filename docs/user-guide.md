@@ -80,6 +80,7 @@ Open **Settings** at the bottom of the window.
   ![Downloading](screenshots/settings-model-downloading-light.png)
   ![Update available](screenshots/settings-model-update-light.png)
   ![Managed by your organization](screenshots/settings-model-managed-light.png)
+- **Keep transcripts for.** Forever (default), 30 days, 90 days or 1 year. Transcripts older than that go to the Recycle Bin when SprkNotes starts and once a day, where you can restore them (if the Recycle Bin can't take one, for example on a network folder, it is deleted). Age counts from the day a transcript last ended. A transcript open in the Library or still being written is left alone, and a new choice applies at the next start, so you can change your mind first. If your organization sets it, the choice is greyed and a line under it says how long they keep transcripts.
 - **Appearance.** System, Light or Dark.
 - **Misc.** **Throwback Mode** (the first app icon). Everything else looks the same.
 

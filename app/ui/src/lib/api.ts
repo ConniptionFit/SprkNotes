@@ -1,4 +1,4 @@
-import type { ManagedPrefs, SaveLocation } from "./types";
+import type { ManagedPrefs, Retention, SaveLocation } from "./types";
 import type { AppUpdateInfo, AppUpdateProgress, AppUpdateStatus, AssistantRequest, AssistantModelStatus, AssistantResponse, AssistantStatus, Caption, DownloadProgress, ExportFormat, LibraryEntry, Line, ModelStatus, Phase, Source, Status, Summarized, TranscriptView, UpdateInfo } from "./types";
 import { asAsk, NO_ASK, type MicAsk } from "./micAsk";
 
@@ -15,6 +15,14 @@ export interface Backend {
   setSaveLocation(path: string | null): Promise<SaveLocation>;
   /** Open a library folder ("" is the top) in File Explorer. */
   libraryOpenFolder(folder: string): Promise<void>;
+  /** "Keep transcripts for": days (0 is forever) and whether an administrator set it. */
+  retention(): Promise<Retention>;
+  /** Save "Keep transcripts for" (0, 30, 90 or 365 days). Applies at the next start or daily check. */
+  setRetention(days: number): Promise<Retention>;
+  /** Old transcripts went to the Recycle Bin (a count only). */
+  onRetentionRemoved(cb: (r: { removed: number; days: number }) => void): Promise<() => void>;
+  /** The Library closed its transcript view (retention leaves an open one alone). */
+  libraryClose(): Promise<void>;
   pause(): Promise<void>;
   resume(): Promise<void>;
   end(): Promise<void>;
@@ -152,6 +160,10 @@ async function tauri(): Promise<Backend> {
     openApp: () => invoke("open_app"),
     libraryList: (query) => invoke("library_list", { query }),
     libraryOpen: (path) => invoke("library_open", { path }),
+    libraryClose: () => invoke("library_close"),
+    retention: () => invoke("retention_status"),
+    setRetention: (days) => invoke("retention_set", { days }),
+    onRetentionRemoved: (cb) => listen<{ removed: number; days: number }>("retention-removed", (e) => cb(e.payload)),
     libraryReveal: (path) => invoke("library_reveal", { path }),
     libraryOpenFolder: (folder) => invoke("library_open_folder", { folder }),
     continueTranscript: (path) => invoke("continue_session", { path }),
@@ -202,6 +214,11 @@ const mockSave: SaveLocation = {
 };
 if (typeof location !== "undefined" && new URLSearchParams(location.search).get("save") === "managed") {
   Object.assign(mockSave, { path: "C:\\Users\\you\\OneDrive - Contoso\\Transcripts", source: "policy", locked: true });
+}
+
+const mockRetention: Retention = { days: 0, source: "default", locked: false };
+if (typeof location !== "undefined" && new URLSearchParams(location.search).get("retention") === "managed") {
+  Object.assign(mockRetention, { days: 180, source: "policy", locked: true });
 }
 
 const mockLibrary: LibraryEntry[] = [
@@ -438,6 +455,14 @@ export function mockBackend(): Backend {
     }),
     libraryReveal: async () => {},
     libraryOpenFolder: async () => {},
+    libraryClose: async () => {},
+    retention: async () => ({ ...mockRetention }),
+    setRetention: async (days) => {
+      if (mockRetention.locked) throw "Your organization sets how long transcripts are kept.";
+      Object.assign(mockRetention, { days, source: "user" });
+      return { ...mockRetention };
+    },
+    onRetentionRemoved: async () => () => {},
     continueTranscript: async (path) => {
       if (!mockLibrary.some((e) => e.path === path)) throw "That transcript is not in your library.";
       t0 = Date.now() - 600_000;
