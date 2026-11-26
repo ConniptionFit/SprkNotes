@@ -19,6 +19,15 @@ export type ModelStatus = {
   busy: boolean;
 };
 
+/** Mirrors the Rust `SpeedStatus`: the speed check for this model on this PC (SPEC 16.8a). */
+export type SpeedStatus = {
+  /** `done` has speed and threads; `env` has threads set by SPRK_ASR_THREADS. */
+  state: "checking" | "done" | "none" | "env" | "unavailable";
+  /** Times faster than real time, one decimal. */
+  speed: number | null;
+  threads: number | null;
+};
+
 /** Mirrors the Rust `UpdateStatus` (camelCase): app updates, and which settings policy locks. */
 export type AppUpdateStatus = {
   installed: string;
@@ -92,6 +101,14 @@ export type Retention = {
   days: number;
   source: "policy" | "user" | "install" | "default";
   locked: boolean;
+};
+
+/** Custom words (Settings): the person's own list, the administrator's (read-only), and what the
+ * last session did with them, as counts only. */
+export type CustomWords = {
+  user: string[];
+  admin: string[];
+  last: { words: number; hints: boolean } | null;
 };
 
 export type LibraryEntry = {

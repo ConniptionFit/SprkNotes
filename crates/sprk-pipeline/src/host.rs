@@ -138,6 +138,27 @@ pub struct StartParams {
     pub continue_from: Option<PathBuf>,
 }
 
+/// A transcription engine that finished loading, and the model it loaded (`id@version`; a
+/// failed model falls back to another, so this can differ from [`StartParams::engine_label`]).
+pub struct LoadedEngine {
+    pub label: String,
+    pub engine: Box<dyn Engine>,
+}
+
+/// The engine a session decodes with (Instant Start, SPEC 4.6).
+pub enum EngineSource {
+    /// Loaded and waiting (the warm model): decoding starts at once.
+    Ready(Box<dyn Engine>),
+    /// Still loading. Capture starts anyway and everything it hears waits in memory, in order,
+    /// until the engine arrives; then it is decoded as if it had just been heard, so no words
+    /// are lost. `Err` (a reason with no model or transcript text) means no engine will come.
+    Loading(Receiver<Result<LoadedEngine, String>>),
+}
+
+/// The longest the session waits for a loading engine before giving up on it. Loads take
+/// seconds; this only stops a load that never returns from holding audio in memory for ever.
+const LOAD_WAIT_MAX: Duration = Duration::from_secs(300);
+
 #[derive(Debug, thiserror::Error)]
 pub enum HostError {
     #[error("could not start the session: {0}")]
@@ -243,12 +264,13 @@ fn duration_text(ms: u64) -> String {
 }
 
 impl Host {
-    /// Create the file, then run the session on its own thread. The engine and VAD are already
-    /// loaded (the caller resolved and validated the model); `make_backend` runs on the capture
-    /// thread because platform streams must stay on the thread that opened them.
+    /// Create the file, then run the session on its own thread. Capture starts at once; the
+    /// engine is either ready or still loading (`EngineSource`), and the VAD packs are
+    /// verified already. `make_backend` runs on the capture thread because platform streams
+    /// must stay on the thread that opened them.
     pub fn start(
         p: StartParams,
-        engine: Box<dyn Engine>,
+        engine: EngineSource,
         make_vad: VadFactory,
         make_backend: Box<dyn FnOnce() -> Box<dyn Backend> + Send>,
         clock: Box<dyn Clock>,
@@ -346,6 +368,12 @@ impl Host {
         lock(&self.writer).as_ref().map(|w| w.path().to_path_buf())
     }
 
+    /// The session thread stopped on its own (a panic, or the engine never loaded). `end`
+    /// returns at once then.
+    pub fn is_finished(&self) -> bool {
+        self.join.as_ref().is_none_or(JoinHandle::is_finished)
+    }
+
     fn send(&self, c: Cmd) -> Result<(), HostError> {
         self.tx.send(c).map_err(|_| HostError::Gone)
     }
@@ -385,11 +413,165 @@ fn interrupted(shared: &SharedWriter, events: &dyn Events) {
     events.status(UiStatus::Ready);
 }
 
+/// What happened before the engine was ready, kept in memory in order and replayed once it
+/// is. Frames heard while paused are not kept: a paused session ignores them anyway.
+enum Early {
+    Got(Vec<Captured>, u64),
+    Pause(Vec<Captured>, u64),
+    Resume(Vec<Captured>, u64),
+    Source(Source, bool, u64),
+}
+
+/// How waiting for a loading engine ended.
+struct Waited {
+    engine: Option<LoadedEngine>,
+    early: Vec<Early>,
+    /// End (or the UI went away) came while waiting.
+    ended: bool,
+}
+
+/// Capture runs and commands are answered while the engine loads; nothing is decoded yet.
+/// The source buttons' meters still move, so the person can see they are being heard.
+fn wait_for_engine(
+    loading: &Receiver<Result<LoadedEngine, String>>,
+    rx: &Receiver<Cmd>,
+    capture: &mut CaptureThread,
+    start: &Instant,
+    events: &dyn Events,
+    title: &mut Option<(String, NameSource)>,
+) -> Waited {
+    let now_ms = |s: &Instant| s.elapsed().as_millis() as u64;
+    let mut early = Vec::new();
+    let mut paused = false;
+    let mut enabled = [true, true];
+    let mut meters: [crate::meter::Meter; 2] = Default::default();
+    let mut last_levels = 0u64;
+    let keep = |got: Vec<Captured>, paused: bool| -> Vec<Captured> {
+        if paused {
+            got.into_iter()
+                .filter(|c| !matches!(c, Captured::Frame(_)))
+                .collect()
+        } else {
+            got
+        }
+    };
+    loop {
+        match loading.try_recv() {
+            Ok(Ok(e)) => {
+                return Waited {
+                    engine: Some(e),
+                    early,
+                    ended: false,
+                }
+            }
+            Ok(Err(_)) | Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                return Waited {
+                    engine: None,
+                    early,
+                    ended: false,
+                }
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => {}
+        }
+        if start.elapsed() > LOAD_WAIT_MAX {
+            return Waited {
+                engine: None,
+                early,
+                ended: false,
+            };
+        }
+        match rx.recv_timeout(Duration::from_millis(20)) {
+            Ok(Cmd::Pause) if !paused => {
+                let got = keep(capture.sync(), paused);
+                early.push(Early::Pause(got, now_ms(start)));
+                paused = true;
+                events.status(UiStatus::Paused);
+            }
+            Ok(Cmd::Resume) if paused => {
+                let got = capture.restart();
+                early.push(Early::Resume(got, now_ms(start)));
+                paused = false;
+                events.status(UiStatus::Transcribing);
+            }
+            Ok(Cmd::Pause | Cmd::Resume) => {}
+            Ok(Cmd::SetSource(s, on)) => {
+                capture.set_enabled(s, on);
+                enabled[usize::from(s == Source::System)] = on;
+                early.push(Early::Source(s, on, now_ms(start)));
+            }
+            Ok(Cmd::Rename(n)) => {
+                if !n.trim().is_empty() {
+                    *title = Some((n, NameSource::User));
+                }
+            }
+            Ok(Cmd::End) | Err(RecvTimeoutError::Disconnected) => {
+                // Keep everything heard up to now, then wait for the engine so it is decoded.
+                let got = keep(capture.sync(), paused);
+                early.push(Early::Got(got, now_ms(start)));
+                let left = LOAD_WAIT_MAX.saturating_sub(start.elapsed());
+                let engine = loading.recv_timeout(left).ok().and_then(Result::ok);
+                return Waited {
+                    engine,
+                    early,
+                    ended: true,
+                };
+            }
+            Err(RecvTimeoutError::Timeout) => {}
+        }
+        capture.rethrow_if_failed();
+        let got = keep(capture.take(), paused);
+        for c in &got {
+            if let Captured::Frame(f) = c {
+                let i = usize::from(f.source == Source::System);
+                if enabled[i] {
+                    meters[i].push(&f.samples);
+                }
+            }
+        }
+        if !got.is_empty() {
+            early.push(Early::Got(got, now_ms(start)));
+        }
+        let t = now_ms(start);
+        if t.saturating_sub(last_levels) >= LEVELS_EVERY_MS {
+            last_levels = t;
+            events.levels(meters[0].take(), meters[1].take());
+        }
+    }
+}
+
+/// The engine never loaded: nothing could be transcribed. Close the file with a line that
+/// says why (no model name: the reason stays generic), and tell the UI.
+fn no_engine(
+    shared: &SharedWriter,
+    events: &dyn Events,
+    clock: &dyn Clock,
+    t: u64,
+    offset_ms: u64,
+) {
+    events.problem("model_failed");
+    if let Some(mut w) = lock(shared).take() {
+        let _ = w.append_event(
+            t + offset_ms,
+            "Transcription stopped: the transcription model did not load",
+        );
+        if w.finalize(
+            &clock.now().iso,
+            &duration_text(t + offset_ms),
+            Status::Complete,
+        )
+        .is_err()
+        {
+            events.problem("finalize_failed");
+        }
+    }
+    events.status(UiStatus::Ready);
+}
+
 #[allow(clippy::too_many_arguments)]
 fn run(
     rx: Receiver<Cmd>,
     shared: SharedWriter,
-    engine: Box<dyn Engine>,
+    engine: EngineSource,
     make_vad: VadFactory,
     make_backend: Box<dyn FnOnce() -> Box<dyn Backend> + Send>,
     clock: Box<dyn Clock>,
@@ -399,13 +581,46 @@ fn run(
     context: Option<ContextConfig>,
     offset_ms: u64,
 ) {
-    let mut ctx = context.map(Ctx::new);
     let start = Instant::now();
     let mut capture = match CaptureThread::spawn(make_backend, start) {
         Ok(c) => c,
         // No thread to read the devices with: close the file as interrupted, as for a panic.
         Err(_) => std::panic::resume_unwind(Box::new("capture thread did not start")),
     };
+    let now_ms = |s: &Instant| s.elapsed().as_millis() as u64;
+    let mut title: Option<(String, NameSource)> = None;
+    events.status(UiStatus::Transcribing);
+
+    let (engine, early, ended) = match engine {
+        EngineSource::Ready(e) => (e, Vec::new(), false),
+        EngineSource::Loading(loading) => {
+            let w = wait_for_engine(
+                &loading,
+                &rx,
+                &mut capture,
+                &start,
+                events.as_ref(),
+                &mut title,
+            );
+            let Some(loaded) = w.engine else {
+                capture.stop();
+                no_engine(
+                    &shared,
+                    events.as_ref(),
+                    clock.as_ref(),
+                    now_ms(&start),
+                    offset_ms,
+                );
+                return;
+            };
+            if let Some(wr) = lock(&shared).as_mut() {
+                wr.set_engine(&loaded.label);
+            }
+            (loaded.engine, w.early, w.ended)
+        }
+    };
+
+    let mut ctx = context.map(Ctx::new);
     let sink = UiSink {
         writer: shared.clone(),
         events: events.clone(),
@@ -414,93 +629,116 @@ fn run(
     };
     let mut session =
         Session::new(engine, make_vad, Box::new(sink), commit).with_echo_cancellation(true);
-    let now_ms = |s: &Instant| s.elapsed().as_millis() as u64;
     let mut last_tick = 0u64;
     let mut last_levels = 0u64;
-    let mut title: Option<(String, NameSource)> = None;
     let mut last_device: [Option<String>; 2] = [None, None];
-    events.status(UiStatus::Transcribing);
 
     let problem = |e: SessionError| {
         let _ = e;
         events.problem("write_failed");
     };
 
-    'main: loop {
-        // Commands first so Pause/End act on a consistent state.
-        match rx.recv_timeout(Duration::from_millis(20)) {
-            Ok(Cmd::Pause) => {
-                let got = capture.sync();
-                apply(
-                    got,
-                    &mut session,
-                    &mut last_device,
-                    now_ms(&start),
-                    &problem,
-                );
+    // Everything heard while the engine loaded, decoded now in the order it happened.
+    for e in early {
+        match e {
+            Early::Got(got, t) => apply(got, &mut session, &mut last_device, t, &problem),
+            Early::Pause(got, t) => {
+                apply(got, &mut session, &mut last_device, t, &problem);
                 if let Some(c) = ctx.as_mut() {
-                    c.pause(now_ms(&start), &mut session);
+                    c.pause(t, &mut session);
                 }
-                if let Err(e) = session.pause(now_ms(&start)) {
+                if let Err(e) = session.pause(t) {
                     problem(e);
                 }
-                emit_captions(events.as_ref(), &mut session, now_ms(&start), offset_ms);
-                events.status(UiStatus::Paused);
             }
-            Ok(Cmd::Resume) => {
-                // Fresh streams: audio buffered through the pause must not be fed as new.
-                let got = capture.restart();
-                apply(
-                    got,
-                    &mut session,
-                    &mut last_device,
-                    now_ms(&start),
-                    &problem,
-                );
-                if let Err(e) = session.resume(now_ms(&start)) {
+            Early::Resume(got, t) => {
+                apply(got, &mut session, &mut last_device, t, &problem);
+                if let Err(e) = session.resume(t) {
                     problem(e);
                 }
-                events.status(UiStatus::Transcribing);
             }
-            Ok(Cmd::SetSource(s, on)) => {
-                capture.set_enabled(s, on);
-                session.set_source_enabled(s, on, now_ms(&start));
+            Early::Source(s, on, t) => session.set_source_enabled(s, on, t),
+        }
+    }
+
+    // End came while the engine loaded: the replay above was everything.
+    if !ended {
+        'main: loop {
+            // Commands first so Pause/End act on a consistent state.
+            match rx.recv_timeout(Duration::from_millis(20)) {
+                Ok(Cmd::Pause) => {
+                    let got = capture.sync();
+                    apply(
+                        got,
+                        &mut session,
+                        &mut last_device,
+                        now_ms(&start),
+                        &problem,
+                    );
+                    if let Some(c) = ctx.as_mut() {
+                        c.pause(now_ms(&start), &mut session);
+                    }
+                    if let Err(e) = session.pause(now_ms(&start)) {
+                        problem(e);
+                    }
+                    emit_captions(events.as_ref(), &mut session, now_ms(&start), offset_ms);
+                    events.status(UiStatus::Paused);
+                }
+                Ok(Cmd::Resume) => {
+                    // Fresh streams: audio buffered through the pause must not be fed as new.
+                    let got = capture.restart();
+                    apply(
+                        got,
+                        &mut session,
+                        &mut last_device,
+                        now_ms(&start),
+                        &problem,
+                    );
+                    if let Err(e) = session.resume(now_ms(&start)) {
+                        problem(e);
+                    }
+                    events.status(UiStatus::Transcribing);
+                }
+                Ok(Cmd::SetSource(s, on)) => {
+                    capture.set_enabled(s, on);
+                    session.set_source_enabled(s, on, now_ms(&start));
+                }
+                Ok(Cmd::Rename(n)) => {
+                    if !n.trim().is_empty() {
+                        title = Some((n, NameSource::User));
+                    }
+                }
+                Ok(Cmd::End) | Err(RecvTimeoutError::Disconnected) => break 'main,
+                Err(RecvTimeoutError::Timeout) => {}
             }
-            Ok(Cmd::Rename(n)) => {
-                if !n.trim().is_empty() {
-                    title = Some((n, NameSource::User));
+            let t = now_ms(&start);
+            // A capture panic carries on here, so the file closes as interrupted as it did when
+            // capture ran on this thread.
+            capture.rethrow_if_failed();
+            let got = capture.take();
+            apply(got, &mut session, &mut last_device, t, &problem);
+            let (cap_on, cap_me) = events.captions_wanted();
+            session.set_captions(cap_on, cap_me);
+            emit_captions(events.as_ref(), &mut session, t, offset_ms);
+            if t.saturating_sub(last_levels) >= LEVELS_EVERY_MS {
+                last_levels = t;
+                let [me, others] = session.levels();
+                events.levels(me, others);
+            }
+            if let Some(c) = ctx.as_mut() {
+                if session.state() == crate::session::State::Running {
+                    c.poll(t, &mut session);
                 }
             }
-            Ok(Cmd::End) | Err(RecvTimeoutError::Disconnected) => break 'main,
-            Err(RecvTimeoutError::Timeout) => {}
-        }
-        let t = now_ms(&start);
-        // A capture panic carries on here, so the file closes as interrupted as it did when
-        // capture ran on this thread.
-        capture.rethrow_if_failed();
-        let got = capture.take();
-        apply(got, &mut session, &mut last_device, t, &problem);
-        let (cap_on, cap_me) = events.captions_wanted();
-        session.set_captions(cap_on, cap_me);
-        emit_captions(events.as_ref(), &mut session, t, offset_ms);
-        if t.saturating_sub(last_levels) >= LEVELS_EVERY_MS {
-            last_levels = t;
-            let [me, others] = session.levels();
-            events.levels(me, others);
-        }
-        if let Some(c) = ctx.as_mut() {
-            if session.state() == crate::session::State::Running {
-                c.poll(t, &mut session);
-            }
-        }
-        if t.saturating_sub(last_tick) >= 1_000 {
-            last_tick = t;
-            if let Err(e) = session.tick(t) {
-                problem(e);
-            }
-            for d in session.take_dropped() {
-                if d.speaker == Speaker::Me {
-                    events.dropped("Me", &d.text);
+            if t.saturating_sub(last_tick) >= 1_000 {
+                last_tick = t;
+                if let Err(e) = session.tick(t) {
+                    problem(e);
+                }
+                for d in session.take_dropped() {
+                    if d.speaker == Speaker::Me {
+                        events.dropped("Me", &d.text);
+                    }
                 }
             }
         }
@@ -833,7 +1071,7 @@ mod tests {
                 commit: Config::default(),
                 continue_from: None,
             },
-            Box::new(QueueEngine(q)),
+            EngineSource::Ready(Box::new(QueueEngine(q))),
             Box::new(|| Box::new(ChunkVad(0))),
             Box::new(move || Box::new(OneMicBackend(audio))),
             Box::new(FixedClock),
@@ -874,7 +1112,7 @@ mod tests {
                 commit: Config::default(),
                 continue_from: Some(files[0].clone()),
             },
-            Box::new(QueueEngine(q)),
+            EngineSource::Ready(Box::new(QueueEngine(q))),
             Box::new(|| Box::new(ChunkVad(0))),
             Box::new(move || Box::new(OneMicBackend(audio))),
             Box::new(FixedClock),
@@ -919,7 +1157,15 @@ mod tests {
     #[test]
     fn levels_reach_the_ui_for_the_source_that_has_sound() {
         let (host, ev, _dir) = launch("Levels", &["hello"]);
-        std::thread::sleep(Duration::from_millis(400));
+        // Wait for the levels rather than a fixed time: a busy CI runner can take
+        // longer than a few hundred milliseconds just to start the session thread.
+        let heard = |l: &[(f32, f32)]| {
+            l.len() >= 2 && l.iter().any(|&(me, _)| (me - 2.0 / 3.0).abs() < 0.01)
+        };
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        while !heard(&ev.levels.lock().unwrap()) && std::time::Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(50));
+        }
         host.end().unwrap();
         let levels = ev.levels.lock().unwrap().clone();
         assert!(levels.len() >= 2, "about ten a second: {levels:?}");
@@ -1029,7 +1275,7 @@ mod tests {
                 commit: Config::default(),
                 continue_from: None,
             },
-            Box::new(QueueEngine(Arc::new(Mutex::new(vec![])))),
+            EngineSource::Ready(Box::new(QueueEngine(Arc::new(Mutex::new(vec![]))))),
             Box::new(|| Box::new(ChunkVad(0))),
             Box::new(|| Box::new(OneMicBackend(Arc::new(Mutex::new(None))))),
             Box::new(FixedClock),
@@ -1147,7 +1393,7 @@ mod tests {
                 commit: Config::default(),
                 continue_from: None,
             },
-            Box::new(PanicEngine),
+            EngineSource::Ready(Box::new(PanicEngine)),
             Box::new(|| Box::new(ChunkVad(0))),
             Box::new(move || Box::new(OneMicBackend(audio))),
             Box::new(FixedClock),
@@ -1190,7 +1436,7 @@ mod tests {
                 commit: Config::default(),
                 continue_from: None,
             },
-            Box::new(QueueEngine(Arc::new(Mutex::new(vec![])))),
+            EngineSource::Ready(Box::new(QueueEngine(Arc::new(Mutex::new(vec![]))))),
             Box::new(|| Box::new(ChunkVad(0))),
             Box::new(|| Box::new(PanicBackend)),
             Box::new(FixedClock),
@@ -1278,7 +1524,7 @@ mod tests {
                 commit: Config::default(),
                 continue_from: None,
             },
-            Box::new(SlowEngine),
+            EngineSource::Ready(Box::new(SlowEngine)),
             Box::new(|| Box::new(EveryFifthVad(0, 0))),
             Box::new(move || Box::new(SteadyMic(r))),
             Box::new(FixedClock),
@@ -1296,5 +1542,242 @@ mod tests {
             "a read waited {worst:?} behind a decode"
         );
         assert!(only_md(dir.path()).contains("**Me:** words"));
+    }
+
+    /// Mic audio whose every sample says where it was in the stream: sample k is
+    /// 0.5 + k * 2^-24 (exact in f32), so lost, repeated or reordered audio shows.
+    struct Ramp {
+        next: Arc<Mutex<u64>>,
+        last: Option<Instant>,
+    }
+    fn ramp_value(k: u64) -> f32 {
+        0.5 + k as f32 / 16_777_216.0
+    }
+    impl PcmStream for Ramp {
+        fn read(&mut self, out: &mut Vec<f32>) {
+            let now = Instant::now();
+            let ms = self
+                .last
+                .map_or(20, |l| now.duration_since(l).as_millis() as u64);
+            self.last = Some(now);
+            let mut next = self.next.lock().unwrap();
+            for _ in 0..ms * 16 {
+                out.push(ramp_value(*next));
+                *next += 1;
+            }
+        }
+    }
+    struct RampMic(Arc<Mutex<u64>>);
+    impl Backend for RampMic {
+        fn default_device(&self, s: Source) -> Option<String> {
+            (s == Source::Mic).then(|| "mic".to_string())
+        }
+        fn open(&mut self, _: Source, _: &str) -> Result<Box<dyn PcmStream>, AudioError> {
+            Ok(Box::new(Ramp {
+                next: self.0.clone(),
+                last: None,
+            }))
+        }
+    }
+    /// Keeps every sample it is asked to decode, in order, and says nothing.
+    struct Tally(Arc<Mutex<Vec<f32>>>);
+    impl Engine for Tally {
+        fn transcribe(&mut self, s: &[f32]) -> Result<Vec<AsrSeg>, AsrError> {
+            self.0.lock().unwrap().extend_from_slice(s);
+            Ok(vec![AsrSeg {
+                start_ms: 0,
+                end_ms: s.len() as u64 * 1000 / 16_000,
+                text: "heard".into(),
+            }])
+        }
+    }
+
+    /// Start with the engine still loading; it arrives after `late` (or fails to, with `None`).
+    fn launch_loading(
+        late: Duration,
+        engine: Option<Box<dyn Engine>>,
+    ) -> (Host, Arc<Collect>, Arc<Mutex<u64>>, tempfile::TempDir) {
+        let dir = tempfile::tempdir().unwrap();
+        let ev = Arc::new(Collect::default());
+        let delivered = Arc::new(Mutex::new(0u64));
+        let (tx, rx) = channel();
+        std::thread::spawn(move || {
+            std::thread::sleep(late);
+            let _ = tx.send(match engine {
+                Some(engine) => Ok(LoadedEngine {
+                    label: "late@2026.11.1".into(),
+                    engine,
+                }),
+                None => Err("did not load".into()),
+            });
+        });
+        let d = delivered.clone();
+        let host = Host::start(
+            StartParams {
+                root: dir.path().to_path_buf(),
+                name: "Instant".into(),
+                app_version: "0.0.1".into(),
+                engine_label: "test@2026.11.0".into(),
+                commit: Config::default(),
+                continue_from: None,
+            },
+            EngineSource::Loading(rx),
+            Box::new(|| Box::new(ChunkVad(0))),
+            Box::new(move || Box::new(RampMic(d))),
+            Box::new(FixedClock),
+            ev.clone(),
+            None,
+        )
+        .unwrap();
+        // As the app does for a source switched off before Start; also keeps the echo
+        // canceller (which needs both streams) out of the way of the exact sample check.
+        host.set_source(Source::System, false).unwrap();
+        (host, ev, delivered, dir)
+    }
+
+    /// The decoded audio is the stream from its first sample, in order, with nothing missing.
+    fn assert_whole_stream_in_order(heard: &[f32], at_least: u64) {
+        let real: Vec<f32> = heard.iter().copied().filter(|v| *v != 0.0).collect();
+        assert!(
+            real.len() as u64 >= at_least,
+            "decoded {} of {at_least} samples",
+            real.len()
+        );
+        for (k, v) in real.iter().enumerate() {
+            assert_eq!(*v, ramp_value(k as u64), "sample {k} lost or out of order");
+        }
+    }
+
+    #[test]
+    fn audio_heard_while_the_engine_loads_is_decoded_in_order_once_it_arrives() {
+        let heard = Arc::new(Mutex::new(Vec::new()));
+        let (host, ev, delivered, dir) = launch_loading(
+            Duration::from_millis(500),
+            Some(Box::new(Tally(heard.clone()))),
+        );
+        // Transcribing from the first moment, before the engine exists.
+        std::thread::sleep(Duration::from_millis(100));
+        assert_eq!(
+            ev.statuses.lock().unwrap().first(),
+            Some(&UiStatus::Transcribing)
+        );
+        assert!(heard.lock().unwrap().is_empty(), "nothing decoded yet");
+        std::thread::sleep(Duration::from_millis(900));
+        let before_end = *delivered.lock().unwrap();
+        host.end().unwrap();
+        assert!(before_end > 8_000, "the fake mic ran: {before_end}");
+        assert_whole_stream_in_order(&heard.lock().unwrap(), before_end);
+        let text = only_md(dir.path());
+        assert!(text.contains("**Me:** heard"), "{text}");
+        assert!(
+            text.contains("engine: \"late@2026.11.1\"") || text.contains("engine: late@2026.11.1"),
+            "{text}"
+        );
+        assert!(text.contains("status: complete"));
+        // The meters moved while the engine loaded.
+        assert!(ev.levels.lock().unwrap().iter().any(|&(me, _)| me > 0.0));
+        assert!(ev.problems.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn end_while_the_engine_loads_waits_for_it_and_keeps_every_word() {
+        let heard = Arc::new(Mutex::new(Vec::new()));
+        let (host, ev, delivered, dir) = launch_loading(
+            Duration::from_millis(700),
+            Some(Box::new(Tally(heard.clone()))),
+        );
+        std::thread::sleep(Duration::from_millis(300));
+        let before_end = *delivered.lock().unwrap();
+        host.end().unwrap();
+        assert!(before_end > 0);
+        assert_whole_stream_in_order(&heard.lock().unwrap(), before_end);
+        let text = only_md(dir.path());
+        assert!(text.contains("**Me:** heard"), "{text}");
+        assert!(text.contains("status: complete"));
+        assert_eq!(ev.statuses.lock().unwrap().last(), Some(&UiStatus::Ready));
+    }
+
+    #[test]
+    fn pause_and_resume_while_the_engine_loads_land_in_the_transcript_in_order() {
+        let heard = Arc::new(Mutex::new(Vec::new()));
+        let (host, ev, _delivered, dir) = launch_loading(
+            Duration::from_millis(600),
+            Some(Box::new(Tally(heard.clone()))),
+        );
+        std::thread::sleep(Duration::from_millis(150));
+        host.pause().unwrap();
+        std::thread::sleep(Duration::from_millis(200));
+        host.resume().unwrap();
+        std::thread::sleep(Duration::from_millis(700));
+        host.end().unwrap();
+        let st = ev.statuses.lock().unwrap().clone();
+        assert_eq!(
+            &st[..3],
+            &[
+                UiStatus::Transcribing,
+                UiStatus::Paused,
+                UiStatus::Transcribing
+            ]
+        );
+        let text = only_md(dir.path());
+        let paused = text.find("Transcription paused").expect("paused line");
+        let resumed = text.find("Transcription resumed").expect("resumed line");
+        let first = text.find("**Me:** heard").expect("a line before the pause");
+        assert!(first < paused && paused < resumed, "{text}");
+        assert!(text[resumed..].contains("**Me:** heard"), "{text}");
+    }
+
+    #[test]
+    fn an_engine_that_never_loads_closes_the_file_and_says_so() {
+        let (host, ev, _delivered, dir) = launch_loading(Duration::from_millis(200), None);
+        std::thread::sleep(Duration::from_millis(500));
+        assert!(host.is_finished(), "the session stopped by itself");
+        host.end().unwrap();
+        let text = only_md(dir.path());
+        assert!(
+            text.contains("Transcription stopped: the transcription model did not load"),
+            "{text}"
+        );
+        assert!(text.contains("status: complete"));
+        assert!(ev
+            .problems
+            .lock()
+            .unwrap()
+            .contains(&"model_failed".to_string()));
+        assert_eq!(ev.statuses.lock().unwrap().last(), Some(&UiStatus::Ready));
+    }
+
+    #[test]
+    fn a_shared_engine_serves_one_session_after_another() {
+        let heard = Arc::new(Mutex::new(Vec::new()));
+        let shared = sprk_asr::SharedEngine::new(Box::new(Tally(heard.clone())));
+        for name in ["First", "Second"] {
+            let dir = tempfile::tempdir().unwrap();
+            let delivered = Arc::new(Mutex::new(0u64));
+            let d = delivered.clone();
+            let host = Host::start(
+                StartParams {
+                    root: dir.path().to_path_buf(),
+                    name: name.into(),
+                    app_version: "0.0.1".into(),
+                    engine_label: "test@2026.11.0".into(),
+                    commit: Config::default(),
+                    continue_from: None,
+                },
+                EngineSource::Ready(Box::new(shared.clone())),
+                Box::new(|| Box::new(ChunkVad(0))),
+                Box::new(move || Box::new(RampMic(d))),
+                Box::new(FixedClock),
+                Arc::new(Collect::default()),
+                None,
+            )
+            .unwrap();
+            host.set_source(Source::System, false).unwrap();
+            std::thread::sleep(Duration::from_millis(300));
+            let before_end = *delivered.lock().unwrap();
+            host.end().unwrap();
+            assert_whole_stream_in_order(&std::mem::take(&mut *heard.lock().unwrap()), before_end);
+            assert!(only_md(dir.path()).contains("**Me:** heard"));
+        }
     }
 }

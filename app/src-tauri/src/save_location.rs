@@ -6,15 +6,18 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
 
-/// `%APPDATA%\SprkNotes\settings.json`: the user's own choices kept by the app (SPEC 10.1).
-/// Each command changes its own field and keeps the others.
+/// `settings.json`. Each setter loads it, changes its own field and stores it again, so one
+/// setting never wipes another.
 #[derive(Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct Saved {
-    pub transcripts_root: Option<String>,
+    pub(crate) transcripts_root: Option<String>,
+    /// Custom words (SPEC 4.3a), the person's own list.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) custom_words: Vec<String>,
     /// "Keep transcripts for", in days (SPEC 6.6). None or 0 is forever.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub keep_days: Option<u64>,
+    pub(crate) keep_days: Option<u64>,
 }
 
 fn saved_path() -> Option<PathBuf> {
@@ -136,10 +139,9 @@ pub fn save_location_set(app: AppHandle, path: Option<String>) -> Result<Status,
         std::fs::create_dir_all(&p)
             .map_err(|_| "That folder could not be created or opened.".to_string())?;
     }
-    store(&Saved {
-        transcripts_root: chosen,
-        ..load()
-    })?;
+    let mut saved = load();
+    saved.transcripts_root = chosen;
+    store(&saved)?;
     save_location_status(app)
 }
 

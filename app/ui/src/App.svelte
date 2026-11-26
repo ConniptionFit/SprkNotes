@@ -258,6 +258,7 @@
   function problemText(kind: string): string {
     if (kind === "write_failed") return "A line could not be saved to your transcript. Check that the folder can be written to and has free space.";
     if (kind === "finalize_failed") return "The transcript could not be closed properly. It still holds everything saved so far.";
+    if (kind === "model_failed") return "The transcription model did not load, so nothing could be transcribed. Check the transcription model in Settings.";
     return "Something went wrong with the session.";
   }
 

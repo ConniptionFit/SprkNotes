@@ -23,7 +23,7 @@ A tour of everything SprkNotes does and how to use it, with screenshots. All scr
 ## Transcribing
 1. Optionally name the session. Blank means SprkNotes names the file from your calendar, the call or the audio playing, and falls back to `Transcript`.
 2. Choose sources: **Me** (your microphone) and **Others** (computer sound).
-3. Press **Start**. The light turns red.
+3. Press **Start**. The light turns red. Start is instant: the speech model is kept ready in the background, and if it is still getting ready (right after SprkNotes opens), what you say is held in memory and transcribed as soon as it is.
 
 | Ready | Named, Me turned off |
 |---|---|
@@ -113,7 +113,8 @@ With one app installed it opens that one (Claude gets the file; for Copilot the 
 ## Settings
 ![Settings](screenshots/settings-full-light.png)
 
-- **Transcription model:** status, **Download model**, **Check for updates**.
+- **Transcription model:** status, **Download model**, **Check for updates**, and a speed line ("Speed: 3.2x real time on 4 threads") with **Check again**.
+- **Custom words:** names and terms to spell right, one per line; near misses are changed to your spelling, everyday words never. Your organization can add to the list.
 - **Keep transcripts for:** Forever (default), 30 days, 90 days or 1 year. Older transcripts go to the Recycle Bin at start and once a day; open or running ones are never touched. Admins can lock it (`TranscriptRetentionDays`).
 - **Appearance:** System, Light or Dark.
 - **Misc:** Throwback Mode.

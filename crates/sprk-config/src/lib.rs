@@ -144,6 +144,9 @@ pub struct AppPolicy {
     pub prompt_template_path: Option<String>,
     pub filler_removal: Option<bool>,
     pub commit_delay_seconds: Option<u64>,
+    /// Custom words (SPEC 4.3a): names and terms the organization wants spelled right. They
+    /// add to the person's own list; they never lock it.
+    pub custom_words: Vec<String>,
     pub audio_source_detection: Option<bool>,
     pub audio_merge_window_seconds: Option<u64>,
     pub call_merge_window_seconds: Option<u64>,
@@ -268,6 +271,7 @@ pub const KEYS: &[&str] = &[
     "PromptTemplatePath",
     "FillerRemoval",
     "CommitDelaySeconds",
+    "CustomWords",
     "AudioSourceDetection",
     "AudioMergeWindowSeconds",
     "CallMergeWindowSeconds",
@@ -381,6 +385,12 @@ impl AppPolicy {
             prompt_template_path: text("PromptTemplatePath"),
             filler_removal: flag(s, "FillerRemoval"),
             commit_delay_seconds: num(s, "CommitDelaySeconds"),
+            custom_words: s
+                .get_multi("CustomWords")
+                .into_iter()
+                .map(|w| w.trim().to_string())
+                .filter(|w| !w.is_empty())
+                .collect(),
             audio_source_detection: flag(s, "AudioSourceDetection"),
             audio_merge_window_seconds: num(s, "AudioMergeWindowSeconds"),
             call_merge_window_seconds: num(s, "CallMergeWindowSeconds"),
@@ -518,6 +528,7 @@ mod tests {
             ("CommitDelaySeconds", "soon"),
             ("CalendarProvider", "graph"),
             ("AudioSourceExcludePatterns", "banking\n\n  vault  "),
+            ("CustomWords", "metoprolol\n\n  Charlie Mertens  "),
         ]));
         assert_eq!(p.call_context, Some(false));
         assert_eq!(p.name_one_to_one_speakers, Some(true));
@@ -525,6 +536,7 @@ mod tests {
         assert_eq!(p.commit_delay_seconds, None);
         assert_eq!(p.calendar_provider, None);
         assert_eq!(p.audio_source_exclude_patterns, vec!["banking", "vault"]);
+        assert_eq!(p.custom_words, vec!["metoprolol", "Charlie Mertens"]);
     }
 
     #[test]

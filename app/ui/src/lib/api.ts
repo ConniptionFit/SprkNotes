@@ -1,5 +1,5 @@
-import type { ManagedPrefs, Retention, SaveLocation } from "./types";
-import type { AppUpdateInfo, AppUpdateProgress, AppUpdateStatus, AssistantRequest, AssistantModelStatus, AssistantResponse, AssistantStatus, Caption, DownloadProgress, ExportFormat, LibraryEntry, Line, ModelStatus, Phase, Source, Status, Summarized, TranscriptView, UpdateInfo } from "./types";
+import type { CustomWords, ManagedPrefs, Retention, SaveLocation } from "./types";
+import type { AppUpdateInfo, AppUpdateProgress, AppUpdateStatus, AssistantRequest, AssistantModelStatus, AssistantResponse, AssistantStatus, Caption, DownloadProgress, ExportFormat, LibraryEntry, Line, ModelStatus, Phase, Source, SpeedStatus, Status, Summarized, TranscriptView, UpdateInfo } from "./types";
 import { asAsk, NO_ASK, type MicAsk } from "./micAsk";
 
 /** Typed surface between the UI and the Rust side. Every command has a matching Tauri command. */
@@ -13,6 +13,9 @@ export interface Backend {
   managedPrefs(): Promise<ManagedPrefs>;
   /** Save a new folder (may use %USERPROFILE%-style names); null goes back to the default. */
   setSaveLocation(path: string | null): Promise<SaveLocation>;
+  /** Custom words: names and terms to spell right. Takes effect at the next session start. */
+  customWords(): Promise<CustomWords>;
+  setCustomWords(words: string[]): Promise<CustomWords>;
   /** Open a library folder ("" is the top) in File Explorer. */
   libraryOpenFolder(folder: string): Promise<void>;
   /** "Keep transcripts for": days (0 is forever) and whether an administrator set it. */
@@ -34,6 +37,10 @@ export interface Backend {
   modelStatus(): Promise<ModelStatus>;
   modelCheckUpdate(): Promise<UpdateInfo>;
   modelDownload(): Promise<void>;
+  /** The speed check's result for this model on this PC. No loading. */
+  speedStatus(): Promise<SpeedStatus>;
+  /** Time the model again ("Check again"). Rejects with a short sentence during a session. */
+  speedCheck(): Promise<SpeedStatus>;
   /** App updates (ADR-011). Policy-locked settings refuse changes with a short sentence. */
   appUpdateStatus(): Promise<AppUpdateStatus>;
   appUpdateCheck(): Promise<AppUpdateInfo>;
@@ -137,6 +144,8 @@ async function tauri(): Promise<Backend> {
     modelStatus: () => invoke("model_status"),
     modelCheckUpdate: () => invoke("model_check_update"),
     modelDownload: () => invoke("model_download"),
+    speedStatus: () => invoke("speed_status"),
+    speedCheck: () => invoke("speed_check"),
     appUpdateStatus: () => invoke("update_status"),
     appUpdateCheck: () => invoke("update_check"),
     appUpdateSet: ({ channel, repoUrl, mode }) => invoke("update_set", { channel, repoUrl, mode }),
@@ -170,6 +179,8 @@ async function tauri(): Promise<Backend> {
     saveLocation: () => invoke("save_location_status"),
     managedPrefs: () => invoke("managed_prefs"),
     setSaveLocation: (path) => invoke("save_location_set", { path }),
+    customWords: () => invoke("custom_words_status"),
+    setCustomWords: (words) => invoke("custom_words_set", { words }),
     libraryExport: (path, format) => invoke("library_export", { path, format }),
     latestTranscript: () => invoke("latest_transcript"),
     summarize: (path, target) => invoke("summarize", { path, target }),
@@ -212,6 +223,11 @@ const mockSave: SaveLocation = {
   source: "default",
   locked: false,
 };
+// "?words=managed" previews words an administrator added, and a finished session's note.
+const mockWords: CustomWords = { user: [], admin: [], last: null };
+if (typeof location !== "undefined" && new URLSearchParams(location.search).get("words") === "managed") {
+  Object.assign(mockWords, { user: ["metoprolol"], admin: ["Lifespark", "Lisinopril"], last: { words: 3, hints: false } });
+}
 if (typeof location !== "undefined" && new URLSearchParams(location.search).get("save") === "managed") {
   Object.assign(mockSave, { path: "C:\\Users\\you\\OneDrive - Contoso\\Transcripts", source: "policy", locked: true });
 }
@@ -379,6 +395,11 @@ export function mockBackend(): Backend {
       busy: false,
     }),
     modelCheckUpdate: async () => ({ available: flag === "update", packs: [] }),
+    speedStatus: async () => ({ state: ready ? "done" : "unavailable", speed: ready ? 3.2 : null, threads: ready ? 4 : null }),
+    speedCheck: async () => {
+      await new Promise((r) => setTimeout(r, 1500));
+      return { state: "done", speed: 3.4, threads: 4 };
+    },
     appUpdateStatus: async () => ({
       installed: "0.0.1",
       mode: "notify",
@@ -472,6 +493,11 @@ export function mockBackend(): Backend {
     },
     saveLocation: async () => ({ ...mockSave }),
     managedPrefs: async () => mockManaged,
+    customWords: async () => ({ ...mockWords }),
+    setCustomWords: async (words) => {
+      mockWords.user = words.map((w) => w.trim()).filter((w) => w !== "");
+      return { ...mockWords };
+    },
     setSaveLocation: async (path) => {
       if (path && !/^([a-zA-Z]:\\|\\\\|%)/.test(path)) throw "Enter a full folder path, for example D:\\Transcripts.";
       mockSave.chosen = path;

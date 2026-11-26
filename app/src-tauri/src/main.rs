@@ -2,6 +2,7 @@
 
 mod assistant;
 mod clock;
+mod custom_words;
 mod hotkey;
 mod library;
 mod mic_watch;
@@ -13,7 +14,9 @@ mod net_unix;
 mod retention;
 mod save_location;
 mod shell;
+mod speed;
 mod updater;
+mod warm;
 
 use serde::Serialize;
 use sprk_audio::cpal_backend::CpalBackend;
@@ -312,6 +315,29 @@ fn model_download(app: AppHandle, state: State<AppState>) -> Result<(), String> 
     model_download::start_install(app, policy())
 }
 
+/// Settings: the speed check's result for this model on this PC (SPEC 16.8a). No loading.
+#[tauri::command]
+fn speed_status() -> speed::SpeedStatus {
+    speed::status()
+}
+
+/// Settings "Check again": time the model at a couple of thread counts and keep the best.
+/// Refused during a session; the warm model reloads with the new choice afterwards.
+#[tauri::command]
+async fn speed_check(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<speed::SpeedStatus, String> {
+    if state.host.lock().map(|h| h.is_some()).unwrap_or(true) {
+        return Err("End the transcript first, then check the speed.".into());
+    }
+    tauri::async_runtime::spawn_blocking(|| speed::run(env!("CARGO_PKG_VERSION")))
+        .await
+        .map_err(|_| "The check was interrupted.".to_string())??;
+    warm::ensure(&app);
+    Ok(speed::status())
+}
+
 /// Ask Sprk model: which packs are on this PC, and may this PC download one? No network.
 #[tauri::command]
 fn assistant_model_status() -> model_download::AssistantModelStatus {
@@ -489,25 +515,35 @@ fn start_session_blocking(
 ) -> Result<(), String> {
     let state = app.state::<AppState>();
     let mut slot = state.host.lock().map_err(|_| "busy".to_string())?;
+    // A session that stopped by itself (the model never loaded, or a panic) is cleared here.
+    if slot.as_ref().is_some_and(Host::is_finished) {
+        if let Some(h) = slot.take() {
+            let _ = h.end();
+        }
+    }
     if slot.is_some() {
         return Err("A session is already running.".into());
     }
     app.state::<assistant::Assistant>().clear();
     let devices = state.devices.clone();
-    // The model is chosen now and never swapped mid-session.
+    // The model is chosen now and never swapped mid-session. It is usually loaded already
+    // (Instant Start, SPEC 4.6); if not, capture starts now and the engine follows.
     let policy = policy();
-    let loaded = models::load_active(env!("CARGO_PKG_VERSION"))?;
+    speed::call_off();
+    let (engine_label, engine) = app.state::<warm::Warm>().for_session()?;
+    let engine = custom_words::apply_source(engine, custom_words::in_force(&policy));
+    let make_vad = models::load_vad()?;
     let host = Host::start(
         StartParams {
             root: transcripts_root(&app, &policy)?,
             name,
             app_version: env!("CARGO_PKG_VERSION").to_string(),
-            engine_label: loaded.label,
+            engine_label,
             commit: commit_config(&policy),
             continue_from,
         },
-        loaded.engine,
-        loaded.make_vad,
+        engine,
+        make_vad,
         Box::new(move || {
             Box::new(Preferred::new(CpalBackend::default(), devices)) as Box<dyn Backend>
         }),
@@ -718,6 +754,7 @@ fn main() -> anyhow::Result<()> {
         .manage(AppState::default())
         .manage(assistant::Assistant::new())
         .manage(shell::Shell::default())
+        .manage(warm::Warm::default())
         .setup(|app| {
             note_policy_file();
             shell::init(app.handle())?;
@@ -726,6 +763,8 @@ fn main() -> anyhow::Result<()> {
             app.state::<assistant::Assistant>().start_idle_timer();
             mic_watch::start(app.handle().clone());
             retention::start(app.handle().clone());
+            // Instant Start: check the speed if needed, then load the model in the background.
+            warm::prepare(app.handle());
             Ok(())
         })
         .on_window_event(|window, event| match window.label() {
@@ -755,6 +794,8 @@ fn main() -> anyhow::Result<()> {
             model_status,
             model_check_update,
             model_download,
+            speed_status,
+            speed_check,
             assistant_model_status,
             assistant_model_check,
             assistant_model_download,
@@ -768,6 +809,8 @@ fn main() -> anyhow::Result<()> {
             save_location::save_location_set,
             retention::retention_status,
             retention::retention_set,
+            custom_words::custom_words_status,
+            custom_words::custom_words_set,
             library::library_open_folder,
             continue_session,
             assistant::assistant_status,

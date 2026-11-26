@@ -1,12 +1,14 @@
 <script lang="ts">
   import type { DownloadProgress, ModelStatus } from "./types";
   import ModelDownload from "./ModelDownload.svelte";
+  import ModelSpeed from "./ModelSpeed.svelte";
   import Segmented from "./Segmented.svelte";
   import AssistantSettings from "./AssistantSettings.svelte";
   import AppUpdates from "./AppUpdates.svelte";
   import DevicePicker from "./DevicePicker.svelte";
   import SaveLocation from "./SaveLocation.svelte";
   import Retention from "./Retention.svelte";
+  import CustomWords from "./CustomWords.svelte";
   import Managed from "./Managed.svelte";
   import { isLocked, prefs, setPref, type CaptionWho, type CaptionDelay, type Theme } from "./prefs.svelte";
   import { comboFromEvent } from "./hotkey";
@@ -75,6 +77,7 @@
           The model turns speech into text on this PC. Audio never leaves your computer.
           {#if model.customSource}Your organization provides the download.{/if}
         </p>
+        {#if model.ready}<ModelSpeed {sessionActive} />{/if}
       </div>
       <ModelDownload
         {model}
@@ -87,6 +90,8 @@
       />
     </div>
   </div>
+
+  <CustomWords {sessionActive} />
 
   <SaveLocation {sessionActive} />
 
