@@ -10,6 +10,8 @@ The bottom bar has icon buttons (hover for what each does): Library, Settings (t
 2. Optionally type a session name. If you leave it blank, SprkNotes names the file from your calendar, the call, or the audio playing, and falls back to `Transcript`.
 3. Press **Start**. The light turns **red** while it is transcribing.
 
+Start is instant: SprkNotes gets the speech model ready in the background when it opens and keeps it ready between sessions. If you press Start right after opening SprkNotes, before the model is ready, it starts listening anyway; your first words are held in memory (never saved as audio) and appear as lines a few seconds later, when the model is ready.
+
 ![Ready](screenshots/main-ready-light.png)
 
 The light replaces a text status: green is ready, red is transcribing, yellow is paused.
@@ -76,11 +78,12 @@ Open **Settings** at the bottom of the window.
 
 ![Settings](screenshots/settings-ready-light.png)
 
-- **Transcription model.** Shows whether the model is installed. **Download model** fetches the current Parakeet model, and **Check for updates** looks for a newer one (SprkNotes also checks quietly when it starts and tells you). Downloads are in parts, checked before use, and blocked while a session is running. Your organization can turn downloads off or point them at an internal mirror, which shows in this panel.
+- **Transcription model.** Shows whether the model is installed. **Download model** fetches the current Parakeet model, and **Check for updates** looks for a newer one (SprkNotes also checks quietly when it starts and tells you). Downloads are in parts, checked before use, and blocked while a session is running. Your organization can turn downloads off or point them at an internal mirror, which shows in this panel. Under it, a speed line such as "Speed: 3.2x real time on 4 threads" says how fast the model runs on this PC. SprkNotes measures this once in the background (and again for a new model) and uses the number of threads that works best; **Check again** measures it now (not during a session).
 
   ![Downloading](screenshots/settings-model-downloading-light.png)
   ![Update available](screenshots/settings-model-update-light.png)
   ![Managed by your organization](screenshots/settings-model-managed-light.png)
+- **Custom words.** Names, medicines and product names you want spelled right, one word or phrase per line, then **Save**. When the speech model hears something close, such as "metaprolol" or "life spark", the transcript, the live line and captions show your spelling ("metoprolol", "Lifespark"). Only words of five or more letters are matched loosely, the first letter has to agree, and everyday words are never changed. Words your organization added are listed under the box. Changes apply from the next session, and a note says how many words the last session used.
 - **Appearance.** System, Light or Dark.
 - **Misc.** **Throwback Mode** (the first app icon). Everything else looks the same.
 
@@ -96,7 +99,7 @@ If the app or PC stops unexpectedly, the file already holds everything that was 
 
 ![After a crash](screenshots/recovery-light.png)
 
-If something goes wrong during a session you see a notice instead of nothing: a Start that fails shows why; "A line could not be saved" means check that the transcripts folder can be written to and has free space; "The transcript could not be closed properly" means it still holds everything saved so far.
+If something goes wrong during a session you see a notice instead of nothing: a Start that fails shows why; "A line could not be saved" means check that the transcripts folder can be written to and has free space; "The transcript could not be closed properly" means it still holds everything saved so far. "The transcription model did not load" means the session stopped because the model could not be loaded; check the transcription model in Settings.
 
 Lines are written in time order even when you and others talk at the same time, and long unbroken speech is committed steadily rather than all at once at the end.
 

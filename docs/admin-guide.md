@@ -33,6 +33,7 @@ Window settings an admin can lock or start: `Theme` (system, light, dark), `Thro
 | `ShowClaudeHandoff`, `ShowCopilotHandoff` | Show or hide the buttons |
 | `CopilotTarget`, `PromptTemplatePath` | Handoff target and prompt template |
 | `FillerRemoval`, `CommitDelaySeconds` | Transcript behavior (delay 3 to 15 s) |
+| `CustomWords` | Multi-string: names, medicines and product names to spell right, one per item. Adds to each person's own **Custom words** list and does not lock it. Taken as hints by a model pack that includes a `bpe_vocab` file, otherwise used to fix near misses after decoding (ADR-017). Never logged |
 | `PinnedModel` | `id@version` forced as the active model |
 | `AllowUserModels` | 0 or 1 |
 | `AllowedModelHashes` | SHA-256 of `model.json`, pilot tier |

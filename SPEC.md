@@ -20,7 +20,7 @@ SprkNotes is a minimal Windows desktop app that transcribes the user's microphon
 | Commit delay | Short hold before a segment is written to disk, so bleed checks can drop duplicates first |
 | Transcription model | The speech-to-text (ASR) model. Not an LLM; it only converts speech to text |
 | Model pack | A single `.sprkmodel` file (zip) holding model files plus a signed `model.json` manifest |
-| Active model | The model the app loads at session start, chosen by `active.json` or admin policy |
+| Active model | The model a session uses (kept loaded between sessions, 4.6), chosen by `active.json` or admin policy |
 | Audio source | An app playing sound through system output (e.g. Firefox tab, Teams), with its title and active duration |
 | Merge window | How long an audio source may go silent and still count as the same continuous activity |
 | Call context | Who the user is actually in a call with right now (not just who was invited) |
@@ -164,6 +164,12 @@ sprknotes/
   - Consecutive short fragments from the same speaker within 1 s are merged.
 - **NPU acceleration (v1.1):** evaluate sherpa-onnx QNN models on Snapdragon. CPU int8 is the v1 baseline.
 
+### 4.3a Custom words (ADR-017)
+- Settings has a **Custom words** box: one word or phrase per line (names, medicines, product names). Entries are cleaned (letters, digits, spaces, `'`, `-` and `.` kept; at most 4 words and 64 characters each; duplicates ignoring case dropped; at most 500). The admin policy `CustomWords` (multi-string) adds entries; both lists apply, the admin's first, and the admin list never locks or replaces the person's own. The list in force is read at session start; a change applies from the next session.
+- **Word hints (engine layer).** At session start the list is offered to the engine (`Engine::bias_toward`). The sherpa-onnx transducer adapter takes it only when the model pack declares the optional `bpe_vocab` file (16.5): it builds a recognizer with modified beam search (`max_active_paths` 4, `hotwords_score` 1.5, `modeling_unit` bpe) and passes the hints to every stream from memory, never as a file. With an empty list, no `bpe_vocab`, or a recognizer that cannot be built, decoding stays plain greedy search, unchanged. The current Parakeet TDT 0.6B v2 pack has no `bpe_vocab`, so this layer is off with it today. Whisper takes no hints.
+- **Spelling fixes (text layer, what ships with the current pack).** Whenever the list is not empty, every decoded text (committed lines, the live line, captions) goes through a corrector that rewrites near misses to the listed spelling: case and punctuation are ignored when comparing; a loose match needs an entry of 5 or more letters, the same first letter and at most 1 differing letter (2 from 10 letters up), word for word; words run together or split apart ("life spark" for "Lifespark") match only exactly and only for entries of 4 or more letters; words with digits and common English words are never changed loosely; a word that differs only in capitals stays as heard; capitals follow the entry when it has any, otherwise the heard first letter; a possessive 's is kept; punctuation between words stops a multi-word match.
+- Settings says what the last session did, as counts only: how many words were in force and whether the model took them as hints. The words are PHI-grade: never logged, never in an error. The person's list is kept in `settings.json` (`customWords`).
+
 ### 4.4 Commit buffer
 - Finalized segments wait **6 s** (configurable 3 to 15 s) for dedupe and merge, then commit in timestamp order. A segment that is ready waits for any segment that started before it and is not ready yet (a short line inside a longer, earlier one from the other stream), up to 20 s more, so lines are written in start order.
 - Finished lines shown in the live view before they commit carry the time their utterance began.
@@ -177,6 +183,12 @@ Live captions (ADR-006) show speech in progress in the overlay. They are transie
 - **Pause:** capture stops, buffer flushes, a pause event line is written.
 - **Resume:** capture restarts, a resume event line is written. Timestamps are wall-clock elapsed since start, so gaps stay visible.
 - **End:** flush, finalize file (6.3), show the name/save confirmation.
+
+### 4.6 Session start (Instant Start)
+- **Warm model:** the active transcription model is loaded in the background at launch (after the speed check, 16.8a, when one is due), when the main window is shown again, when "Start a transcript?" (8.3a) shows, and after a model download. It stays loaded between sessions and every session uses that one engine (one session runs at a time). It is loaded again only when the resolver's choice (16.4) or the speed check's thread count changes, or after a decode panicked. Never during a session: a change found then waits for the next Start.
+- **Start is instant:** Start creates the file (6.3), opens the devices and begins capture at once. The voice activity pack is checked at Start, so a missing one still stops Start with its reason. If the warm model is ready, decoding starts at once.
+- **Start before the model is ready** (right after launch, or the model changed): the model is loaded now and capture runs meanwhile. Everything captured waits **in memory only**, in order, with Pause, Resume, source changes, marks and notes; when the model arrives it is decoded as if just heard, so no words are lost and lines keep their real times. The source meters move while waiting. End while waiting waits for the model, then decodes and finalizes as usual. A load that fails (or takes over 5 minutes) closes the file with "Transcription stopped: the transcription model did not load" and a notice; nothing could be transcribed. A model that loads by falling back to another one (16.4) is written into the front matter at End.
+- **Memory:** keeping the model loaded costs its RAM while SprkNotes runs, also when idle (about 1 GB for the default Parakeet model). That is the price of an instant Start; there is no setting for it. The speed check loads a second copy for a few seconds.
 
 ---
 
@@ -303,7 +315,7 @@ Exports are generated on demand from the `.md` file plus the JSONL sidecar.
 - The name is editable in the main window at any time during the session. Renaming moves the open file atomically (file opened with `FILE_SHARE_DELETE`).
 
 ### 6.3 Write strategy
-- **Start:** create the file with front matter (`status: in-progress`), heading, optional meeting context, and `## Transcript`.
+- **Start:** create the file with front matter (`status: in-progress`), heading, optional meeting context, and `## Transcript`. This happens at once, also while the model is still loading (4.6).
 - **During:** each committed segment is appended and flushed (`FlushFileBuffers`). Same for the JSONL sidecar.
 - **End:** rewrite front matter (end, duration, `status: complete`) by writing a temp file and atomically replacing (`ReplaceFileW`). This is the only time the file is rewritten.
 - **Max loss on crash:** the commit delay plus the in-progress utterance (target ≤ 10 s).
@@ -391,12 +403,13 @@ Scheduled Teams and Zoom meetings live on the user's Outlook calendar, so one lo
 
 ### 8.5 Settings (keep short)
 - Save transcripts to: the folder (6.1), typed with variables allowed, with **Save**, **Use default** and **Open**. Read-only with "Set by your organization." when policy sets it.
+- Custom words (4.3a): one word or phrase per line, with **Save**; words the organization added are listed under it, read-only, and a note says what the last session did with the list.
 - Audio: mic device and output device (lists of devices; "System default" follows the headset, an unplugged pick falls back to the default), Others on/off, filler removal, commit delay (advanced).
 - Outlook: provider, context prompt behavior (Ask / Always / Never).
 - Context: detect audio sources (on/off, merge window), Teams call context (on/off, poll interval), name 1:1 speakers (on/off), excluded apps/title patterns.
 - Files: transcripts root, default export format.
 - AI handoff: show Claude button, show Copilot button, edit prompt template.
-- Models (16.7): active model, installed models, Import, Switch, Roll back. Locked with a "Managed by your organization" note when policy pins a model.
+- Models (16.7): active model, installed models, Import, Switch, Roll back. Locked with a "Managed by your organization" note when policy pins a model. Under the transcription model, a read-only speed line ("Speed: 3.2x real time on 4 threads") with **Check again** (16.8a).
 - Appearance: System, Light or Dark (the overlay stays dark unless Light is chosen).
 - Throwback Mode: off (default) or on. It swaps only the app icon in the tray and on the window to the first (starburst) icon; fonts, colors, sizes and spacing stay the same, so the window does not move.
 - Live captions: on or off, and Others only (default) or Others and Me in the pop-out. The transcript window's live line always shows both.
@@ -473,7 +486,7 @@ Admin values win over user settings and lock the matching UI control. Sources, s
 - `HKCU\Software\Policies\SprkNotes` (user registry).
 - Values may also arrive packed in one string value named `Settings` (`Key=Value;Key=Value`, `|` between the items of a list), which is what the MSI switches `POLICY` and `DEFAULTS` write (10.2a). A separate value of the same name wins over the packed one.
 - Path values (`TranscriptsRoot`, `PromptTemplatePath`) are expanded per user at runtime (6.1).
-- Keys: `TranscriptsRoot`, `CalendarProvider` (`com`/`off`), `ContextPrompt`, `SummarizeEnabled` (0 removes Summarize, 9), `ShowClaudeHandoff`, `ShowCopilotHandoff`, `CopilotTarget`, `PromptTemplatePath`, `FillerRemoval`, `CommitDelaySeconds`.
+- Keys: `TranscriptsRoot`, `CalendarProvider` (`com`/`off`), `ContextPrompt`, `SummarizeEnabled` (0 removes Summarize, 9), `ShowClaudeHandoff`, `ShowCopilotHandoff`, `CopilotTarget`, `PromptTemplatePath`, `FillerRemoval`, `CommitDelaySeconds`, `CustomWords` (multi-string; adds to each person's own list and never locks it, 4.3a).
 - Model keys (section 16): `PinnedModel` (`id@version`), `AllowUserModels` (0/1), `AllowedModelHashes` (multi-string, SHA-256 of `model.json`), `RequireSignedModels` (0/1; forced on from 1.0), `ModelPublicKeys` (multi-string, OpenSSH `allowed_signers` lines for Ed25519 keys), `KeepModelVersions` (default 2).
 - Context keys (sections 18, 19): `AudioSourceDetection` (0/1), `AudioMergeWindowSeconds`, `CallMergeWindowSeconds`, `AudioSourceExcludePatterns` (multi-string: process names or title regexes), `CallContext` (0/1), `CallPollSeconds`, `NameOneToOneSpeakers` (0/1), `TeamsLocalApi` (0/1, default 1: probed silently at session start).
 
@@ -700,7 +713,7 @@ If the chosen model fails verification or loading, fall back to the next valid c
   "notes": "Changelog for this model version"
 }
 ```
-- `files` keys are roles the adapter looks up (`sherpa-onnx/offline-transducer`: encoder, decoder, joiner, tokens; `sherpa-onnx/whisper`: encoder, decoder, tokens; `sherpa-onnx/vad-silero`: vad). A voice activity model is a pack of its own with `features` all false.
+- `files` keys are roles the adapter looks up (`sherpa-onnx/offline-transducer`: encoder, decoder, joiner, tokens, and optionally `bpe_vocab`, the tokenizer vocabulary that lets the model take custom-word hints, 4.3a; `sherpa-onnx/whisper`: encoder, decoder, tokens; `sherpa-onnx/vad-silero`: vad). A voice activity model is a pack of its own with `features` all false.
 - `engine` must match an adapter compiled into the app (17.2). New weights for a supported engine family need **no app update**. A new engine family needs an app release with a new adapter.
 - Versions use `YYYY.MM.patch` so they sort correctly.
 
@@ -745,6 +758,13 @@ sprkctl model sync --from <\\server\share\models> --scope machine   # optional: 
 - Installed list with **Switch** and **Roll back**; **Import model pack** button (user/portable scope only).
 - When policy pins or manages the model, controls are read-only with "Managed by your organization".
 
+### 16.8a Speed check (decode threads)
+- Desktop decode threads used to be fixed at `min(4, logical cores)`. Now, once per model and machine, the app loads the active model at a couple of thread counts (half the default, the default and twice it, within the cores and at most 8) and times a decode of a 3 s built-in clip (made in code: voiced tones at syllable rate, no voice, nothing read from or written to disk) after one warm-up decode. It keeps the fewest threads within 10% of the fastest (more threads add heat for little speed). The same self-check idea as the phone tuning (ADR-015 Decision 2), in `sprk_asr::tune`.
+- Runs in the background at launch when the active model was never checked on this PC, after a model download, and on **Check again** in Settings. Never during a session; a Start while it runs calls it off (its result is dropped and it runs again later). Refused during a session from Settings.
+- Kept in `%APPDATA%\SprkNotes\speed.json`, keyed by `id@version` and machine (processor type, logical cores, computer name), so a roaming profile does not carry one PC's choice to another.
+- Any error (no model, a load or decode failure, a fallback model loaded instead) keeps the default. `SPRK_ASR_THREADS` still wins over everything, and then no check runs; Settings says the threads are set on this PC.
+- Settings shows "Speed: 3.2x real time on 4 threads" (times faster than real time, 1 / real-time factor) under the transcription model, with **Check again**. A new choice takes effect when the warm model reloads (4.6), at the latest the next Start.
+
 ### 16.9 Release process for a new model (runbook outline)
 1. Convert/obtain the model, place files in a folder with `model.json`.
 2. `sprkctl model pack`, then `sprkctl model sign` (1.0) or record the hash with `sprkctl model hash` (pilot).
@@ -788,7 +808,7 @@ Signing is **mandatory for the 1.0 release**. Pilot builds (0.x) may run without
 | Exporters | `Exporter` (input: parsed transcript) | md, txt, json, docx; later srt/vtt, pdf |
 | Calendar providers | `CalendarProvider` | Outlook COM (classic); later other local sources |
 | AI handoff targets | Config entries: name, launch template, prompt template, policy key | Claude, M365 Copilot; new targets added by config |
-| Post-processing | `SegmentFilter` chain in the commit buffer | dedupe, filler removal, custom vocabulary fixes (e.g. company terms) |
+| Post-processing | `SegmentFilter` chain in the commit buffer; engine wrappers for fixes that should reach live text too | dedupe, filler removal; custom words (`custom_words::Corrected`, 4.3a) |
 | Audio source resolvers | `AudioSourceResolver` chain (18.3) | media session, browser tab UIA, window title, process name |
 | Call context providers | `CallContextProvider` chain (19.2) | calendar (COM), Teams local API, Teams call window title; later Zoom |
 

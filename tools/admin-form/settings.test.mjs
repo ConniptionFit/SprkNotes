@@ -30,6 +30,17 @@ test("bad values are reported and good ones pass", () => {
   assert.equal(bad.length, 6);
 });
 
+test("custom words are a list that adds to the person's own and is never a starting value", () => {
+  const s = A.SETTINGS.find((x) => x.key === "CustomWords");
+  assert.equal(s.type, "list");
+  assert.ok(!s.start);
+  const c = [{ key: "CustomWords", mode: "lock", value: "metoprolol\n\nCharlie Mertens" }];
+  assert.deepEqual(A.validate(c), []);
+  assert.equal(A.packed(c, "lock"), "CustomWords=metoprolol|Charlie Mertens");
+  assert.match(A.policyScript(c), /Name = 'CustomWords'; Kind = 'MultiString'; Value = \[string\[\]\]@\('metoprolol', 'Charlie Mertens'\)/);
+  assert.equal(A.validate([{ key: "CustomWords", mode: "start", value: "metoprolol" }]).length, 1);
+});
+
 test("packed values and the msiexec line keep variables as written", () => {
   const c = [
     { key: "TranscriptsRoot", mode: "start", value: "%OneDrive%\\Notes" },

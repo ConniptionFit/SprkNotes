@@ -23,6 +23,7 @@
 
     { key: "FillerRemoval", group: "Transcript", type: "bool", label: "Remove filler words", help: "Drop um, uh and similar from the transcript." },
     { key: "CommitDelaySeconds", group: "Transcript", type: "number", min: 3, max: 15, label: "Line delay (seconds)", help: "How long a line may still change before it is written, 3 to 15." },
+    { key: "CustomWords", group: "Transcript", type: "list", label: "Custom words", help: "Names, medicines and product names to spell right, one per line. They add to each person's own list in Settings." },
 
     { key: "CalendarProvider", group: "Meetings", type: "enum", options: ["com", "off"], label: "Calendar source", help: "com reads the local Outlook calendar for meeting titles; off never looks." },
     { key: "CallContext", group: "Meetings", type: "bool", label: "Use call details", help: "Read the name of the call app and the meeting while a session runs." },
