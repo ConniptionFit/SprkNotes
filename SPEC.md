@@ -259,11 +259,15 @@ app: "SprkNotes 0.1.0"
 
 > `00:31:40` Back to 1:1 with Sam Sample: remote speaker labeled Sam Sample
 - `00:31:45` **Sam Sample:** Okay, back to the pilot.
+
+> `00:33:10` Mark
+> `00:33:25` Note: Send Sam the rollout checklist
 ```
 
 **Grammar (parsers rely on this):**
 - Statement line: `- \`HH:MM:SS\` **<Speaker>:** <text>` (one statement, one line, no line breaks inside). Speaker is `Me`, `Others`, or a participant display name (section 19).
-- Event line: `> \`HH:MM:SS\` <event text>`. Event types: paused, resumed, interrupted, source changed, call started/ended, labeling mode changed (1:1 / group), audio source started/ended.
+- Event line: `> \`HH:MM:SS\` <event text>`. Event types: paused, resumed, interrupted, source changed, call started/ended, labeling mode changed (1:1 / group), audio source started/ended, mark, note.
+- Mark and note (added by the user during a session, 8.1): a mark is the event text `Mark` exactly; a note is `Note: <text>`, one line, trimmed, at most 500 characters (longer notes are cut). They are ordinary event lines (and `{"event":true,...}` sidecar entries), so older readers show them as events, they never feed the Participants or Audio sources sections, and the summary prompt (9.3) and Ask Sprk read them with the rest of the transcript. Statements already committed are written first, so a mark follows what was on screen when it was pressed.
 - A blank line is inserted when the speaker changes (readability; parsers ignore blank lines).
 - Front matter is YAML. `format` is versioned; any breaking change bumps it. The `call`, `audio_sources` and `name_source` fields and the Participants / Audio sources sections are additive in format 1.
 - Meeting context section appears only if the user accepted it (7.3). Participants and Audio sources sections are written at finalization (6.3) from the events already in the file, so a crash loses none of that data.
@@ -348,6 +352,7 @@ Scheduled Teams and Zoom meetings live on the user's Outlook calendar, so one lo
 ### 8.1 Main window
 - **Top bar:** editable session name, source buttons (small icon buttons: microphone **Me**, speaker **Others**, struck through when off). Clicking one opens a menu: System default, each device found now (a saved device that is unplugged stays listed as not connected), and Turn off / Turn on. Picking a device turns that source on. The device choice is the same one as Settings. Which sources are on is remembered across launches (both on at first run). While transcribing, each button that is on shows a small waveform: one smooth line whose swell follows the voice, tapering at both ends. There is one style and no setting for it (Nine bars was retired in 0.2.0-alpha.13; see docs/archive/nine-bars.md). It is drawn on a small canvas at whole device pixels. It shows the peak input level about twenty times a second, on a loudness scale from -60 dBFS to full scale, measured before echo removal so a muted or wrong device reads flat. Levels below about -39 dBFS count as silence, so dead air settles into a flat line. The window hears a level only when it changes, so the meter keeps the newest level and eases toward it on display frames (quick rise, gentler fall) until the line is flat, then stops drawing; a silence that repeats the same 0 still settles. With reduced motion it updates twenty times a second without easing and the line does not drift. Only the number reaches the window; no audio is kept or logged. The buttons show icons only (Me and Others are in the tooltip). Status pill ("Transcribing", "Paused", "Ready").
 - **Controls:** Start · Pause/Resume · End. Context-aware (only valid actions enabled).
+- **Marks and notes:** while a session runs (transcribing or paused), a bar under the live pane has **Mark** (also Ctrl+M while the window has focus; a held key counts once) and a note box (Enter or **Save note** saves it; the box is kept if saving fails). Each is written to the transcript at once as a timestamped line (5.1) and shown in the live pane and the Library view with a tint so it stands out. Not in the overlay, and not a system-wide shortcut (8.6).
 - **Live pane:** transcript lines styled per 5.1 (timestamp muted, speaker bold, Me and Others visually distinct).
 - **Live line:** while transcribing, the newest words appear as the last line of the live pane (marked "live"), growing word by word. Words the engine is unsure of (after `stable`) are muted with a dotted underline; words that change are briefly tinted; when the committed line arrives it replaces the live line. Both speakers, whatever the pop-out shows (Me's live words make Me as quick as Others; before, Me waited for the commit delay). Each speaker has a live row of their own: when two people talk at once, both rows grow side by side (the one who started first on top) instead of one row switching between them. The live line is display only: the saved transcript contains committed lines only, and partial text is never written to disk or logged. A toolbar above the pane has smaller/larger text (remembered) and a show/hide toggle (also in Settings, on by default).
 - **Footer:** Library, Settings, Summarize (document icon; hands the newest transcript to Claude or Copilot, 9; greyed with a tooltip saying why when there is nothing to summarize), and Ask Sprk only while the assistant and its Ask feature are on (hidden otherwise).
@@ -404,6 +409,7 @@ Scheduled Teams and Zoom meetings live on the user's Outlook calendar, so one lo
 - A press starts a transcript when none runs (the same as the tray's Start), pauses a running one and resumes a paused one. Presses less than 0.75 s apart count once; holding the keys does not repeat.
 - A combination needs Ctrl, Alt or Win with a letter, a digit, F1 to F24 or Space, so it never takes a key typed on its own or with Shift.
 - Windows registers it (RegisterHotKey); if another app holds the combination, Settings says so and asks for other keys, and nothing else changes. It is kept in the app's settings and set again at each launch. Other platforms do not offer it.
+- Ctrl+M (drop a mark, 8.1) is a window shortcut, not a system-wide one: it works only while the main window has focus, shows the live transcript (not Library or Settings) and a session runs.
 
 ---
 
@@ -435,6 +441,7 @@ Each statement is one line: - `HH:MM:SS` **Speaker:** text
 "Me" is the person who ran SprkNotes. A named speaker (e.g. "Sam Sample") is the only other person on a 1:1 call.
 "Others" means one or more remote people when the call had 3+ people or nobody could be identified; do not guess who said an "Others" line.
 Lines starting with ">" are events: pauses, people joining or leaving, and audio sources (videos or apps playing sound). Speech during an audio source window may be from a video, not a person in the meeting; treat it that way.
+"> `HH:MM:SS` Mark" is a moment the user flagged as important, and "> `HH:MM:SS` Note: text" is a note the user typed at that moment. Give marked moments and notes extra weight, and keep each note's timestamp when you use it.
 The front matter and the Meeting context, Participants and Audio sources sections give extra context. Invitees are not proof someone attended. During a group-call period, other participants were not identified.
 Speech recognition can mishear words. Fix obvious errors from context, but never invent content.
 

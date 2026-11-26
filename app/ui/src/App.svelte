@@ -5,6 +5,7 @@
   import TopBar from "./lib/TopBar.svelte";
   import Controls from "./lib/Controls.svelte";
   import LivePane from "./lib/LivePane.svelte";
+  import MarkBar from "./lib/MarkBar.svelte";
   import Footer from "./lib/Footer.svelte";
   import Settings from "./lib/Settings.svelte";
   import Library from "./lib/Library.svelte";
@@ -369,6 +370,17 @@
         />
       {/snippet}
     </LivePane>
+    {#if status !== "ready"}
+      <MarkBar
+        disabled={phase.phase === "ending"}
+        onmark={async () => {
+          await api?.mark();
+        }}
+        onnote={async (t) => {
+          await api?.note(t);
+        }}
+      />
+    {/if}
   {/if}
   <div class="dock">
     <Footer

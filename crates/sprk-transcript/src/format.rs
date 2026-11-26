@@ -26,6 +26,46 @@ pub fn event_line(elapsed_ms: u64, event: &str) -> String {
     format!("> `{}` {}", timestamp(elapsed_ms), single_line(event))
 }
 
+/// Event text of a mark the user dropped during a session (SPEC 5.1).
+pub const MARK: &str = "Mark";
+
+/// Event text of a note the user typed during a session starts with this (SPEC 5.1).
+pub const NOTE_PREFIX: &str = "Note: ";
+
+/// Longest note kept, in characters. Longer notes are cut at a character boundary.
+pub const NOTE_MAX_CHARS: usize = 500;
+
+/// Event text for a typed note: one line, trimmed, at most [`NOTE_MAX_CHARS`] characters.
+/// `None` when nothing is left to save.
+pub fn note_event(text: &str) -> Option<String> {
+    let one = single_line(text);
+    if one.is_empty() {
+        return None;
+    }
+    let cut: String = one.chars().take(NOTE_MAX_CHARS).collect();
+    Some(format!("{NOTE_PREFIX}{}", cut.trim_end()))
+}
+
+/// What an event line's text says, for readers that show marks and notes differently.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EventKind<'a> {
+    Mark,
+    Note(&'a str),
+    Other,
+}
+
+/// Classify event text (the part after the timestamp).
+pub fn event_kind(text: &str) -> EventKind<'_> {
+    let text = text.trim();
+    if text == MARK {
+        return EventKind::Mark;
+    }
+    match text.strip_prefix(NOTE_PREFIX) {
+        Some(n) if !n.trim().is_empty() => EventKind::Note(n.trim()),
+        _ => EventKind::Other,
+    }
+}
+
 /// Quote a YAML scalar.
 pub fn yaml_str(s: &str) -> String {
     format!(
@@ -157,6 +197,29 @@ mod tests {
             event_line(842_000, "Transcription paused"),
             "> `00:14:02` Transcription paused"
         );
+    }
+
+    #[test]
+    fn notes_are_one_trimmed_capped_line() {
+        assert_eq!(
+            note_event("  check BP\n again "),
+            Some("Note: check BP again".into())
+        );
+        assert_eq!(note_event(" \n\t "), None);
+        let long = "é".repeat(NOTE_MAX_CHARS + 20);
+        let n = note_event(&long).unwrap();
+        assert_eq!(n.chars().count(), NOTE_PREFIX.len() + NOTE_MAX_CHARS);
+        assert!(event_line(0, &n).lines().count() == 1);
+    }
+
+    #[test]
+    fn event_kinds() {
+        assert_eq!(event_kind("Mark"), EventKind::Mark);
+        assert_eq!(event_kind("Note: follow up"), EventKind::Note("follow up"));
+        assert_eq!(event_kind("Note: "), EventKind::Other);
+        assert_eq!(event_kind("Marked"), EventKind::Other);
+        assert_eq!(event_kind("Transcription paused"), EventKind::Other);
+        assert_eq!(event_kind("Call with Sam"), EventKind::Other);
     }
 
     #[test]

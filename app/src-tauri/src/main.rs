@@ -21,6 +21,7 @@ use sprk_audio::live::{Preferred, SharedChoice};
 use sprk_audio::Source;
 use sprk_pipeline::commit::Config;
 use sprk_pipeline::host::{Events, Host, StartParams, UiLine, UiStatus};
+use sprk_transcript::format::{event_kind, EventKind};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -46,6 +47,17 @@ enum LinePayload {
         text: String,
     },
     Event {
+        id: u64,
+        t: String,
+        text: String,
+    },
+    /// A mark the user dropped (SPEC 5.1). In the file it is an event line.
+    Mark {
+        id: u64,
+        t: String,
+    },
+    /// A note the user typed, without its "Note: " prefix.
+    Note {
         id: u64,
         t: String,
         text: String,
@@ -93,7 +105,15 @@ impl Events for TauriEvents {
                 speaker,
                 text,
             },
-            UiLine::Event { id, t, text } => LinePayload::Event { id, t, text },
+            UiLine::Event { id, t, text } => match event_kind(&text) {
+                EventKind::Mark => LinePayload::Mark { id, t },
+                EventKind::Note(n) => LinePayload::Note {
+                    id,
+                    t,
+                    text: n.to_string(),
+                },
+                EventKind::Other => LinePayload::Event { id, t, text },
+            },
         };
         let _ = self.0.emit("transcript-line", p);
     }
@@ -544,6 +564,18 @@ fn resume_session(state: State<AppState>) -> Result<(), String> {
     with_host(&state, |h| h.resume())
 }
 
+/// Drop a mark into the live transcript at this moment.
+#[tauri::command]
+fn mark_session(state: State<AppState>) -> Result<(), String> {
+    with_host(&state, |h| h.mark())
+}
+
+/// Save a short typed note into the live transcript at this moment.
+#[tauri::command]
+fn note_session(state: State<AppState>, text: String) -> Result<(), String> {
+    with_host(&state, |h| h.note(&text).map(|_| ()))
+}
+
 #[tauri::command]
 fn rename_session(state: State<AppState>, name: String) -> Result<(), String> {
     with_host(&state, |h| h.rename(&name))
@@ -736,6 +768,8 @@ fn main() -> anyhow::Result<()> {
             resume_session,
             end_session,
             rename_session,
+            mark_session,
+            note_session,
             set_source,
             list_devices,
             set_device,

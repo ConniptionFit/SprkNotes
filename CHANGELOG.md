@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Marks and notes: while a session runs, a bar under the transcript has a **Mark** button (or press Ctrl+M) to flag the moment, and a box where you can type a short note and press Enter. Both are saved in the transcript with the time, stand out in the live view and in the Library, and Summarize and Ask Sprk see them. Needs a look on the laptop.
 - Me and Others are kept apart, and now tested to stay apart: new tests on every build feed two different signals and check that each one reaches transcription unchanged and only on its own side. The echo canceller can now only take sound away from Me, never add it, so a silent microphone always gives a silent Me stream even when the other side is loud.
 - Line wave is the sound meter: the Me and Others buttons now always show the smooth line that swells with the voice. Nine bars is retired and its code archived (see docs/archive/nine-bars.md), so the **Sound meter** setting is gone, and so is the admin key `WaveformStyle`; a saved choice or a policy that still sets it is ignored. Needs a look on the laptop.
 - Nine bars fix (Nine bars is now retired, see above): after someone stops talking, every bar now walks down to the flat line (before, the outer bars could stay raised until the next sound), and the bars and gaps are drawn on whole screen pixels so the spacing is even at 100, 125, 150 or 200 percent. Needs a look on the laptop.
