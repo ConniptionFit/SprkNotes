@@ -6,6 +6,7 @@
   import AppUpdates from "./AppUpdates.svelte";
   import DevicePicker from "./DevicePicker.svelte";
   import SaveLocation from "./SaveLocation.svelte";
+  import CustomWords from "./CustomWords.svelte";
   import Managed from "./Managed.svelte";
   import { isLocked, prefs, setPref, type CaptionWho, type CaptionDelay, type Theme } from "./prefs.svelte";
   import { comboFromEvent } from "./hotkey";
@@ -86,6 +87,8 @@
       />
     </div>
   </div>
+
+  <CustomWords {sessionActive} />
 
   <SaveLocation {sessionActive} />
 

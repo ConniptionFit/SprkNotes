@@ -2,6 +2,7 @@
 
 mod assistant;
 mod clock;
+mod custom_words;
 mod hotkey;
 mod library;
 mod mic_watch;
@@ -494,6 +495,7 @@ fn start_session_blocking(
     // The model is chosen now and never swapped mid-session.
     let policy = policy();
     let loaded = models::load_active(env!("CARGO_PKG_VERSION"))?;
+    let (engine, words) = custom_words::apply(loaded.engine, &custom_words::in_force(&policy));
     let host = Host::start(
         StartParams {
             root: transcripts_root(&app, &policy)?,
@@ -503,7 +505,7 @@ fn start_session_blocking(
             commit: commit_config(&policy),
             continue_from,
         },
-        loaded.engine,
+        engine,
         loaded.make_vad,
         Box::new(move || {
             Box::new(Preferred::new(CpalBackend::default(), devices)) as Box<dyn Backend>
@@ -513,6 +515,7 @@ fn start_session_blocking(
         context_config(&policy),
     )
     .map_err(|e| e.to_string())?;
+    custom_words::note(words);
     let off = state.sources_off.lock().map(|o| *o).unwrap_or_default();
     for (source, off) in [(Source::Mic, off[0]), (Source::System, off[1])] {
         if off {
@@ -762,6 +765,8 @@ fn main() -> anyhow::Result<()> {
             save_location::save_location_status,
             managed_prefs,
             save_location::save_location_set,
+            custom_words::custom_words_status,
+            custom_words::custom_words_set,
             library::library_open_folder,
             continue_session,
             assistant::assistant_status,

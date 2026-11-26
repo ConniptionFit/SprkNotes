@@ -6,24 +6,29 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
 
+/// `settings.json`. Each setter loads it, changes its own field and stores it again, so one
+/// setting never wipes another.
 #[derive(Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-struct Saved {
-    transcripts_root: Option<String>,
+pub(crate) struct Saved {
+    pub(crate) transcripts_root: Option<String>,
+    /// Custom words (SPEC 4.3a), the person's own list.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) custom_words: Vec<String>,
 }
 
 fn saved_path() -> Option<PathBuf> {
     crate::models::user_data_dir().map(|d| d.join("SprkNotes").join("settings.json"))
 }
 
-fn load() -> Saved {
+pub(crate) fn load() -> Saved {
     saved_path()
         .and_then(|p| std::fs::read(p).ok())
         .and_then(|b| serde_json::from_slice(&b).ok())
         .unwrap_or_default()
 }
 
-fn store(s: &Saved) -> Result<(), String> {
+pub(crate) fn store(s: &Saved) -> Result<(), String> {
     let p = saved_path().ok_or("No settings folder is available.")?;
     if let Some(d) = p.parent() {
         std::fs::create_dir_all(d).map_err(|_| "Your settings could not be saved.")?;
@@ -131,9 +136,9 @@ pub fn save_location_set(app: AppHandle, path: Option<String>) -> Result<Status,
         std::fs::create_dir_all(&p)
             .map_err(|_| "That folder could not be created or opened.".to_string())?;
     }
-    store(&Saved {
-        transcripts_root: chosen,
-    })?;
+    let mut saved = load();
+    saved.transcripts_root = chosen;
+    store(&saved)?;
     save_location_status(app)
 }
 

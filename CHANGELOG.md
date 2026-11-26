@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Custom words: Settings has a new **Custom words** box for names, medicines and product names you want spelled right, one per line. When the speech model hears something close (for example "metaprolol"), SprkNotes writes your spelling ("metoprolol") in the transcript, the live line and captions. Short and everyday words are never changed. Your organization can add words too with the admin setting `CustomWords`; theirs and yours both apply. Changes take effect at the next session, and Settings says how many words the last session used. Needs a look on the laptop.
 - Line wave is the sound meter: the Me and Others buttons now always show the smooth line that swells with the voice. Nine bars is retired and its code archived (see docs/archive/nine-bars.md), so the **Sound meter** setting is gone, and so is the admin key `WaveformStyle`; a saved choice or a policy that still sets it is ignored. Needs a look on the laptop.
 - Nine bars fix (Nine bars is now retired, see above): after someone stops talking, every bar now walks down to the flat line (before, the outer bars could stay raised until the next sound), and the bars and gaps are drawn on whole screen pixels so the spacing is even at 100, 125, 150 or 200 percent. Needs a look on the laptop.
 - Smoother waveform: the Me and Others meters have nine bars instead of five, glide between levels instead of jumping, and fall to a flat line when there is no sound (room hiss no longer holds them a little raised). Needs a look on the laptop.

@@ -163,6 +163,12 @@ sprknotes/
   - Consecutive short fragments from the same speaker within 1 s are merged.
 - **NPU acceleration (v1.1):** evaluate sherpa-onnx QNN models on Snapdragon. CPU int8 is the v1 baseline.
 
+### 4.3a Custom words (ADR-016)
+- Settings has a **Custom words** box: one word or phrase per line (names, medicines, product names). Entries are cleaned (letters, digits, spaces, `'`, `-` and `.` kept; at most 4 words and 64 characters each; duplicates ignoring case dropped; at most 500). The admin policy `CustomWords` (multi-string) adds entries; both lists apply, the admin's first, and the admin list never locks or replaces the person's own. The list in force is read at session start; a change applies from the next session.
+- **Word hints (engine layer).** At session start the list is offered to the engine (`Engine::bias_toward`). The sherpa-onnx transducer adapter takes it only when the model pack declares the optional `bpe_vocab` file (16.5): it builds a recognizer with modified beam search (`max_active_paths` 4, `hotwords_score` 1.5, `modeling_unit` bpe) and passes the hints to every stream from memory, never as a file. With an empty list, no `bpe_vocab`, or a recognizer that cannot be built, decoding stays plain greedy search, unchanged. The current Parakeet TDT 0.6B v2 pack has no `bpe_vocab`, so this layer is off with it today. Whisper takes no hints.
+- **Spelling fixes (text layer, what ships with the current pack).** Whenever the list is not empty, every decoded text (committed lines, the live line, captions) goes through a corrector that rewrites near misses to the listed spelling: case and punctuation are ignored when comparing; a loose match needs an entry of 5 or more letters, the same first letter and at most 1 differing letter (2 from 10 letters up), word for word; words run together or split apart ("life spark" for "Lifespark") match only exactly and only for entries of 4 or more letters; words with digits and common English words are never changed loosely; a word that differs only in capitals stays as heard; capitals follow the entry when it has any, otherwise the heard first letter; a possessive 's is kept; punctuation between words stops a multi-word match.
+- Settings says what the last session did, as counts only: how many words were in force and whether the model took them as hints. The words are PHI-grade: never logged, never in an error. The person's list is kept in `settings.json` (`customWords`).
+
 ### 4.4 Commit buffer
 - Finalized segments wait **6 s** (configurable 3 to 15 s) for dedupe and merge, then commit in timestamp order. A segment that is ready waits for any segment that started before it and is not ready yet (a short line inside a longer, earlier one from the other stream), up to 20 s more, so lines are written in start order.
 - Finished lines shown in the live view before they commit carry the time their utterance began.
@@ -385,6 +391,7 @@ Scheduled Teams and Zoom meetings live on the user's Outlook calendar, so one lo
 
 ### 8.5 Settings (keep short)
 - Save transcripts to: the folder (6.1), typed with variables allowed, with **Save**, **Use default** and **Open**. Read-only with "Set by your organization." when policy sets it.
+- Custom words (4.3a): one word or phrase per line, with **Save**; words the organization added are listed under it, read-only, and a note says what the last session did with the list.
 - Audio: mic device and output device (lists of devices; "System default" follows the headset, an unplugged pick falls back to the default), Others on/off, filler removal, commit delay (advanced).
 - Outlook: provider, context prompt behavior (Ask / Always / Never).
 - Context: detect audio sources (on/off, merge window), Teams call context (on/off, poll interval), name 1:1 speakers (on/off), excluded apps/title patterns.
@@ -465,7 +472,7 @@ Admin values win over user settings and lock the matching UI control. Sources, s
 - `HKCU\Software\Policies\SprkNotes` (user registry).
 - Values may also arrive packed in one string value named `Settings` (`Key=Value;Key=Value`, `|` between the items of a list), which is what the MSI switches `POLICY` and `DEFAULTS` write (10.2a). A separate value of the same name wins over the packed one.
 - Path values (`TranscriptsRoot`, `PromptTemplatePath`) are expanded per user at runtime (6.1).
-- Keys: `TranscriptsRoot`, `CalendarProvider` (`com`/`off`), `ContextPrompt`, `SummarizeEnabled` (0 removes Summarize, 9), `ShowClaudeHandoff`, `ShowCopilotHandoff`, `CopilotTarget`, `PromptTemplatePath`, `FillerRemoval`, `CommitDelaySeconds`.
+- Keys: `TranscriptsRoot`, `CalendarProvider` (`com`/`off`), `ContextPrompt`, `SummarizeEnabled` (0 removes Summarize, 9), `ShowClaudeHandoff`, `ShowCopilotHandoff`, `CopilotTarget`, `PromptTemplatePath`, `FillerRemoval`, `CommitDelaySeconds`, `CustomWords` (multi-string; adds to each person's own list and never locks it, 4.3a).
 - Model keys (section 16): `PinnedModel` (`id@version`), `AllowUserModels` (0/1), `AllowedModelHashes` (multi-string, SHA-256 of `model.json`), `RequireSignedModels` (0/1; forced on from 1.0), `ModelPublicKeys` (multi-string, OpenSSH `allowed_signers` lines for Ed25519 keys), `KeepModelVersions` (default 2).
 - Context keys (sections 18, 19): `AudioSourceDetection` (0/1), `AudioMergeWindowSeconds`, `CallMergeWindowSeconds`, `AudioSourceExcludePatterns` (multi-string: process names or title regexes), `CallContext` (0/1), `CallPollSeconds`, `NameOneToOneSpeakers` (0/1), `TeamsLocalApi` (0/1, default 1: probed silently at session start).
 
@@ -692,7 +699,7 @@ If the chosen model fails verification or loading, fall back to the next valid c
   "notes": "Changelog for this model version"
 }
 ```
-- `files` keys are roles the adapter looks up (`sherpa-onnx/offline-transducer`: encoder, decoder, joiner, tokens; `sherpa-onnx/whisper`: encoder, decoder, tokens; `sherpa-onnx/vad-silero`: vad). A voice activity model is a pack of its own with `features` all false.
+- `files` keys are roles the adapter looks up (`sherpa-onnx/offline-transducer`: encoder, decoder, joiner, tokens, and optionally `bpe_vocab`, the tokenizer vocabulary that lets the model take custom-word hints, 4.3a; `sherpa-onnx/whisper`: encoder, decoder, tokens; `sherpa-onnx/vad-silero`: vad). A voice activity model is a pack of its own with `features` all false.
 - `engine` must match an adapter compiled into the app (17.2). New weights for a supported engine family need **no app update**. A new engine family needs an app release with a new adapter.
 - Versions use `YYYY.MM.patch` so they sort correctly.
 
@@ -780,7 +787,7 @@ Signing is **mandatory for the 1.0 release**. Pilot builds (0.x) may run without
 | Exporters | `Exporter` (input: parsed transcript) | md, txt, json, docx; later srt/vtt, pdf |
 | Calendar providers | `CalendarProvider` | Outlook COM (classic); later other local sources |
 | AI handoff targets | Config entries: name, launch template, prompt template, policy key | Claude, M365 Copilot; new targets added by config |
-| Post-processing | `SegmentFilter` chain in the commit buffer | dedupe, filler removal, custom vocabulary fixes (e.g. company terms) |
+| Post-processing | `SegmentFilter` chain in the commit buffer; engine wrappers for fixes that should reach live text too | dedupe, filler removal; custom words (`custom_words::Corrected`, 4.3a) |
 | Audio source resolvers | `AudioSourceResolver` chain (18.3) | media session, browser tab UIA, window title, process name |
 | Call context providers | `CallContextProvider` chain (19.2) | calendar (COM), Teams local API, Teams call window title; later Zoom |
 

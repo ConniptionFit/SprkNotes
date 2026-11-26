@@ -38,13 +38,26 @@ fn threads() -> i32 {
         })
 }
 
+/// Boost per hint token (sherpa-onnx's usual value). Modest, so a hint nudges rather than forces.
+const HOTWORDS_SCORE: f32 = 1.5;
+
 pub struct SherpaEngine {
     recognizer: OfflineRecognizer,
+    /// How to build the recognizer again with word hints. Only for transducer packs that ship
+    /// a `bpe_vocab` file: sherpa-onnx needs it to turn a hint into the model's tokens, and
+    /// without it the native code stops the process instead of returning an error.
+    hint_cfg: Option<OfflineRecognizerConfig>,
+    /// Hints for every stream, in sherpa-onnx's form (`one/two words`). Memory only, never a
+    /// file and never logged.
+    hotwords: Option<String>,
 }
 
 impl Engine for SherpaEngine {
     fn transcribe(&mut self, samples_16k_mono: &[f32]) -> Result<Vec<Segment>, AsrError> {
-        let stream = self.recognizer.create_stream();
+        let stream = match &self.hotwords {
+            Some(h) => self.recognizer.create_stream_with_hotwords(h),
+            None => self.recognizer.create_stream(),
+        };
         stream.accept_waveform(16_000, samples_16k_mono);
         self.recognizer.decode(&stream);
         let text = stream
@@ -60,6 +73,30 @@ impl Engine for SherpaEngine {
             text,
         }])
     }
+
+    /// Rebuilds the recognizer with modified beam search and per-stream hotwords. Any failure
+    /// keeps the greedy recognizer already loaded, so transcription goes on exactly as before.
+    fn bias_toward(&mut self, phrases: &[String]) -> bool {
+        let Some(base) = &self.hint_cfg else {
+            return false;
+        };
+        let hotwords = crate::custom_words::hint_phrases(phrases);
+        if hotwords.is_empty() {
+            return false;
+        }
+        let mut cfg = base.clone();
+        cfg.decoding_method = Some("modified_beam_search".into());
+        cfg.max_active_paths = 4;
+        cfg.hotwords_score = HOTWORDS_SCORE;
+        match OfflineRecognizer::create(&cfg) {
+            Some(r) => {
+                self.recognizer = r;
+                self.hotwords = Some(hotwords);
+                true
+            }
+            None => false,
+        }
+    }
 }
 
 fn build_transducer(m: &Manifest, dir: &Path) -> Result<Box<dyn Engine>, AsrError> {
@@ -70,7 +107,14 @@ fn build_transducer(m: &Manifest, dir: &Path) -> Result<Box<dyn Engine>, AsrErro
     cfg.model_config.tokens = Some(role(m, dir, "tokens")?);
     cfg.model_config.model_type = Some("nemo_transducer".into());
     cfg.model_config.num_threads = threads();
-    create(cfg)
+    // Optional role: a pack that ships the tokenizer's vocabulary can take custom-word hints.
+    let hint_cfg = m.file_path(dir, "bpe_vocab").map(|p| {
+        let mut h = cfg.clone();
+        h.model_config.modeling_unit = Some("bpe".into());
+        h.model_config.bpe_vocab = Some(p.to_string_lossy().into_owned());
+        h
+    });
+    create(cfg, hint_cfg)
 }
 
 fn build_whisper(m: &Manifest, dir: &Path) -> Result<Box<dyn Engine>, AsrError> {
@@ -82,12 +126,19 @@ fn build_whisper(m: &Manifest, dir: &Path) -> Result<Box<dyn Engine>, AsrError> 
     cfg.model_config.whisper.tail_paddings = -1;
     cfg.model_config.tokens = Some(role(m, dir, "tokens")?);
     cfg.model_config.num_threads = threads();
-    create(cfg)
+    create(cfg, None)
 }
 
-fn create(cfg: OfflineRecognizerConfig) -> Result<Box<dyn Engine>, AsrError> {
+fn create(
+    cfg: OfflineRecognizerConfig,
+    hint_cfg: Option<OfflineRecognizerConfig>,
+) -> Result<Box<dyn Engine>, AsrError> {
     let recognizer = OfflineRecognizer::create(&cfg).ok_or(AsrError::Rejected)?;
-    Ok(Box::new(SherpaEngine { recognizer }))
+    Ok(Box::new(SherpaEngine {
+        recognizer,
+        hint_cfg,
+        hotwords: None,
+    }))
 }
 
 /// Silero VAD through sherpa-onnx. `max_speech_s` caps utterance length so offline
