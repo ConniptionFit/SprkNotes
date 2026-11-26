@@ -919,7 +919,15 @@ mod tests {
     #[test]
     fn levels_reach_the_ui_for_the_source_that_has_sound() {
         let (host, ev, _dir) = launch("Levels", &["hello"]);
-        std::thread::sleep(Duration::from_millis(400));
+        // Wait for the levels rather than a fixed time: a busy CI runner can take
+        // longer than a few hundred milliseconds just to start the session thread.
+        let heard = |l: &[(f32, f32)]| {
+            l.len() >= 2 && l.iter().any(|&(me, _)| (me - 2.0 / 3.0).abs() < 0.01)
+        };
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        while !heard(&ev.levels.lock().unwrap()) && std::time::Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(50));
+        }
         host.end().unwrap();
         let levels = ev.levels.lock().unwrap().clone();
         assert!(levels.len() >= 2, "about ten a second: {levels:?}");
