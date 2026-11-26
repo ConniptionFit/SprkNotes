@@ -32,6 +32,7 @@ A tour of everything SprkNotes does and how to use it, with screenshots. All scr
 While transcribing:
 - **Pause** writes a pause line and stops capture; **Resume** continues. **End** finishes the file.
 - The light shows the state: green ready, red transcribing, yellow paused.
+- **Mark** (or Ctrl+M) flags the moment, and the note box saves a short typed note with the time (Enter). Both are written into the transcript straight away, stand out in the live view and the Library, and reach Summarize and Ask Sprk.
 - Turn sources on or off at any time. Source changes (a headset plugged in, a default device change) are written as event lines.
 
 | Transcribing | Paused |
@@ -161,5 +162,5 @@ Deployment through Intune, GPO, SCCM or an RMM, registry policy keys, model runb
 ![Model download turned off by policy](screenshots/settings-model-managed-dark.png)
 
 ## Keyboard and accessibility
-- Everything is reachable by keyboard; the overlay's buttons appear on keyboard focus too. **End** jumps to the live end of the transcript. **Esc** hides the overlay's buttons.
+- Everything is reachable by keyboard; the overlay's buttons appear on keyboard focus too. **End** jumps to the live end of the transcript. **Ctrl+M** drops a mark while a session runs. **Esc** hides the overlay's buttons.
 - The state is also in the tray tooltip and menu header, not only the light's color. Text sizes are adjustable. New live words appear whole, with no typing animation, when the system asks for reduced motion.

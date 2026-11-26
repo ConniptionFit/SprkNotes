@@ -20,6 +20,10 @@ export interface Backend {
   libraryOpenFolder(folder: string): Promise<void>;
   pause(): Promise<void>;
   resume(): Promise<void>;
+  /** Drop a mark into the live transcript at this moment. */
+  mark(): Promise<void>;
+  /** Save a short typed note into the live transcript at this moment. */
+  note(text: string): Promise<void>;
   end(): Promise<void>;
   rename(name: string): Promise<void>;
   setSource(source: Source, on: boolean): Promise<void>;
@@ -128,6 +132,8 @@ async function tauri(): Promise<Backend> {
     start: (name) => invoke("start_session", { name }),
     pause: () => invoke("pause_session"),
     resume: () => invoke("resume_session"),
+    mark: () => invoke("mark_session"),
+    note: (text) => invoke("note_session", { text }),
     end: () => invoke("end_session"),
     rename: (name) => invoke("rename_session", { name }),
     setSource: (source, on) => invoke("set_source", { source, on }),
@@ -365,6 +371,13 @@ export function mockBackend(): Backend {
       clearInterval(timer);
       statusCb("ready");
     },
+    mark: async () => {
+      lineCb({ kind: "mark", id: id++, t: stamp() });
+    },
+    note: async (text) => {
+      const n = text.split(/\s+/).filter(Boolean).join(" ").slice(0, 500);
+      if (n) lineCb({ kind: "note", id: id++, t: stamp(), text: n });
+    },
     rename: async () => {},
     setSource: async () => {},
     listDevices: async (source) =>
@@ -453,6 +466,8 @@ export function mockBackend(): Backend {
       lines: [
         { kind: "statement", t: "00:00:04", speaker: "Me", text: "Thanks for joining, let's start with the budget." },
         { kind: "statement", t: "00:00:11", speaker: "Others", text: "Sure. The numbers are in the shared sheet." },
+        { kind: "mark", t: "00:05:40", speaker: "", text: "" },
+        { kind: "note", t: "00:06:02", speaker: "", text: "Ask finance for the Q3 numbers" },
         { kind: "event", t: "00:12:30", speaker: "", text: "Transcription paused" },
         { kind: "statement", t: "00:12:52", speaker: "Me", text: "Okay, back. Next item is the roadmap." },
       ],

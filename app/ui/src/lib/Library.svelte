@@ -330,6 +330,10 @@
           <p class="line" class:me={l.speaker === "Me"} class:others={l.speaker !== "Me"}>
             <time>{l.t}</time><strong>{l.speaker}</strong><span class="text">{l.text}</span>
           </p>
+        {:else if l.kind === "mark"}
+          <p class="line marked"><time>{l.t}</time><strong>Mark</strong><span class="text"></span></p>
+        {:else if l.kind === "note"}
+          <p class="line usernote"><time>{l.t}</time><strong>Note</strong><span class="text">{l.text}</span></p>
         {:else}
           <p class="line event"><time>{l.t}</time><span class="text">{l.text}</span></p>
         {/if}
@@ -488,4 +492,7 @@
   .others strong { color: var(--others); }
   .event { color: var(--muted); font-style: italic; }
   .event .text { grid-column: 2 / -1; }
+  /* Marks and notes the user added stand out from the conversation (SPEC 5.1). */
+  .marked, .usernote { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+  .marked strong, .usernote strong { color: var(--accent); }
 </style>
