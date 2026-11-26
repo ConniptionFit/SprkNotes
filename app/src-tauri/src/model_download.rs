@@ -309,6 +309,10 @@ pub fn start_install(app: AppHandle, p: AppPolicy) -> Result<(), String> {
     std::thread::spawn(move || {
         let result = fetcher_install(&app, &p);
         BUSY.store(false, Ordering::SeqCst);
+        if result.is_ok() {
+            // Instant Start: time and load the new model now, not at the next Start.
+            crate::warm::prepare(&app);
+        }
         let ev = match result {
             Ok(()) => Progress {
                 stage: "done",

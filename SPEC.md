@@ -20,7 +20,7 @@ SprkNotes is a minimal Windows desktop app that transcribes the user's microphon
 | Commit delay | Short hold before a segment is written to disk, so bleed checks can drop duplicates first |
 | Transcription model | The speech-to-text (ASR) model. Not an LLM; it only converts speech to text |
 | Model pack | A single `.sprkmodel` file (zip) holding model files plus a signed `model.json` manifest |
-| Active model | The model the app loads at session start, chosen by `active.json` or admin policy |
+| Active model | The model a session uses (kept loaded between sessions, 4.6), chosen by `active.json` or admin policy |
 | Audio source | An app playing sound through system output (e.g. Firefox tab, Teams), with its title and active duration |
 | Merge window | How long an audio source may go silent and still count as the same continuous activity |
 | Call context | Who the user is actually in a call with right now (not just who was invited) |
@@ -178,6 +178,12 @@ Live captions (ADR-006) show speech in progress in the overlay. They are transie
 - **Resume:** capture restarts, a resume event line is written. Timestamps are wall-clock elapsed since start, so gaps stay visible.
 - **End:** flush, finalize file (6.3), show the name/save confirmation.
 
+### 4.6 Session start (Instant Start)
+- **Warm model:** the active transcription model is loaded in the background at launch (after the speed check, 16.8a, when one is due), when the main window is shown again, when "Start a transcript?" (8.3a) shows, and after a model download. It stays loaded between sessions and every session uses that one engine (one session runs at a time). It is loaded again only when the resolver's choice (16.4) or the speed check's thread count changes, or after a decode panicked. Never during a session: a change found then waits for the next Start.
+- **Start is instant:** Start creates the file (6.3), opens the devices and begins capture at once. The voice activity pack is checked at Start, so a missing one still stops Start with its reason. If the warm model is ready, decoding starts at once.
+- **Start before the model is ready** (right after launch, or the model changed): the model is loaded now and capture runs meanwhile. Everything captured waits **in memory only**, in order, with Pause, Resume and source changes; when the model arrives it is decoded as if just heard, so no words are lost and lines keep their real times. The source meters move while waiting. End while waiting waits for the model, then decodes and finalizes as usual. A load that fails (or takes over 5 minutes) closes the file with "Transcription stopped: the transcription model did not load" and a notice; nothing could be transcribed. A model that loads by falling back to another one (16.4) is written into the front matter at End.
+- **Memory:** keeping the model loaded costs its RAM while SprkNotes runs, also when idle (about 1 GB for the default Parakeet model). That is the price of an instant Start; there is no setting for it. The speed check loads a second copy for a few seconds.
+
 ---
 
 ## 5. Transcript format (`sprknotes-transcript/1`)
@@ -299,7 +305,7 @@ Exports are generated on demand from the `.md` file plus the JSONL sidecar.
 - The name is editable in the main window at any time during the session. Renaming moves the open file atomically (file opened with `FILE_SHARE_DELETE`).
 
 ### 6.3 Write strategy
-- **Start:** create the file with front matter (`status: in-progress`), heading, optional meeting context, and `## Transcript`.
+- **Start:** create the file with front matter (`status: in-progress`), heading, optional meeting context, and `## Transcript`. This happens at once, also while the model is still loading (4.6).
 - **During:** each committed segment is appended and flushed (`FlushFileBuffers`). Same for the JSONL sidecar.
 - **End:** rewrite front matter (end, duration, `status: complete`) by writing a temp file and atomically replacing (`ReplaceFileW`). This is the only time the file is rewritten.
 - **Max loss on crash:** the commit delay plus the in-progress utterance (target ≤ 10 s).
@@ -391,7 +397,7 @@ Scheduled Teams and Zoom meetings live on the user's Outlook calendar, so one lo
 - Context: detect audio sources (on/off, merge window), Teams call context (on/off, poll interval), name 1:1 speakers (on/off), excluded apps/title patterns.
 - Files: transcripts root, default export format.
 - AI handoff: show Claude button, show Copilot button, edit prompt template.
-- Models (16.7): active model, installed models, Import, Switch, Roll back. Locked with a "Managed by your organization" note when policy pins a model.
+- Models (16.7): active model, installed models, Import, Switch, Roll back. Locked with a "Managed by your organization" note when policy pins a model. Under the transcription model, a read-only speed line ("Speed: 3.2x real time on 4 threads") with **Check again** (16.8a).
 - Appearance: System, Light or Dark (the overlay stays dark unless Light is chosen).
 - Throwback Mode: off (default) or on. It swaps only the app icon in the tray and on the window to the first (starburst) icon; fonts, colors, sizes and spacing stay the same, so the window does not move.
 - Live captions: on or off, and Others only (default) or Others and Me in the pop-out. The transcript window's live line always shows both.
@@ -737,6 +743,13 @@ sprkctl model sync --from <\\server\share\models> --scope machine   # optional: 
 - Shows active model, version, engine, source store, last benchmark.
 - Installed list with **Switch** and **Roll back**; **Import model pack** button (user/portable scope only).
 - When policy pins or manages the model, controls are read-only with "Managed by your organization".
+
+### 16.8a Speed check (decode threads)
+- Desktop decode threads used to be fixed at `min(4, logical cores)`. Now, once per model and machine, the app loads the active model at a couple of thread counts (half the default, the default and twice it, within the cores and at most 8) and times a decode of a 3 s built-in clip (made in code: voiced tones at syllable rate, no voice, nothing read from or written to disk) after one warm-up decode. It keeps the fewest threads within 10% of the fastest (more threads add heat for little speed). The same self-check idea as the phone tuning (ADR-015 Decision 2), in `sprk_asr::tune`.
+- Runs in the background at launch when the active model was never checked on this PC, after a model download, and on **Check again** in Settings. Never during a session; a Start while it runs calls it off (its result is dropped and it runs again later). Refused during a session from Settings.
+- Kept in `%APPDATA%\SprkNotes\speed.json`, keyed by `id@version` and machine (processor type, logical cores, computer name), so a roaming profile does not carry one PC's choice to another.
+- Any error (no model, a load or decode failure, a fallback model loaded instead) keeps the default. `SPRK_ASR_THREADS` still wins over everything, and then no check runs; Settings says the threads are set on this PC.
+- Settings shows "Speed: 3.2x real time on 4 threads" (times faster than real time, 1 / real-time factor) under the transcription model, with **Check again**. A new choice takes effect when the warm model reloads (4.6), at the latest the next Start.
 
 ### 16.9 Release process for a new model (runbook outline)
 1. Convert/obtain the model, place files in a folder with `model.json`.
