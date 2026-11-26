@@ -6,7 +6,11 @@ export type Phase = { phase: "idle" | "loading" | "ending"; model?: string | nul
 /** One line of the live pane, matching the transcript grammar (SPEC 5.1). */
 export type Line =
   | { kind: "statement"; id: number; t: string; speaker: string; text: string }
-  | { kind: "event"; id: number; t: string; text: string };
+  | { kind: "event"; id: number; t: string; text: string }
+  /** A moment the user flagged with Mark. In the file it is an event line (SPEC 5.1). */
+  | { kind: "mark"; id: number; t: string }
+  /** A short note the user typed, without its "Note: " prefix. */
+  | { kind: "note"; id: number; t: string; text: string };
 
 export type Source = "mic" | "system";
 
@@ -122,7 +126,7 @@ export type LibraryEntry = {
   folder: string;
 };
 
-export type ViewLine = { kind: "statement" | "event"; t: string; speaker: string; text: string };
+export type ViewLine = { kind: "statement" | "event" | "mark" | "note"; t: string; speaker: string; text: string };
 export type TranscriptView = {
   title: string;
   date: string;

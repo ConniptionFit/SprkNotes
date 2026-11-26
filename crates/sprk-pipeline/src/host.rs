@@ -192,6 +192,8 @@ enum Cmd {
     End,
     Rename(String),
     SetSource(Source, bool),
+    /// Event text the user added: a mark or a note (SPEC 5.1).
+    UserEvent(String),
 }
 
 pub struct Host {
@@ -389,6 +391,18 @@ impl Host {
     pub fn set_source(&self, s: Source, on: bool) -> Result<(), HostError> {
         self.send(Cmd::SetSource(s, on))
     }
+    /// Drop a mark at this moment (SPEC 5.1). Works while transcribing or paused.
+    pub fn mark(&self) -> Result<(), HostError> {
+        self.send(Cmd::UserEvent(sprk_transcript::format::MARK.to_string()))
+    }
+    /// Save a short note at this moment. Returns false (and writes nothing) when the note
+    /// is empty once trimmed.
+    pub fn note(&self, text: &str) -> Result<bool, HostError> {
+        match sprk_transcript::format::note_event(text) {
+            Some(ev) => self.send(Cmd::UserEvent(ev)).map(|_| true),
+            None => Ok(false),
+        }
+    }
     /// Flush, finalize the file and stop. Blocks until the thread is done.
     pub fn end(mut self) -> Result<(), HostError> {
         let _ = self.tx.send(Cmd::End);
@@ -420,6 +434,8 @@ enum Early {
     Pause(Vec<Captured>, u64),
     Resume(Vec<Captured>, u64),
     Source(Source, bool, u64),
+    /// A mark or note, after what was heard up to it.
+    Event(Vec<Captured>, u64, String),
 }
 
 /// How waiting for a loading engine ended.
@@ -498,6 +514,10 @@ fn wait_for_engine(
                 capture.set_enabled(s, on);
                 enabled[usize::from(s == Source::System)] = on;
                 early.push(Early::Source(s, on, now_ms(start)));
+            }
+            Ok(Cmd::UserEvent(text)) => {
+                let got = keep(capture.sync(), paused);
+                early.push(Early::Event(got, now_ms(start), text));
             }
             Ok(Cmd::Rename(n)) => {
                 if !n.trim().is_empty() {
@@ -658,6 +678,12 @@ fn run(
                 }
             }
             Early::Source(s, on, t) => session.set_source_enabled(s, on, t),
+            Early::Event(got, t, text) => {
+                apply(got, &mut session, &mut last_device, t, &problem);
+                if let Err(e) = session.event(t, &text) {
+                    problem(e);
+                }
+            }
         }
     }
 
@@ -702,6 +728,12 @@ fn run(
                 Ok(Cmd::SetSource(s, on)) => {
                     capture.set_enabled(s, on);
                     session.set_source_enabled(s, on, now_ms(&start));
+                }
+                Ok(Cmd::UserEvent(text)) => {
+                    // Lines already committed land first, so the mark follows what was on screen.
+                    if let Err(e) = session.event(now_ms(&start), &text) {
+                        problem(e);
+                    }
                 }
                 Ok(Cmd::Rename(n)) => {
                     if !n.trim().is_empty() {
@@ -1212,6 +1244,49 @@ mod tests {
             .iter()
             .any(|l| matches!(l, UiLine::Statement { speaker, .. } if speaker == "Me")));
         assert!(ev.problems.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn marks_and_notes_land_in_the_file_as_timestamped_event_lines() {
+        let (host, ev, dir) = launch("Visit", &["blood pressure is fine"]);
+        std::thread::sleep(Duration::from_millis(300));
+        host.mark().unwrap();
+        assert!(host.note("  recheck in two weeks\n").unwrap());
+        assert!(!host.note(" \n ").unwrap(), "an empty note is not saved");
+        host.pause().unwrap();
+        // Paused still takes notes.
+        assert!(host.note("asked about diet").unwrap());
+        host.end().unwrap();
+        let text = std::fs::read_to_string(&md_files(dir.path())[0]).unwrap();
+        let p = sprk_transcript::parse::Parsed::parse(&text, None);
+        let kinds: Vec<_> = p
+            .events
+            .iter()
+            .map(|e| sprk_transcript::format::event_kind(&e.text))
+            .filter(|k| *k != sprk_transcript::format::EventKind::Other)
+            .collect();
+        use sprk_transcript::format::EventKind;
+        assert_eq!(
+            kinds,
+            vec![
+                EventKind::Mark,
+                EventKind::Note("recheck in two weeks"),
+                EventKind::Note("asked about diet"),
+            ]
+        );
+        // The line spoken before the mark is written before it.
+        let said = text.find("**Me:** blood pressure is fine").unwrap();
+        let mark = text.find("` Mark\n").unwrap();
+        assert!(said < mark, "{text}");
+        assert!(text.contains("status: complete"));
+        // The live view gets the same lines.
+        let lines = ev.lines.lock().unwrap();
+        assert!(lines
+            .iter()
+            .any(|l| matches!(l, UiLine::Event { text, .. } if text == "Mark")));
+        assert!(lines.iter().any(
+            |l| matches!(l, UiLine::Event { text, .. } if text == "Note: recheck in two weeks")
+        ));
     }
 
     #[test]
@@ -1734,6 +1809,25 @@ mod tests {
         let first = text.find("**Me:** heard").expect("a line before the pause");
         assert!(first < paused && paused < resumed, "{text}");
         assert!(text[resumed..].contains("**Me:** heard"), "{text}");
+    }
+
+    #[test]
+    fn a_mark_and_a_note_made_while_the_engine_loads_land_after_what_was_heard() {
+        let heard = Arc::new(Mutex::new(Vec::new()));
+        let (host, ev, _delivered, dir) =
+            launch_loading(Duration::from_millis(600), Some(Box::new(Tally(heard))));
+        std::thread::sleep(Duration::from_millis(250));
+        host.mark().unwrap();
+        assert!(host.note("before the model was ready").unwrap());
+        std::thread::sleep(Duration::from_millis(700));
+        host.end().unwrap();
+        let text = only_md(dir.path());
+        let first = text.find("**Me:** heard").expect("a line before the mark");
+        let mark = text.find("` Mark\n").expect("the mark");
+        let note = text.find("before the model was ready").expect("the note");
+        assert!(first < mark && mark < note, "{text}");
+        assert!(text.contains("status: complete"));
+        assert!(ev.problems.lock().unwrap().is_empty());
     }
 
     #[test]

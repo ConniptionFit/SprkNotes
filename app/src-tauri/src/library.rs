@@ -4,7 +4,8 @@
 use serde::Serialize;
 use sprk_handoff::detect::{self, Decision, SystemProbe, TargetInfo};
 use sprk_handoff::{Launcher, Request};
-use sprk_transcript::{export, format::timestamp, library};
+use sprk_transcript::format::{event_kind, timestamp, EventKind};
+use sprk_transcript::{export, library};
 use std::path::{Path, PathBuf};
 use tauri::AppHandle;
 
@@ -129,14 +130,20 @@ pub fn library_open(
         ));
     }
     for e in &t.events {
+        // Marks and notes the user added show apart from other events (SPEC 5.1).
+        let (kind, text) = match event_kind(&e.text) {
+            EventKind::Mark => ("mark", String::new()),
+            EventKind::Note(n) => ("note", n.to_string()),
+            EventKind::Other => ("event", e.text.clone()),
+        };
         rows.push((
             e.t_ms,
             0,
             ViewLine {
-                kind: "event",
+                kind,
                 t: timestamp(e.t_ms),
                 speaker: String::new(),
-                text: e.text.clone(),
+                text,
             },
         ));
     }

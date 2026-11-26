@@ -25,6 +25,7 @@ SprkNotes needs a transcription model before it can start. If none is installed,
 - **Me (your microphone)** and **Others (computer sound)** switches turn each source on or off.
 - **Pause** stops capture and writes a pause line. **Resume** continues. Timestamps keep counting, so the gap is visible.
 - **End** finishes the file.
+- **Mark** (or **Ctrl+M** while the window is in front) flags the moment in the transcript, for example something to come back to. Type a short note in the box next to it and press **Enter** to save it with the time. Marks and notes are tinted in the transcript and in the Library, and Summarize and Ask Sprk read them too. They work while paused as well.
 - The magnifier buttons change the text size. The **CC** button turns the live line on or off in this window.
 
 ![Transcribing](screenshots/main-transcribing-light.png)
@@ -93,7 +94,7 @@ Open **Settings** at the bottom of the window.
 ![All settings](screenshots/settings-full-light.png)
 
 ## Your files
-Transcripts are Markdown files in `Documents\SprkNotes\Transcripts` (Windows), named `YYYY-MM-DD HHmm <Title>.md`. Each line is `- \`HH:MM:SS\` **Speaker:** text`. Lines starting with `>` are events (pauses, call changes, audio sources).
+Transcripts are Markdown files in `Documents\SprkNotes\Transcripts` (Windows), named `YYYY-MM-DD HHmm <Title>.md`. Each line is `- \`HH:MM:SS\` **Speaker:** text`. Lines starting with `>` are events (pauses, call changes, audio sources), and also your marks (`> \`00:12:04\` Mark`) and notes (`> \`00:12:30\` Note: your words`).
 
 If the app or PC stops unexpectedly, the file already holds everything that was committed. On the next start SprkNotes says it closed unexpectedly and offers **Open** (takes you to the Library) or **Mark finished** (closes the transcript as interrupted).
 
