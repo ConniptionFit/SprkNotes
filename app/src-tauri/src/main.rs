@@ -2,6 +2,7 @@
 
 mod assistant;
 mod clock;
+mod custom_words;
 mod hotkey;
 mod library;
 mod mic_watch;
@@ -527,6 +528,7 @@ fn start_session_blocking(
     let policy = policy();
     speed::call_off();
     let (engine_label, engine) = app.state::<warm::Warm>().for_session()?;
+    let engine = custom_words::apply_source(engine, custom_words::in_force(&policy));
     let make_vad = models::load_vad()?;
     let host = Host::start(
         StartParams {
@@ -801,6 +803,8 @@ fn main() -> anyhow::Result<()> {
             save_location::save_location_status,
             managed_prefs,
             save_location::save_location_set,
+            custom_words::custom_words_status,
+            custom_words::custom_words_set,
             library::library_open_folder,
             continue_session,
             assistant::assistant_status,

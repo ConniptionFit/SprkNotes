@@ -96,6 +96,14 @@ export type SaveLocation = {
   locked: boolean;
 };
 
+/** Custom words (Settings): the person's own list, the administrator's (read-only), and what the
+ * last session did with them, as counts only. */
+export type CustomWords = {
+  user: string[];
+  admin: string[];
+  last: { words: number; hints: boolean } | null;
+};
+
 export type LibraryEntry = {
   path: string;
   name: string;

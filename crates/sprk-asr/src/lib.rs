@@ -1,4 +1,5 @@
 //! Engine trait. The pipeline never branches on a specific engine or model.
+pub mod custom_words;
 pub mod tune;
 pub mod wav;
 pub mod wer;
@@ -26,6 +27,12 @@ pub enum AsrError {
 
 pub trait Engine: Send {
     fn transcribe(&mut self, samples_16k_mono: &[f32]) -> Result<Vec<Segment>, AsrError>;
+    /// Custom words (SPEC 4.3a): bias decoding toward these phrases where the engine and its
+    /// model support it. True when decoding now favors them; false (the default) leaves
+    /// decoding exactly as it was. Called once at session start, before any audio.
+    fn bias_toward(&mut self, _phrases: &[String]) -> bool {
+        false
+    }
 }
 
 /// One loaded engine shared between sessions, so the model loads once and stays ready

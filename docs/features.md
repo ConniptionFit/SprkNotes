@@ -114,6 +114,7 @@ With one app installed it opens that one (Claude gets the file; for Copilot the 
 ![Settings](screenshots/settings-full-light.png)
 
 - **Transcription model:** status, **Download model**, **Check for updates**, and a speed line ("Speed: 3.2x real time on 4 threads") with **Check again**.
+- **Custom words:** names and terms to spell right, one per line; near misses are changed to your spelling, everyday words never. Your organization can add to the list.
 - **Appearance:** System, Light or Dark.
 - **Misc:** Throwback Mode.
 - **Live captions:** captions on the overlay, the live line in the main window, **Live text delay** (Fast, Steady, Smoothest) and whose words (Others only or Others and Me).
