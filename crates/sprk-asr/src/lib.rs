@@ -28,6 +28,39 @@ pub trait Engine: Send {
     fn transcribe(&mut self, samples_16k_mono: &[f32]) -> Result<Vec<Segment>, AsrError>;
 }
 
+/// One loaded engine shared between sessions, so the model loads once and stays ready
+/// (Instant Start, SPEC 4.6). Only one session runs at a time, so the lock is never contended.
+/// A decode that panicked poisons the lock; every later decode then fails instead of using an
+/// engine left in an unknown state, and the owner loads a fresh one.
+#[derive(Clone)]
+pub struct SharedEngine(pub std::sync::Arc<std::sync::Mutex<Box<dyn Engine>>>);
+
+impl SharedEngine {
+    pub fn new(engine: Box<dyn Engine>) -> Self {
+        Self(std::sync::Arc::new(std::sync::Mutex::new(engine)))
+    }
+
+    /// True once a decode panicked: load a fresh engine instead of handing this one out.
+    pub fn is_poisoned(&self) -> bool {
+        self.0.is_poisoned()
+    }
+}
+
+impl Engine for SharedEngine {
+    fn transcribe(&mut self, samples_16k_mono: &[f32]) -> Result<Vec<Segment>, AsrError> {
+        let mut engine = self.0.lock().map_err(|_| AsrError::Load)?;
+        engine.transcribe(samples_16k_mono)
+    }
+}
+
+/// How an engine is built. `Default` is what every build used before the speed check.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct EngineOptions {
+    /// Decode threads. `None` means the engine's own default. The `SPRK_ASR_THREADS`
+    /// environment variable still wins over this for benchmarking.
+    pub threads: Option<u32>,
+}
+
 /// One stretch of speech cut out of a stream by a [`Vad`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct Utterance {
@@ -112,8 +145,11 @@ pub fn transcribe_with_vad(
 
 /// Builds an engine from a verified model folder. Adapters register one of these per
 /// `model.json` `engine` string (SPEC 17.2); the pipeline never branches on the string.
-pub type EngineFactory =
-    fn(&sprk_models::Manifest, &std::path::Path) -> Result<Box<dyn Engine>, AsrError>;
+pub type EngineFactory = fn(
+    &sprk_models::Manifest,
+    &std::path::Path,
+    &EngineOptions,
+) -> Result<Box<dyn Engine>, AsrError>;
 
 #[derive(Default)]
 pub struct Registry {
@@ -137,6 +173,17 @@ impl Registry {
         dir: &std::path::Path,
         app_version: &str,
     ) -> Result<Box<dyn Engine>, AsrError> {
+        self.load_with(manifest, dir, app_version, &EngineOptions::default())
+    }
+
+    /// [`Registry::load`] with build options (decode threads from the speed check).
+    pub fn load_with(
+        &self,
+        manifest: &sprk_models::Manifest,
+        dir: &std::path::Path,
+        app_version: &str,
+        options: &EngineOptions,
+    ) -> Result<Box<dyn Engine>, AsrError> {
         manifest.check_compat(&self.engines(), app_version)?;
         manifest.verify_files(dir)?;
         let factory = self
@@ -145,7 +192,7 @@ impl Registry {
             .find(|(n, _)| *n == manifest.engine)
             .map(|(_, f)| *f)
             .ok_or(AsrError::Load)?;
-        factory(manifest, dir)
+        factory(manifest, dir, options)
     }
 }
 
@@ -178,6 +225,7 @@ mod tests {
     fn fake_factory(
         _m: &sprk_models::Manifest,
         _d: &std::path::Path,
+        _o: &EngineOptions,
     ) -> Result<Box<dyn Engine>, AsrError> {
         Ok(Box::new(FakeEngine { script: vec![] }))
     }
@@ -233,6 +281,41 @@ mod tests {
             .is_err());
         std::fs::write(dir.path().join("tokens.txt"), "tampered").unwrap();
         assert!(r.load(&manifest("test/fake"), dir.path(), "0.0.1").is_err());
+    }
+
+    #[test]
+    fn a_shared_engine_serves_every_clone() {
+        let seg = Segment {
+            start_ms: 0,
+            end_ms: 100,
+            text: "same".into(),
+        };
+        let shared = SharedEngine::new(Box::new(FakeEngine {
+            script: vec![seg.clone()],
+        }));
+        let mut a = shared.clone();
+        let mut b = shared.clone();
+        assert_eq!(a.transcribe(&[]).ok(), Some(vec![seg.clone()]));
+        assert_eq!(b.transcribe(&[]).ok(), Some(vec![seg]));
+        assert!(!shared.is_poisoned());
+    }
+
+    struct Boom;
+    impl Engine for Boom {
+        fn transcribe(&mut self, _s: &[f32]) -> Result<Vec<Segment>, AsrError> {
+            panic!("decode failed");
+        }
+    }
+
+    #[test]
+    fn a_panicked_shared_engine_refuses_to_decode_again() {
+        let shared = SharedEngine::new(Box::new(Boom));
+        let mut a = shared.clone();
+        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| a.transcribe(&[])));
+        assert!(r.is_err());
+        assert!(shared.is_poisoned());
+        let mut b = shared.clone();
+        assert!(b.transcribe(&[]).is_err());
     }
 
     #[test]

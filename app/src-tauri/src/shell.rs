@@ -368,6 +368,8 @@ fn act(app: &AppHandle, id: &str) {
 }
 
 pub fn open_main(app: &AppHandle) {
+    // Instant Start: a Start from here should not wait for the model.
+    crate::warm::ensure(app);
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.show();
         let _ = w.unminimize();
@@ -456,6 +458,8 @@ pub fn show_mic_prompt(app: &AppHandle, apps: Vec<String>) {
             .collect();
     }
     shell.mic_prompt.store(true, Ordering::SeqCst);
+    // Instant Start: a Start from the question should not wait for the model.
+    crate::warm::ensure(app);
     if !mini.is_visible().unwrap_or(false) {
         place_mini(app, &mini);
         let _ = mini.show();
