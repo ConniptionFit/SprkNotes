@@ -860,4 +860,230 @@ mod tests {
         let held = 50 * 320 - s.mic.fed;
         assert_eq!(held, 0, "{held} mic samples left in the echo path");
     }
+
+    // Stream independence (SPEC 4.2): Me is transcribed from the microphone alone and Others
+    // from the system stream alone. The engine below keeps every utterance it is handed.
+
+    /// Keeps each utterance's samples; answers with words that say which signal it heard.
+    struct Witness(Arc<Mutex<Vec<Vec<f32>>>>);
+    impl Engine for Witness {
+        fn transcribe(&mut self, s: &[f32]) -> Result<Vec<AsrSeg>, AsrError> {
+            let mut calls = self.0.lock().unwrap();
+            calls.push(s.to_vec());
+            let n = calls.len();
+            let text = if s.iter().all(|v| *v >= 0.0) {
+                format!("alpha bravo charlie {n}")
+            } else if s.iter().all(|v| *v <= 0.0) {
+                format!("xray yankee zulu {n}")
+            } else {
+                format!("mixed signal heard {n}")
+            };
+            Ok(vec![AsrSeg {
+                start_ms: 0,
+                end_ms: (s.len() as u64) * 1000 / 16_000,
+                text,
+            }])
+        }
+    }
+
+    fn witnessed(echo: bool) -> (Session, Log, Arc<Mutex<Vec<Vec<f32>>>>) {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let log = Log::default();
+        let s = Session::new(
+            Box::new(Witness(calls.clone())),
+            Box::new(|| Box::new(ChunkVad { seen: 0 })),
+            Box::new(log.clone()),
+            Config::default(),
+        )
+        .with_echo_cancellation(echo);
+        (s, log, calls)
+    }
+
+    /// Speech-like test signal (band-limited noise with a syllable rhythm), different per seed.
+    fn talker(n: usize, seed: u32) -> Vec<f32> {
+        let mut x = seed;
+        let mut lp = 0.0f32;
+        (0..n)
+            .map(|i| {
+                x = x.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                lp = 0.6 * lp + 0.4 * ((x >> 8) as f32 / 8_388_608.0 - 1.0);
+                let t = i as f32 / 16_000.0;
+                let rate = 3.0 + (seed % 7) as f32 * 0.37;
+                let phrase = 0.5
+                    + 0.5
+                        * (std::f32::consts::TAU * (0.23 + (seed % 5) as f32 * 0.07) * t
+                            + seed as f32)
+                            .sin();
+                let env = (0.5 + 0.5 * (std::f32::consts::TAU * rate * t + seed as f32).sin())
+                    .powi(2)
+                    * phrase.powi(2);
+                lp * env * 0.6
+            })
+            .collect()
+    }
+
+    fn corr_any_lag(a: &[f32], b: &[f32], max_lag: usize) -> f32 {
+        let rms = |x: &[f32]| (x.iter().map(|v| v * v).sum::<f32>() / x.len().max(1) as f32).sqrt();
+        let n = a.len().min(b.len());
+        (0..=max_lag.min(n / 2))
+            .step_by(8)
+            .flat_map(|lag| [(&a[lag..n], &b[..n - lag]), (&a[..n - lag], &b[lag..n])])
+            .map(|(x, y)| {
+                let dot: f32 = x.iter().zip(y).map(|(p, q)| p * q).sum();
+                (dot / (rms(x) * rms(y) * x.len() as f32).max(1e-12)).abs()
+            })
+            .fold(0.0, f32::max)
+    }
+
+    #[test]
+    fn each_stream_is_transcribed_from_its_own_audio_only() {
+        // Mic samples are all positive and system samples all negative, fed in uneven,
+        // interleaved pieces through one shared engine. Every utterance must hold one sign
+        // only, and each stream's audio must reach the engine unchanged and in order.
+        let (mut s, log, calls) = witnessed(false);
+        let mic: Vec<f32> = (0..96_000)
+            .map(|k| 0.05 + (k % 997) as f32 * 1e-4)
+            .collect();
+        let sys: Vec<f32> = (0..96_000)
+            .map(|k| -0.05 - (k % 991) as f32 * 1e-4)
+            .collect();
+        let (mut mi, mut si, mut step) = (0, 0, 0usize);
+        while mi < mic.len() || si < sys.len() {
+            step += 1;
+            let m = (step * 2_311 % 7_000 + 400).min(mic.len() - mi);
+            let k = (step * 3_571 % 9_000 + 300).min(sys.len() - si);
+            if m > 0 {
+                s.feed(Source::Mic, &mic[mi..mi + m]);
+            }
+            if k > 0 {
+                s.feed(Source::System, &sys[si..si + k]);
+            }
+            mi += m;
+            si += k;
+        }
+        s.end(60_000).unwrap();
+        let calls = calls.lock().unwrap();
+        let (mut heard_mic, mut heard_sys) = (Vec::new(), Vec::new());
+        for c in calls.iter() {
+            if c.iter().all(|v| *v > 0.0) {
+                heard_mic.extend_from_slice(c);
+            } else if c.iter().all(|v| *v < 0.0) {
+                heard_sys.extend_from_slice(c);
+            } else {
+                panic!("an utterance held audio from both streams");
+            }
+        }
+        assert_eq!(heard_mic, mic, "Me audio was changed, lost or reordered");
+        assert_eq!(
+            heard_sys, sys,
+            "Others audio was changed, lost or reordered"
+        );
+        let lines = log.0.lock().unwrap().clone();
+        let me: Vec<_> = lines.iter().filter(|l| l.contains(" Me: ")).collect();
+        let others: Vec<_> = lines.iter().filter(|l| l.contains(" Others: ")).collect();
+        assert!(!me.is_empty() && !others.is_empty(), "{lines:?}");
+        assert!(me.iter().all(|l| l.contains("alpha bravo")), "{me:?}");
+        assert!(
+            others.iter().all(|l| l.contains("xray yankee")),
+            "{others:?}"
+        );
+        assert!(!lines.iter().any(|l| l.contains("mixed")), "{lines:?}");
+    }
+
+    #[test]
+    fn with_echo_cancellation_others_is_untouched_and_a_silent_mic_writes_nothing() {
+        let (mut s, log, calls) = witnessed(true);
+        let sys = talker(16_000 * 12, 7);
+        let chunks: Vec<&[f32]> = sys.chunks(1_600).collect();
+        for c in &chunks {
+            s.feed(Source::Mic, &[0.0; 1_600]);
+            s.feed(Source::System, c);
+        }
+        s.end(60_000).unwrap();
+        let calls = calls.lock().unwrap();
+        // Every utterance the engine heard is a system chunk, bit for bit, in order.
+        assert_eq!(calls.len(), chunks.len(), "the silent mic was transcribed");
+        for (c, want) in calls.iter().zip(&chunks) {
+            assert_eq!(
+                c.as_slice(),
+                *want,
+                "system audio was changed on its way in"
+            );
+        }
+        let lines = log.0.lock().unwrap().clone();
+        assert!(!lines.iter().any(|l| l.contains(" Me: ")), "{lines:?}");
+        assert!(lines.iter().any(|l| l.contains(" Others: ")), "{lines:?}");
+    }
+
+    #[test]
+    fn with_echo_cancellation_me_carries_nothing_of_the_other_side() {
+        // A headset: both people talk at once and nothing of the speakers reaches the mic.
+        let n = 16_000 * 16;
+        let me = talker(n, 4_243);
+        let them = talker(n, 7);
+        let (mut s, _log, calls) = witnessed(true);
+        let mc: Vec<&[f32]> = me.chunks(1_600).collect();
+        let sc: Vec<&[f32]> = them.chunks(1_600).collect();
+        for (m, t) in mc.iter().zip(&sc) {
+            s.feed(Source::Mic, m);
+            s.feed(Source::System, t);
+        }
+        s.end(60_000).unwrap();
+        // The same canceller fed the same way, outside the session: its output lines up
+        // sample for sample with the mic, so it can be held against both voices.
+        let mut alone = sprk_audio::echo::EchoPath::new();
+        let (mut clean, mut pieces) = (Vec::new(), Vec::new());
+        for (m, t) in mc.iter().zip(&sc) {
+            for out in [
+                {
+                    alone.push_mic(m);
+                    alone.take()
+                },
+                {
+                    alone.push_reference(t);
+                    alone.take()
+                },
+            ] {
+                if !out.is_empty() {
+                    clean.extend_from_slice(&out);
+                    pieces.push(out);
+                }
+            }
+        }
+        let tail = alone.flush();
+        clean.extend_from_slice(&tail);
+        pieces.push(tail);
+        let calls = calls.lock().unwrap();
+        let mut rest = sc.iter().peekable();
+        let mut mine = pieces.iter().filter(|p| loudest_rms(p) >= ME_SPEECH_FLOOR);
+        for c in calls.iter() {
+            if rest.peek().is_some_and(|t| c.as_slice() == **t) {
+                rest.next(); // an Others utterance, exactly as it came in
+            } else {
+                // A Me utterance: exactly the canceller's output for the mic, nothing else.
+                let want = mine.next().expect("more Me utterances than the mic gave");
+                assert_eq!(
+                    c, want,
+                    "Me audio was not the canceller's output for the mic"
+                );
+            }
+        }
+        assert!(
+            rest.next().is_none(),
+            "some system audio did not reach the engine unchanged"
+        );
+        let t = 16_000 * 2..n; // after the canceller's first seconds
+        let other = corr_any_lag(&clean[t.clone()], &them[t.clone()], 8_000);
+        let own = corr_any_lag(&clean[t.clone()], &me[t.clone()], 8_000);
+        eprintln!("Me vs Others correlation {other:.3}, Me vs own voice {own:.3}");
+        assert!(
+            other < 0.05,
+            "the Me stream follows the other side ({other:.3})"
+        );
+        // Well above the other side: the canceller delays and gates a little of it.
+        assert!(
+            own > 0.5,
+            "the Me stream is not the user's voice ({own:.3})"
+        );
+    }
 }

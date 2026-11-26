@@ -102,6 +102,25 @@ fn push_env(q: &mut VecDeque<f32>, v: f32) {
     }
 }
 
+/// The canceller may only take sound away from the mic, never add any: what it subtracts is
+/// built from the speakers' stream, so output well above what the mic heard carries sound
+/// the mic never picked up (a misjudged echo estimate, or comfort noise). Scale such a frame
+/// back, so a silent mic always gives a silent Me stream and the other side can never be
+/// written into it. AEC3 works in overlapping blocks, so a frame's output may carry a little
+/// of the frame before; the limit is the louder of the two input frames, with 3 dB to spare.
+fn cap_to_input(clean: &mut [f32; FRAME], mic: &[f32; FRAME], prev_in: f32) -> f32 {
+    let energy = |x: &[f32]| x.iter().map(|v| v * v).sum::<f32>();
+    let (out, inp) = (energy(&clean[..]), energy(&mic[..]));
+    let limit = 2.0 * inp.max(prev_in);
+    if out > limit {
+        let g = (limit / out).sqrt();
+        for v in clean.iter_mut() {
+            *v *= g;
+        }
+    }
+    inp
+}
+
 pub struct EchoPath {
     apm: AudioProcessing,
     /// Mic samples; the flag marks silence we inserted to hold the mic back (never emitted).
@@ -126,6 +145,8 @@ pub struct EchoPath {
     /// Recent mic-to-reference level ratios while the speakers play.
     ratios: VecDeque<f32>,
     sup_hold: u32,
+    /// Energy of the previous mic frame (for the output cap).
+    prev_in: f32,
 }
 
 impl Default for EchoPath {
@@ -167,6 +188,7 @@ impl EchoPath {
             lag_frames: (TARGET_DELAY_MS / FRAME_MS) as usize,
             ratios: VecDeque::new(),
             sup_hold: 0,
+            prev_in: 0.0,
         }
     }
 
@@ -240,6 +262,7 @@ impl EchoPath {
             {
                 clean = m; // never lose the user's speech to a processing error
             }
+            self.prev_in = cap_to_input(&mut clean, &m, self.prev_in);
             push_env(&mut self.env_mic, level(&m));
             push_env(&mut self.env_ref, level(&r));
             push_env(&mut self.env_clean, level(&clean));
@@ -653,5 +676,76 @@ mod tests {
                 "kept only {kept:.2} of the user's speech at {scale}"
             );
         }
+    }
+
+    /// Highest correlation of `out` with `other` at any lag up to `max_lag` samples.
+    fn max_corr(out: &[f32], other: &[f32], max_lag: usize) -> f32 {
+        let n = out.len().min(other.len());
+        (0..=max_lag)
+            .step_by(8)
+            .map(|lag| {
+                let (o, r) = (&out[lag..n], &other[..n - lag]);
+                let dot: f32 = o.iter().zip(r).map(|(a, b)| a * b).sum();
+                (dot / (rms(o) * rms(r) * o.len() as f32).max(1e-12)).abs()
+            })
+            .fold(0.0, f32::max)
+    }
+
+    #[test]
+    fn a_silent_mic_stays_silent_while_the_other_side_talks() {
+        let n = 16_000 * 20;
+        let refr = speechlike(n, 7);
+        let out = run(&vec![0.0; n], &refr);
+        assert_eq!(out.len(), n);
+        let peak = out.iter().fold(0.0f32, |a, v| a.max(v.abs()));
+        assert_eq!(
+            peak, 0.0,
+            "the other side reached the Me stream (peak {peak})"
+        );
+    }
+
+    #[test]
+    fn nothing_of_the_other_side_is_written_into_me() {
+        // Headset: no acoustic path. Whatever comes out must be the user's own sound.
+        let n = 16_000 * 20;
+        let refr = speechlike(n, 7);
+        let me: Vec<f32> = speechlike(n, 4243).iter().map(|v| v * 0.4).collect();
+        let out = run(&me, &refr);
+        let t = 16_000 * 4..n;
+        let c = max_corr(&out[t.clone()], &refr[t.clone()], 16_000 / 2);
+        eprintln!("correlation with the other side: {c:.3}");
+        assert!(c < 0.05, "Me output follows the other side (corr {c:.3})");
+        for (i, (o, m)) in out.chunks(FRAME).zip(me.chunks(FRAME)).enumerate().skip(1) {
+            let e = |x: &[f32]| x.iter().map(|v| v * v).sum::<f32>();
+            let prev = e(&me[(i - 1) * FRAME..i * FRAME]);
+            assert!(
+                e(o) <= 2.0 * e(m).max(prev) + 1e-9,
+                "frame {i} came out louder than it went in"
+            );
+        }
+    }
+
+    #[test]
+    fn when_the_echo_path_goes_away_nothing_is_added() {
+        // Laptop speakers for 15 s, then a headset: the canceller has learned an echo that is
+        // no longer there and must not subtract it from (that is, add it to) a silent mic.
+        let n = 16_000 * 30;
+        let refr = speechlike(n, 7);
+        let cut = 16_000 * 15;
+        let mic: Vec<f32> = (0..n)
+            .map(|i| {
+                if (1_600..cut).contains(&i) {
+                    0.5 * refr[i - 1_600]
+                } else {
+                    0.0
+                }
+            })
+            .collect();
+        let out = run(&mic, &refr);
+        let peak = out[cut..].iter().fold(0.0f32, |a, v| a.max(v.abs()));
+        assert_eq!(
+            peak, 0.0,
+            "the other side reached the Me stream after the path changed"
+        );
     }
 }

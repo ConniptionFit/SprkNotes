@@ -6,6 +6,7 @@ use crate::save_location::{load, store};
 use serde::Serialize;
 use sprk_asr::custom_words::{clean, combine, Corrected};
 use sprk_asr::Engine;
+use sprk_pipeline::host::{EngineSource, LoadedEngine};
 use std::sync::Mutex;
 
 /// What the last session did with the list. Counts only.
@@ -38,6 +39,33 @@ pub fn apply(mut engine: Box<dyn Engine>, words: &[String]) -> (Box<dyn Engine>,
         return (engine, last);
     }
     (Box::new(Corrected::new(engine, words)), last)
+}
+
+/// [`apply`] for an engine that may still be loading (Instant Start): a ready engine is wrapped
+/// now, a loading one the moment it arrives. Either way the session's use is noted.
+pub fn apply_source(source: EngineSource, words: Vec<String>) -> EngineSource {
+    match source {
+        EngineSource::Ready(engine) => {
+            let (engine, last) = apply(engine, &words);
+            note(last);
+            EngineSource::Ready(engine)
+        }
+        EngineSource::Loading(rx) => {
+            let (tx, out) = std::sync::mpsc::channel();
+            std::thread::spawn(move || {
+                let got = rx.recv().unwrap_or_else(|_| Err("model load stopped".into()));
+                let _ = tx.send(got.map(|loaded| {
+                    let (engine, last) = apply(loaded.engine, &words);
+                    note(last);
+                    LoadedEngine {
+                        label: loaded.label,
+                        engine,
+                    }
+                }));
+            });
+            EngineSource::Loading(out)
+        }
+    }
 }
 
 pub fn note(last: LastSession) {

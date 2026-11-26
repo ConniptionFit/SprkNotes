@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { DownloadProgress, ModelStatus } from "./types";
   import ModelDownload from "./ModelDownload.svelte";
+  import ModelSpeed from "./ModelSpeed.svelte";
   import Segmented from "./Segmented.svelte";
   import AssistantSettings from "./AssistantSettings.svelte";
   import AppUpdates from "./AppUpdates.svelte";
@@ -75,6 +76,7 @@
           The model turns speech into text on this PC. Audio never leaves your computer.
           {#if model.customSource}Your organization provides the download.{/if}
         </p>
+        {#if model.ready}<ModelSpeed {sessionActive} />{/if}
       </div>
       <ModelDownload
         {model}

@@ -1,4 +1,4 @@
-# ADR-016: Custom words
+# ADR-017: Custom words
 
 Status: accepted (2026-11-26, John's request)
 

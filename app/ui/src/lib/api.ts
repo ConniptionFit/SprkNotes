@@ -1,5 +1,5 @@
 import type { CustomWords, ManagedPrefs, SaveLocation } from "./types";
-import type { AppUpdateInfo, AppUpdateProgress, AppUpdateStatus, AssistantRequest, AssistantModelStatus, AssistantResponse, AssistantStatus, Caption, DownloadProgress, ExportFormat, LibraryEntry, Line, ModelStatus, Phase, Source, Status, Summarized, TranscriptView, UpdateInfo } from "./types";
+import type { AppUpdateInfo, AppUpdateProgress, AppUpdateStatus, AssistantRequest, AssistantModelStatus, AssistantResponse, AssistantStatus, Caption, DownloadProgress, ExportFormat, LibraryEntry, Line, ModelStatus, Phase, Source, SpeedStatus, Status, Summarized, TranscriptView, UpdateInfo } from "./types";
 import { asAsk, NO_ASK, type MicAsk } from "./micAsk";
 
 /** Typed surface between the UI and the Rust side. Every command has a matching Tauri command. */
@@ -29,6 +29,10 @@ export interface Backend {
   modelStatus(): Promise<ModelStatus>;
   modelCheckUpdate(): Promise<UpdateInfo>;
   modelDownload(): Promise<void>;
+  /** The speed check's result for this model on this PC. No loading. */
+  speedStatus(): Promise<SpeedStatus>;
+  /** Time the model again ("Check again"). Rejects with a short sentence during a session. */
+  speedCheck(): Promise<SpeedStatus>;
   /** App updates (ADR-011). Policy-locked settings refuse changes with a short sentence. */
   appUpdateStatus(): Promise<AppUpdateStatus>;
   appUpdateCheck(): Promise<AppUpdateInfo>;
@@ -132,6 +136,8 @@ async function tauri(): Promise<Backend> {
     modelStatus: () => invoke("model_status"),
     modelCheckUpdate: () => invoke("model_check_update"),
     modelDownload: () => invoke("model_download"),
+    speedStatus: () => invoke("speed_status"),
+    speedCheck: () => invoke("speed_check"),
     appUpdateStatus: () => invoke("update_status"),
     appUpdateCheck: () => invoke("update_check"),
     appUpdateSet: ({ channel, repoUrl, mode }) => invoke("update_set", { channel, repoUrl, mode }),
@@ -372,6 +378,11 @@ export function mockBackend(): Backend {
       busy: false,
     }),
     modelCheckUpdate: async () => ({ available: flag === "update", packs: [] }),
+    speedStatus: async () => ({ state: ready ? "done" : "unavailable", speed: ready ? 3.2 : null, threads: ready ? 4 : null }),
+    speedCheck: async () => {
+      await new Promise((r) => setTimeout(r, 1500));
+      return { state: "done", speed: 3.4, threads: 4 };
+    },
     appUpdateStatus: async () => ({
       installed: "0.0.1",
       mode: "notify",
