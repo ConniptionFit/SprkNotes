@@ -24,7 +24,7 @@
 
   const NAMES = { titles: "Titles only", light: "Light", standard: "Standard" } as const;
   // Rough download sizes, only so people know what they are starting.
-  const SIZES = { titles: "0.6 GB", light: "1.5 GB", standard: "2.7 GB" } as const;
+  const SIZES = { titles: "0.5 GB", light: "1.3 GB", standard: "2.7 GB" } as const;
 
   const have = $derived(model?.installed.some((i) => i.tier === tier) ?? false);
   const working = $derived(
