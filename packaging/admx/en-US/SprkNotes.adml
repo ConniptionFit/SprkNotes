@@ -24,6 +24,8 @@
       <string id="Transcripts">Transcripts and AI</string>
       <string id="TranscriptsRoot">Transcripts folder</string>
       <string id="TranscriptsRoot_Explain">Where every user's transcripts are saved. A full path, and %VARIABLES% such as %OneDrive%\Transcripts are expanded for each user. Setting this locks the folder in Settings.</string>
+      <string id="TranscriptRetentionDays">Keep transcripts for (days)</string>
+      <string id="TranscriptRetentionDays_Explain">Transcripts older than this many days go to the Recycle Bin, or are deleted when the Recycle Bin can't take them, when SprkNotes starts and once a day. A transcript that is open or still being written is never touched. 0 keeps transcripts forever. Setting this locks the choice in Settings.</string>
       <string id="SummarizeEnabled">Allow Summarize</string>
       <string id="SummarizeEnabled_Explain">Disabled removes Summarize, so transcripts are never handed to Claude or Microsoft 365 Copilot. Transcripts may hold PHI.</string>
       <string id="AssistantEnabled">Allow the on-device assistant (Ask Sprk)</string>
@@ -34,6 +36,7 @@
       <presentation id="UpdateChannel"><dropdownList refId="UpdateChannelValue" defaultItem="0">Channel</dropdownList></presentation>
       <presentation id="UpdateRepoUrl"><textBox refId="UpdateRepoUrlValue"><label>Repository address</label></textBox></presentation>
       <presentation id="UpdatePublicKeys"><textBox refId="UpdatePublicKeysValue"><label>Public key</label></textBox></presentation>
+      <presentation id="TranscriptRetentionDays"><decimalTextBox refId="TranscriptRetentionDaysValue" defaultValue="365">Days</decimalTextBox></presentation>
       <presentation id="TranscriptsRoot"><textBox refId="TranscriptsRootValue"><label>Folder</label></textBox></presentation>
     </presentationTable>
   </resources>

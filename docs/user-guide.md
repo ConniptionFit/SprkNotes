@@ -83,6 +83,7 @@ Open **Settings** at the bottom of the window.
   ![Downloading](screenshots/settings-model-downloading-light.png)
   ![Update available](screenshots/settings-model-update-light.png)
   ![Managed by your organization](screenshots/settings-model-managed-light.png)
+- **Keep transcripts for.** Forever (default), 30 days, 90 days or 1 year. Transcripts older than that go to the Recycle Bin when SprkNotes starts and once a day, where you can restore them (if the Recycle Bin can't take one, for example on a network folder, it is deleted). Age counts from the day a transcript last ended. A transcript open in the Library or still being written is left alone, and a new choice applies at the next start, so you can change your mind first. If your organization sets it, the choice is greyed and a line under it says how long they keep transcripts.
 - **Custom words.** Names, medicines and product names you want spelled right, one word or phrase per line, then **Save**. When the speech model hears something close, such as "metaprolol" or "life spark", the transcript, the live line and captions show your spelling ("metoprolol", "Lifespark"). Only words of five or more letters are matched loosely, the first letter has to agree, and everyday words are never changed. Words your organization added are listed under the box. Changes apply from the next session, and a note says how many words the last session used.
 - **Appearance.** System, Light or Dark.
 - **Misc.** **Throwback Mode** (the first app icon). Everything else looks the same.

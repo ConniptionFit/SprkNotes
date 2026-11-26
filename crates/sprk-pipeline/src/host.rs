@@ -1319,10 +1319,19 @@ mod tests {
         std::thread::sleep(Duration::from_millis(300));
         // Simulate the UI going away without End: the thread finalizes on disconnect.
         drop(host);
-        std::thread::sleep(Duration::from_millis(300));
-        let files = md_files(dir.path());
-        let text = std::fs::read_to_string(&files[0]).unwrap();
-        assert!(text.contains("this line is committed"));
+        // Wait for the line rather than a fixed time: a busy CI runner can be slow to finalize.
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        let mut text = String::new();
+        while std::time::Instant::now() < deadline {
+            if let Some(f) = md_files(dir.path()).first() {
+                text = std::fs::read_to_string(f).unwrap_or_default();
+                if text.contains("this line is committed") {
+                    break;
+                }
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        assert!(text.contains("this line is committed"), "{text}");
     }
 
     #[test]
@@ -1824,7 +1833,11 @@ mod tests {
     #[test]
     fn an_engine_that_never_loads_closes_the_file_and_says_so() {
         let (host, ev, _delivered, dir) = launch_loading(Duration::from_millis(200), None);
-        std::thread::sleep(Duration::from_millis(500));
+        // Wait for the stop rather than a fixed time: a busy CI runner can be slow.
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        while !host.is_finished() && std::time::Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(50));
+        }
         assert!(host.is_finished(), "the session stopped by itself");
         host.end().unwrap();
         let text = only_md(dir.path());

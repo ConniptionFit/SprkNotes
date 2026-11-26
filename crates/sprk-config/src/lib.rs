@@ -192,6 +192,9 @@ pub struct AppPolicy {
     pub update_public_keys: Vec<String>,
     /// Hours between checks (default 24, at least 1).
     pub update_check_hours: Option<u64>,
+    /// Keep transcripts this many days, then move them to the Recycle Bin (SPEC 6.6). `Some(0)`
+    /// keeps them forever. `Some` locks the setting.
+    pub transcript_retention_days: Option<u64>,
 }
 
 /// An app link (`scheme:...`, scheme of two or more characters so `C:` is no link) or an https
@@ -221,6 +224,8 @@ pub struct InstallDefaults {
     pub update_channel: Option<String>,
     pub update_repo_url: Option<String>,
     pub update_provider: Option<String>,
+    /// Starting "Keep transcripts for" (SPEC 6.6), in days; 0 is forever.
+    pub transcript_retention_days: Option<u64>,
 }
 
 impl InstallDefaults {
@@ -233,6 +238,7 @@ impl InstallDefaults {
             update_channel: p.update_channel,
             update_repo_url: p.update_repo_url,
             update_provider: p.update_provider,
+            transcript_retention_days: p.transcript_retention_days,
         }
     }
 }
@@ -248,6 +254,10 @@ fn flag(s: &dyn PolicyStore, k: &str) -> Option<bool> {
 fn num(s: &dyn PolicyStore, k: &str) -> Option<u64> {
     s.get(k)?.trim().parse().ok()
 }
+
+/// Longest `TranscriptRetentionDays` an admin may set (ten years). A larger number is taken for
+/// a typo and ignored, like any other bad value.
+pub const MAX_RETENTION_DAYS: u64 = 3650;
 
 /// Every key `AppPolicy::load` reads. The admin install-script form and the ADMX list the same
 /// keys; a test keeps the form in step with this list.
@@ -291,6 +301,7 @@ pub const KEYS: &[&str] = &[
     "UpdateProvider",
     "UpdatePublicKeys",
     "UpdateCheckHours",
+    "TranscriptRetentionDays",
 ];
 
 /// Window preferences an admin can set (SPEC 10.2b). The app keeps these in the window, so the
@@ -434,6 +445,8 @@ impl AppPolicy {
                 .filter(|k| !k.is_empty())
                 .collect(),
             update_check_hours: num(s, "UpdateCheckHours").filter(|n| *n >= 1),
+            transcript_retention_days: num(s, "TranscriptRetentionDays")
+                .filter(|n| *n <= MAX_RETENTION_DAYS),
         }
     }
 }
@@ -630,5 +643,24 @@ mod tests {
         assert_eq!(q.update_channel, None);
         assert_eq!(q.update_repo_url, None);
         assert_eq!(q.update_check_hours, None);
+    }
+
+    #[test]
+    fn retention_days_parse_zero_is_forever_and_bad_values_are_ignored() {
+        let p = AppPolicy::load(&fake(&[("TranscriptRetentionDays", " 90 ")]));
+        assert_eq!(p.transcript_retention_days, Some(90));
+        let forever = AppPolicy::load(&fake(&[("TranscriptRetentionDays", "0")]));
+        assert_eq!(forever.transcript_retention_days, Some(0));
+        for bad in ["-1", "soon", "3651", ""] {
+            assert_eq!(
+                AppPolicy::load(&fake(&[("TranscriptRetentionDays", bad)]))
+                    .transcript_retention_days,
+                None,
+                "{bad}"
+            );
+        }
+        // An installer starting value goes through the same checks.
+        let d = InstallDefaults::load(&fake(&[("TranscriptRetentionDays", "365")]));
+        assert_eq!(d.transcript_retention_days, Some(365));
     }
 }

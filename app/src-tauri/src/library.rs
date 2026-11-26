@@ -102,10 +102,19 @@ pub fn library_list(app: AppHandle, query: String) -> Result<Vec<Entry>, String>
         .collect())
 }
 
+/// Open a transcript in the Library. It counts as open (retention leaves it alone, SPEC 6.6)
+/// until `library_close` or another one is opened.
 #[tauri::command]
-pub fn library_open(app: AppHandle, path: String) -> Result<View, String> {
+pub fn library_open(
+    app: AppHandle,
+    state: tauri::State<crate::AppState>,
+    path: String,
+) -> Result<View, String> {
     let root = root(&app)?;
     let p = checked(&app, &path)?;
+    if let Ok(mut v) = state.viewing.lock() {
+        *v = Some(p.clone());
+    }
     let t = library::load(&root, &p).ok_or("Could not read that transcript.")?;
     let mut rows: Vec<(u64, u8, ViewLine)> = Vec::new();
     for g in &t.segments {
@@ -147,6 +156,14 @@ pub fn library_open(app: AppHandle, path: String) -> Result<View, String> {
         context: t.meeting_context,
         lines: rows.into_iter().map(|r| r.2).collect(),
     })
+}
+
+/// The Library closed its transcript view.
+#[tauri::command]
+pub fn library_close(state: tauri::State<crate::AppState>) {
+    if let Ok(mut v) = state.viewing.lock() {
+        *v = None;
+    }
 }
 
 fn reveal(path: &Path) {

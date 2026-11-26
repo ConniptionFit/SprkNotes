@@ -208,6 +208,12 @@
     if (menuFor && !(e.target as Element | null)?.closest?.(".row")) menuFor = null;
   }
 
+  // Retention (SPEC 6.6) leaves the transcript open here alone; say when it is closed again.
+  $effect(() => {
+    if (!open) api?.libraryClose().catch(() => {});
+  });
+  $effect(() => () => api?.libraryClose().catch(() => {}));
+
   function close() {
     open = null;
     renaming = false;

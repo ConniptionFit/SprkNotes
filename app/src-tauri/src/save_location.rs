@@ -15,6 +15,9 @@ pub(crate) struct Saved {
     /// Custom words (SPEC 4.3a), the person's own list.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) custom_words: Vec<String>,
+    /// "Keep transcripts for", in days (SPEC 6.6). None or 0 is forever.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) keep_days: Option<u64>,
 }
 
 fn saved_path() -> Option<PathBuf> {

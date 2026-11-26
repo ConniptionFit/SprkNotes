@@ -116,6 +116,7 @@ With one app installed it opens that one (Claude gets the file; for Copilot the 
 
 - **Transcription model:** status, **Download model**, **Check for updates**, and a speed line ("Speed: 3.2x real time on 4 threads") with **Check again**.
 - **Custom words:** names and terms to spell right, one per line; near misses are changed to your spelling, everyday words never. Your organization can add to the list.
+- **Keep transcripts for:** Forever (default), 30 days, 90 days or 1 year. Older transcripts go to the Recycle Bin at start and once a day; open or running ones are never touched. Admins can lock it (`TranscriptRetentionDays`).
 - **Appearance:** System, Light or Dark.
 - **Misc:** Throwback Mode.
 - **Live captions:** captions on the overlay, the live line in the main window, **Live text delay** (Fast, Steady, Smoothest) and whose words (Others only or Others and Me).

@@ -9,6 +9,7 @@
   // start: true when the installer may set a starting value (the user can change it later).
   const SETTINGS = [
     { key: "TranscriptsRoot", group: "Files", type: "path", start: true, label: "Save transcripts to", help: "Folder for new transcripts and the Library. Use %OneDrive%, %USERPROFILE% and the like so each person gets their own folder." },
+    { key: "TranscriptRetentionDays", group: "Files", type: "number", min: 0, max: 3650, start: true, label: "Keep transcripts for (days)", help: "Transcripts older than this go to the Recycle Bin (or are deleted when it can't take them) when SprkNotes starts and once a day. 0 keeps them forever. Settings offers 30, 90 and 365 days; any number up to 3650 works here." },
     { key: "PromptTemplatePath", group: "Files", type: "path", label: "Summary prompt template", help: "A .md file used when sending a transcript to Claude or Copilot. Variables are expanded per user." },
 
     { key: "Theme", group: "Look and live text", type: "enum", options: ["system", "light", "dark"], start: true, label: "Appearance", help: "System follows Windows; Light or Dark always." },
