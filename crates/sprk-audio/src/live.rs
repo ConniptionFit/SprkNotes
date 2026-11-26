@@ -505,6 +505,51 @@ mod tests {
     }
 
     #[test]
+    fn each_source_gets_exactly_its_own_samples() {
+        // Two different signals, delivered in uneven bursts as a busy machine would: every
+        // frame must carry only its own source's samples, unchanged and in order. Mic samples
+        // are positive and System samples negative, so any mix-up shows.
+        let (mut c, w) = setup();
+        let mic: Vec<f32> = (1..=40_000).map(|k| k as f32 * 1e-5).collect();
+        let sys: Vec<f32> = (1..=40_000).map(|k| -(k as f32) * 1e-5).collect();
+        let (mut mi, mut si, mut now) = (0usize, 0usize, 0u64);
+        let (mut got_mic, mut got_sys) = (Vec::new(), Vec::new());
+        let mut step = 0usize;
+        while mi < mic.len() || si < sys.len() {
+            step += 1;
+            let m = (step * 37 % 900 + 1).min(mic.len() - mi);
+            let k = (step * 53 % 1_300 + 1).min(sys.len() - si);
+            {
+                let mut w = w.lock().unwrap();
+                w.pending.push(("mic-a".into(), mic[mi..mi + m].to_vec()));
+                w.pending.push(("spk-a".into(), sys[si..si + k].to_vec()));
+            }
+            mi += m;
+            si += k;
+            now += 20;
+            c.poll(now);
+            while let Some(f) = c.next_frame() {
+                for &v in &f.samples {
+                    match f.source {
+                        Source::Mic => assert!(v >= 0.0, "System sample in a Mic frame"),
+                        Source::System => assert!(v <= 0.0, "Mic sample in a System frame"),
+                    }
+                }
+                let keep = f.samples.iter().copied().filter(|v| *v != 0.0);
+                match f.source {
+                    Source::Mic => got_mic.extend(keep),
+                    Source::System => got_sys.extend(keep),
+                }
+            }
+        }
+        assert_eq!(got_mic, mic, "Mic samples were changed, lost or reordered");
+        assert_eq!(
+            got_sys, sys,
+            "System samples were changed, lost or reordered"
+        );
+    }
+
+    #[test]
     fn both_sources_produce_labeled_frames() {
         let (mut c, w) = setup();
         w.lock().unwrap().pending = vec![("mic-a".into(), vec![0.1]), ("spk-a".into(), vec![0.2])];
