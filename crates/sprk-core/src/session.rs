@@ -2,18 +2,19 @@
 //! picked in Settings and the sources switched off before Start. The shell supplies the platform
 //! pieces (model, capture backend, events, call context) when a session starts.
 
-use sprk_asr::Engine;
 use sprk_audio::live::{Backend, SharedChoice};
 use sprk_audio::Source;
-use sprk_pipeline::host::{ContextConfig, Events, Host, HostError, StartParams};
+use sprk_pipeline::host::{ContextConfig, EngineSource, Events, Host, HostError, StartParams};
 use sprk_pipeline::session::VadFactory;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 /// Everything a shell hands over to start a session.
 pub struct Launch {
     pub params: StartParams,
-    /// Loaded and validated by the shell; never swapped mid-session.
-    pub engine: Box<dyn Engine>,
+    /// The model for this session, loaded or still loading (Instant Start, SPEC 4.6). Fixed at
+    /// Start and never swapped mid-session.
+    pub engine: EngineSource,
     pub make_vad: VadFactory,
     /// Runs on the capture thread (platform streams stay on the thread that opened them).
     pub make_backend: Box<dyn FnOnce() -> Box<dyn Backend> + Send>,
@@ -31,6 +32,8 @@ pub struct Sessions {
     /// Sources switched off ([mic, system]). Kept between sessions so a stream turned off before
     /// Start stays off when the session begins.
     sources_off: Mutex<[bool; 2]>,
+    /// The transcript open in the Library, which retention (SPEC 6.6) leaves alone.
+    viewing: Mutex<Option<PathBuf>>,
 }
 
 const BUSY: &str = "busy";
@@ -56,8 +59,30 @@ impl Sessions {
     }
 
     /// The file the running session writes to, if any.
-    pub fn live_path(&self) -> Option<std::path::PathBuf> {
+    pub fn live_path(&self) -> Option<PathBuf> {
         self.host.lock().ok()?.as_ref()?.path()
+    }
+
+    /// Note which transcript the Library has open (None: none).
+    pub fn set_viewing(&self, path: Option<PathBuf>) {
+        if let Ok(mut v) = self.viewing.lock() {
+            *v = path;
+        }
+    }
+
+    /// The transcript the Library has open, if any.
+    pub fn viewing(&self) -> Option<PathBuf> {
+        self.viewing.lock().ok().and_then(|v| v.clone())
+    }
+
+    /// Run `f` while holding the session slot, so no session can start on, or continue, a file
+    /// while `f` works on the transcripts. `f` gets the live file, if a session is running.
+    pub fn hold<R>(&self, f: impl FnOnce(Option<PathBuf>) -> R) -> R {
+        let slot = self.host.lock().unwrap_or_else(|p| p.into_inner());
+        let live = slot.as_ref().and_then(Host::path);
+        let r = f(live);
+        drop(slot);
+        r
     }
 
     /// Start a session. `prepare` runs only when none is running, while the slot is held, so two
@@ -67,6 +92,12 @@ impl Sessions {
         prepare: impl FnOnce(SharedChoice) -> Result<Launch, String>,
     ) -> Result<(), String> {
         let mut slot = self.host.lock().map_err(|_| BUSY.to_string())?;
+        // A session that stopped by itself (the model never loaded, or a panic) is cleared here.
+        if slot.as_ref().is_some_and(Host::is_finished) {
+            if let Some(h) = slot.take() {
+                let _ = h.end();
+            }
+        }
         if slot.is_some() {
             return Err("A session is already running.".into());
         }
@@ -109,6 +140,16 @@ impl Sessions {
 
     pub fn rename(&self, name: &str) -> Result<(), String> {
         self.with_host(|h| h.rename(name))
+    }
+
+    /// Drop a mark into the live transcript at this moment.
+    pub fn mark(&self) -> Result<(), String> {
+        self.with_host(|h| h.mark())
+    }
+
+    /// Save a short typed note into the live transcript at this moment.
+    pub fn note(&self, text: &str) -> Result<(), String> {
+        self.with_host(|h| h.note(text).map(|_| ()))
     }
 
     /// Turn a source on or off. Remembered for the next session; applied now if one is running.
@@ -158,6 +199,19 @@ mod tests {
         // Switching a source off before Start is remembered, not an error.
         assert_eq!(s.set_source(Source::System, false), Ok(()));
         assert_eq!(s.sources_off.lock().map(|o| *o).ok(), Some([false, true]));
+        assert_eq!(s.mark(), Err("No session is running.".to_string()));
+        assert_eq!(s.note("x"), Err("No session is running.".to_string()));
+    }
+
+    #[test]
+    fn viewing_is_remembered_and_cleared() {
+        let s = Sessions::default();
+        assert_eq!(s.viewing(), None);
+        s.set_viewing(Some(PathBuf::from("a.md")));
+        assert_eq!(s.viewing(), Some(PathBuf::from("a.md")));
+        s.set_viewing(None);
+        assert_eq!(s.viewing(), None);
+        assert_eq!(s.hold(|live| live), None);
     }
 
     #[test]

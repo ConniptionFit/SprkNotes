@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod assistant;
+mod custom_words;
 mod hotkey;
 mod library;
 mod mic_watch;
@@ -9,9 +10,12 @@ mod models;
 #[cfg(windows)]
 mod net;
 mod net_unix;
+mod retention;
 mod save_location;
 mod shell;
+mod speed;
 mod updater;
+mod warm;
 
 use sprk_audio::cpal_backend::CpalBackend;
 use sprk_audio::live::Backend;
@@ -185,6 +189,29 @@ fn model_download(app: AppHandle, state: State<AppState>) -> Result<(), String> 
     model_download::start_install(app, policy())
 }
 
+/// Settings: the speed check's result for this model on this PC (SPEC 16.8a). No loading.
+#[tauri::command]
+fn speed_status() -> speed::SpeedStatus {
+    speed::status()
+}
+
+/// Settings "Check again": time the model at a couple of thread counts and keep the best.
+/// Refused during a session; the warm model reloads with the new choice afterwards.
+#[tauri::command]
+async fn speed_check(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<speed::SpeedStatus, String> {
+    if state.busy() {
+        return Err("End the transcript first, then check the speed.".into());
+    }
+    tauri::async_runtime::spawn_blocking(|| speed::run(env!("CARGO_PKG_VERSION")))
+        .await
+        .map_err(|_| "The check was interrupted.".to_string())??;
+    warm::ensure(&app);
+    Ok(speed::status())
+}
+
 /// Ask Sprk model: which packs are on this PC, and may this PC download one? No network.
 #[tauri::command]
 fn assistant_model_status() -> model_download::AssistantModelStatus {
@@ -355,20 +382,24 @@ fn start_session_blocking(
     let events = Arc::new(TauriEvents(app.clone()));
     app.state::<AppState>().start(|devices| {
         app.state::<assistant::Assistant>().clear();
-        // The model is chosen now and never swapped mid-session.
+        // The model is chosen now and never swapped mid-session. It is usually loaded already
+        // (Instant Start, SPEC 4.6); if not, capture starts now and the engine follows.
         let policy = policy();
-        let loaded = models::load_active(env!("CARGO_PKG_VERSION"))?;
+        speed::call_off();
+        let (engine_label, engine) = app.state::<warm::Warm>().for_session()?;
+        let engine = custom_words::apply_source(engine, custom_words::in_force(&policy));
+        let make_vad = models::load_vad()?;
         Ok(Launch {
             params: StartParams {
                 root: transcripts_root(&app, &policy)?,
                 name,
                 app_version: env!("CARGO_PKG_VERSION").to_string(),
-                engine_label: loaded.label,
+                engine_label,
                 commit: commit_config(&policy),
                 continue_from,
             },
-            engine: loaded.engine,
-            make_vad: loaded.make_vad,
+            engine,
+            make_vad,
             make_backend: Box::new(move || {
                 Box::new(Preferred::new(CpalBackend::default(), devices)) as Box<dyn Backend>
             }),
@@ -386,6 +417,18 @@ fn pause_session(state: State<AppState>) -> Result<(), String> {
 #[tauri::command]
 fn resume_session(state: State<AppState>) -> Result<(), String> {
     state.resume()
+}
+
+/// Drop a mark into the live transcript at this moment.
+#[tauri::command]
+fn mark_session(state: State<AppState>) -> Result<(), String> {
+    state.mark()
+}
+
+/// Save a short typed note into the live transcript at this moment.
+#[tauri::command]
+fn note_session(state: State<AppState>, text: String) -> Result<(), String> {
+    state.note(&text)
 }
 
 #[tauri::command]
@@ -532,6 +575,7 @@ fn main() -> anyhow::Result<()> {
         .manage(AppState::default())
         .manage(assistant::Assistant::new())
         .manage(shell::Shell::default())
+        .manage(warm::Warm::default())
         .setup(|app| {
             note_policy_file();
             shell::init(app.handle())?;
@@ -539,6 +583,9 @@ fn main() -> anyhow::Result<()> {
             updater::launch_check(app.handle().clone(), policy());
             app.state::<assistant::Assistant>().start_idle_timer();
             mic_watch::start(app.handle().clone());
+            retention::start(app.handle().clone());
+            // Instant Start: check the speed if needed, then load the model in the background.
+            warm::prepare(app.handle());
             Ok(())
         })
         .on_window_event(|window, event| match window.label() {
@@ -553,6 +600,8 @@ fn main() -> anyhow::Result<()> {
             resume_session,
             end_session,
             rename_session,
+            mark_session,
+            note_session,
             set_source,
             list_devices,
             set_device,
@@ -568,6 +617,8 @@ fn main() -> anyhow::Result<()> {
             model_status,
             model_check_update,
             model_download,
+            speed_status,
+            speed_check,
             assistant_model_status,
             assistant_model_check,
             assistant_model_download,
@@ -579,6 +630,10 @@ fn main() -> anyhow::Result<()> {
             save_location::save_location_status,
             managed_prefs,
             save_location::save_location_set,
+            retention::retention_status,
+            retention::retention_set,
+            custom_words::custom_words_status,
+            custom_words::custom_words_set,
             library::library_open_folder,
             continue_session,
             assistant::assistant_status,
@@ -587,6 +642,7 @@ fn main() -> anyhow::Result<()> {
             assistant::assistant_run,
             library::library_list,
             library::library_open,
+            library::library_close,
             library::library_reveal,
             library::recovery_scan,
             library::recovery_mark,

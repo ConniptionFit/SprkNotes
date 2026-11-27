@@ -13,12 +13,15 @@ test("every setting has a unique key, a label and a known type", () => {
   }
   // Only settings with a control in the app take a starting value (InstallDefaults, UiManaged).
   const start = A.SETTINGS.filter((s) => s.start).map((s) => s.key).sort();
-  assert.deepEqual(start, ["AssistantEnabled", "CaptionDelay", "CaptionSpeakers", "Hotkey", "HotkeyKeys", "LiveCaptions", "LiveLine", "MicPrompt", "Theme", "ThrowbackMode", "TranscriptsRoot", "UpdateChannel", "UpdateMode", "UpdateProvider", "UpdateRepoUrl"]);
+  assert.deepEqual(start, ["AssistantEnabled", "CaptionDelay", "CaptionSpeakers", "Hotkey", "HotkeyKeys", "LiveCaptions", "LiveLine", "MicPrompt", "Theme", "ThrowbackMode", "TranscriptRetentionDays", "TranscriptsRoot", "UpdateChannel", "UpdateMode", "UpdateProvider", "UpdateRepoUrl"]);
 });
 
 test("bad values are reported and good ones pass", () => {
   assert.deepEqual(A.validate([{ key: "TranscriptsRoot", mode: "lock", value: "%OneDrive%\\Notes" }]), []);
   assert.deepEqual(A.validate([{ key: "CommitDelaySeconds", mode: "lock", value: "5" }]), []);
+  assert.deepEqual(A.validate([{ key: "TranscriptRetentionDays", mode: "lock", value: "0" }]), []);
+  assert.deepEqual(A.validate([{ key: "TranscriptRetentionDays", mode: "start", value: "90" }]), []);
+  assert.equal(A.validate([{ key: "TranscriptRetentionDays", mode: "lock", value: "3651" }]).length, 1);
   const bad = A.validate([
     { key: "TranscriptsRoot", mode: "lock", value: "Notes" },
     { key: "CommitDelaySeconds", mode: "lock", value: "40" },
@@ -28,6 +31,17 @@ test("bad values are reported and good ones pass", () => {
     { key: "Nope", mode: "lock", value: "1" },
   ]);
   assert.equal(bad.length, 6);
+});
+
+test("custom words are a list that adds to the person's own and is never a starting value", () => {
+  const s = A.SETTINGS.find((x) => x.key === "CustomWords");
+  assert.equal(s.type, "list");
+  assert.ok(!s.start);
+  const c = [{ key: "CustomWords", mode: "lock", value: "metoprolol\n\nCharlie Mertens" }];
+  assert.deepEqual(A.validate(c), []);
+  assert.equal(A.packed(c, "lock"), "CustomWords=metoprolol|Charlie Mertens");
+  assert.match(A.policyScript(c), /Name = 'CustomWords'; Kind = 'MultiString'; Value = \[string\[\]\]@\('metoprolol', 'Charlie Mertens'\)/);
+  assert.equal(A.validate([{ key: "CustomWords", mode: "start", value: "metoprolol" }]).length, 1);
 });
 
 test("packed values and the msiexec line keep variables as written", () => {

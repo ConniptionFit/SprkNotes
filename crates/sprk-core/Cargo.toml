@@ -12,6 +12,7 @@ sprk-asr = { path = "../sprk-asr" }
 sprk-audio = { path = "../sprk-audio" }
 sprk-config = { path = "../sprk-config" }
 sprk-pipeline = { path = "../sprk-pipeline" }
+sprk-transcript = { path = "../sprk-transcript" }
 
 [dev-dependencies]
 serde_json.workspace = true

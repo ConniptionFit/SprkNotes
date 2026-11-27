@@ -208,6 +208,12 @@
     if (menuFor && !(e.target as Element | null)?.closest?.(".row")) menuFor = null;
   }
 
+  // Retention (SPEC 6.6) leaves the transcript open here alone; say when it is closed again.
+  $effect(() => {
+    if (!open) api?.libraryClose().catch(() => {});
+  });
+  $effect(() => () => api?.libraryClose().catch(() => {}));
+
   function close() {
     open = null;
     renaming = false;
@@ -330,6 +336,10 @@
           <p class="line" class:me={l.speaker === "Me"} class:others={l.speaker !== "Me"}>
             <time>{l.t}</time><strong>{l.speaker}</strong><span class="text">{l.text}</span>
           </p>
+        {:else if l.kind === "mark"}
+          <p class="line marked"><time>{l.t}</time><strong>Mark</strong><span class="text"></span></p>
+        {:else if l.kind === "note"}
+          <p class="line usernote"><time>{l.t}</time><strong>Note</strong><span class="text">{l.text}</span></p>
         {:else}
           <p class="line event"><time>{l.t}</time><span class="text">{l.text}</span></p>
         {/if}
@@ -488,4 +498,7 @@
   .others strong { color: var(--others); }
   .event { color: var(--muted); font-style: italic; }
   .event .text { grid-column: 2 / -1; }
+  /* Marks and notes the user added stand out from the conversation (SPEC 5.1). */
+  .marked, .usernote { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+  .marked strong, .usernote strong { color: var(--accent); }
 </style>

@@ -3,6 +3,7 @@
 
 use serde::Serialize;
 use sprk_pipeline::host::{UiCaption, UiLine, UiStatus};
+use sprk_transcript::format::{event_kind, EventKind};
 
 /// Event names, so both shells emit the same ones.
 pub mod event {
@@ -30,6 +31,17 @@ pub enum LinePayload {
         t: String,
         text: String,
     },
+    /// A mark the user dropped (SPEC 5.1). In the file it is an event line.
+    Mark {
+        id: u64,
+        t: String,
+    },
+    /// A note the user typed, without its "Note: " prefix.
+    Note {
+        id: u64,
+        t: String,
+        text: String,
+    },
 }
 
 impl From<UiLine> for LinePayload {
@@ -46,7 +58,15 @@ impl From<UiLine> for LinePayload {
                 speaker,
                 text,
             },
-            UiLine::Event { id, t, text } => LinePayload::Event { id, t, text },
+            UiLine::Event { id, t, text } => match event_kind(&text) {
+                EventKind::Mark => LinePayload::Mark { id, t },
+                EventKind::Note(n) => LinePayload::Note {
+                    id,
+                    t,
+                    text: n.to_string(),
+                },
+                EventKind::Other => LinePayload::Event { id, t, text },
+            },
         }
     }
 }

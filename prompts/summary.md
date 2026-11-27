@@ -3,6 +3,7 @@ Each statement is one line: - `HH:MM:SS` **Speaker:** text
 "Me" is the person who ran SprkNotes. A named speaker (e.g. "Sam Sample") is the only other person on a 1:1 call.
 "Others" means one or more remote people when the call had 3+ people or nobody could be identified; do not guess who said an "Others" line.
 Lines starting with ">" are events: pauses, people joining or leaving, and audio sources (videos or apps playing sound). Speech during an audio source window may be from a video, not a person in the meeting; treat it that way.
+"> `HH:MM:SS` Mark" is a moment the user flagged as important, and "> `HH:MM:SS` Note: text" is a note the user typed at that moment. Give marked moments and notes extra weight, and keep each note's timestamp when you use it.
 The front matter and the Meeting context, Participants and Audio sources sections give extra context. Invitees are not proof someone attended. During a group-call period, other participants were not identified.
 Speech recognition can mishear words. Fix obvious errors from context, but never invent content.
 

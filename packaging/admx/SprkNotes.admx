@@ -60,6 +60,13 @@
         <text id="TranscriptsRootValue" valueName="TranscriptsRoot" required="true" />
       </elements>
     </policy>
+    <policy name="TranscriptRetentionDays" class="Machine" displayName="$(string.TranscriptRetentionDays)" explainText="$(string.TranscriptRetentionDays_Explain)" key="Software\Policies\SprkNotes" presentation="$(presentation.TranscriptRetentionDays)">
+      <parentCategory ref="Transcripts" />
+      <supportedOn ref="windows:SUPPORTED_Windows7" />
+      <elements>
+        <decimal id="TranscriptRetentionDaysValue" valueName="TranscriptRetentionDays" required="true" minValue="0" maxValue="3650" />
+      </elements>
+    </policy>
     <policy name="SummarizeEnabled" class="Machine" displayName="$(string.SummarizeEnabled)" explainText="$(string.SummarizeEnabled_Explain)" key="Software\Policies\SprkNotes" valueName="SummarizeEnabled">
       <parentCategory ref="Transcripts" />
       <supportedOn ref="windows:SUPPORTED_Windows7" />
