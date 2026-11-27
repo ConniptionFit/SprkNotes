@@ -103,3 +103,82 @@ export function collectMarks(lines: readonly Line[]): Marks {
   items.sort((a, b) => (a.t < b.t ? -1 : a.t > b.t ? 1 : a.id - b.id));
   return { items, byLine, hidden };
 }
+
+// A note about one line ("Add a note about this line") is saved as "About 00:12:41: text". It is
+// an annotation: the live pane and the Library show it nested under the line said at that time,
+// flagged as an annotation, instead of as its own entry at the time it was typed.
+
+const ABOUT = /^About (\d{2,}:\d{2}:\d{2}): ([\s\S]+)$/;
+
+/** The start of a note about the line said at time `t`. */
+export function aboutPrefix(t: string): string {
+  return `About ${t}: `;
+}
+
+/** A note about a line: the line's time and the note's own words; anything else is null. */
+export function parseAbout(text: string): { t: string; text: string } | null {
+  const m = ABOUT.exec(text.trim());
+  return m && m[2].trim() ? { t: m[1], text: m[2].trim() } : null;
+}
+
+export type LineNote = {
+  /** Id of the note line itself. */
+  id: number;
+  /** When the note was typed. */
+  t: string;
+  text: string;
+};
+
+export type LineNotes = {
+  /** Statement id to the notes about it, in the order they were typed. */
+  under: Map<number, LineNote[]>;
+  /** Notes shown under their line instead of as an entry of their own. */
+  hidden: Set<number>;
+};
+
+/** Notes about a line, attached to the line said at the time they name. */
+export function collectLineNotes(lines: readonly Line[]): LineNotes {
+  const under = new Map<number, LineNote[]>();
+  const hidden = new Set<number>();
+  const firstAt = new Map<string, number>();
+  for (const l of lines) if (l.kind === "statement" && !firstAt.has(l.t)) firstAt.set(l.t, l.id);
+  for (const l of lines) {
+    if (l.kind !== "note") continue;
+    const p = parseAbout(l.text);
+    const target = p ? firstAt.get(p.t) : undefined;
+    if (!p || target === undefined) continue;
+    const list = under.get(target) ?? [];
+    list.push({ id: l.id, t: l.t, text: p.text });
+    under.set(target, list);
+    hidden.add(l.id);
+  }
+  return { under, hidden };
+}
+
+/**
+ * The line a mark is about: the marked line itself, or for a mark dropped with Mark or Ctrl+M,
+ * the line that was being said at that moment (the latest one that started at or before it).
+ */
+export function markedLine(lines: readonly Line[], m: MarkItem): (Line & { kind: "statement" }) | null {
+  let best: (Line & { kind: "statement" }) | null = null;
+  for (const l of lines) {
+    if (l.kind !== "statement") continue;
+    if (l.id === m.id) return l;
+    if (l.t <= m.t && (!best || l.t >= best.t)) best = l;
+  }
+  return best;
+}
+
+/** True when a line mark still has the name it got when the line was marked. */
+export function isLineMarkDefault(m: MarkItem, line: { speaker: string; text: string } | null): boolean {
+  return !!line && m.name === lineMarkName(line.speaker, line.text);
+}
+
+/** Lines of a saved transcript, given ids by position, for the helpers above. */
+export function withIds(lines: readonly { kind: Line["kind"]; t: string; speaker: string; text: string }[]): Line[] {
+  return lines.map((l, id): Line => {
+    if (l.kind === "statement") return { kind: "statement", id, t: l.t, speaker: l.speaker, text: l.text };
+    if (l.kind === "mark") return { kind: "mark", id, t: l.t };
+    return { kind: l.kind, id, t: l.t, text: l.text };
+  });
+}

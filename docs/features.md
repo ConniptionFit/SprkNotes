@@ -34,7 +34,7 @@ While transcribing:
 - The light shows the state: green ready, red transcribing, yellow paused.
 - The transcript reads like a conversation: Others on the left and Me on the right in tinted bubbles, the speaker's name once per turn, an easy reading width on wide windows, and each line's time on hover (or always, in Settings).
 - A status chip beside the session name shows **Listening** or **Paused** with the time so far; the **Me** and **Others** pills carry the sound meters.
-- **Mark** (or Ctrl+M) flags the moment, and the note box saves a short typed note with the time (Enter), both in a slim bar at the bottom of the transcript. Both are written into the transcript straight away, stand out in the live view and the Library, and reach Summarize and Ask Sprk. Marks can be named, listed under **Marks**, and jumped to; hovering a line offers Copy line, Mark this line and Add a note about this line.
+- **Mark** (or Ctrl+M) flags the moment, and the note box saves a short typed note with the time (Enter), both in a slim bar at the bottom of the transcript. Both are written into the transcript straight away, stand out in the live view and the Library, and reach Summarize and Ask Sprk. Marks can be named, listed under **Marks**, and jumped to; hovering a line offers Copy line, Mark this line and Add a note about this line. Marks and notes on a line show nested under it as annotations, and the **Marks** list shows the line each mark is about.
 - **Find** (Ctrl+F) searches the transcript on screen and highlights every match.
 - Turn sources on or off at any time. Source changes (a headset plugged in, a default device change) are written as event lines.
 
