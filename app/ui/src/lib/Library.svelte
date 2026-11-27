@@ -29,7 +29,7 @@
   let loaded = $state(false);
   let open = $state<{ entry: LibraryEntry; view: TranscriptView } | null>(null);
   // Marks get their names, and marks and notes about one line sit under it as annotations.
-  const shown = $derived.by(() => {
+  const view = $derived.by(() => {
     const lines = withIds(open?.view.lines ?? []);
     const marks = collectMarks(lines);
     const notes = collectLineNotes(lines);
@@ -339,10 +339,10 @@
     {#if message || notice}<p class="note" role="status">{message || notice}</p>{/if}
     <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
     <div class="body" tabindex="0" role="region" aria-label="Transcript">
-      {#each shown.lines as l (l.id)}
+      {#each view.lines as l (l.id)}
         {#if l.kind === "statement"}
-          {@const m = shown.marks.byLine.get(l.id)}
-          {@const about = shown.notes.under.get(l.id) ?? []}
+          {@const m = view.marks.byLine.get(l.id)}
+          {@const about = view.notes.under.get(l.id) ?? []}
           <p class="line" class:me={l.speaker === "Me"} class:others={l.speaker !== "Me"}>
             <time>{l.t}</time><strong>{l.speaker}</strong><span class="text">{l.text}</span>
           </p>
@@ -357,7 +357,7 @@
             </ul>
           {/if}
         {:else if l.kind === "mark"}
-          <p class="line marked"><time>{l.t}</time><strong>Mark</strong><span class="text">{shown.marks.byLine.get(l.id)?.name ?? ""}</span></p>
+          <p class="line marked"><time>{l.t}</time><strong>Mark</strong><span class="text">{view.marks.byLine.get(l.id)?.name ?? ""}</span></p>
         {:else if l.kind === "note"}
           <p class="line usernote"><time>{l.t}</time><strong>Note</strong><span class="text">{l.text}</span></p>
         {:else}
