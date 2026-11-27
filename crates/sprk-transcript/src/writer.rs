@@ -242,6 +242,13 @@ impl TranscriptWriter {
         &self.meta
     }
 
+    /// The model that actually decodes this session (`id@version`), when it is only known after
+    /// the file was created (Instant Start, SPEC 4.6: the model finishes loading while capture
+    /// runs and may fall back to another one). Written into the front matter at finalize.
+    pub fn set_engine(&mut self, engine: &str) {
+        engine.clone_into(&mut self.meta.engine);
+    }
+
     /// Rewrite the front matter (end, duration, status) and heading atomically.
     /// Consumes the writer, which closes the open handle first.
     pub fn finalize(
@@ -503,6 +510,18 @@ mod tests {
         assert!(std::fs::read_to_string(p)
             .unwrap()
             .contains("# User Name\n"));
+        std::fs::remove_dir_all(d).unwrap();
+    }
+
+    #[test]
+    fn a_late_engine_label_reaches_the_front_matter_at_finalize() {
+        let d = tmpdir("late-engine");
+        let mut w = TranscriptWriter::create(d.join("a.md"), None, meta(), None).unwrap();
+        w.set_engine("fallback@2026.10.0");
+        let p = w.finalize("e", "0:00:01", Status::Complete).unwrap();
+        let text = std::fs::read_to_string(p).unwrap();
+        assert!(text.contains("fallback@2026.10.0"), "{text}");
+        assert!(!text.contains("test-engine"), "{text}");
         std::fs::remove_dir_all(d).unwrap();
     }
 

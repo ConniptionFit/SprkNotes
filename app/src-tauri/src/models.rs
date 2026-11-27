@@ -1,8 +1,9 @@
 //! Where the desktop app keeps model stores (SPEC 16.4). Resolving and loading is shared with the
-//! phone app in `sprk_core::models`.
+//! phone app in `sprk_core::models`. The model a session uses is fixed at its start and never
+//! swapped mid-session; the warm copy (`warm.rs`, SPEC 4.6) is loaded ahead of time.
+use sprk_pipeline::host::LoadedEngine;
+use sprk_pipeline::session::VadFactory;
 use std::path::PathBuf;
-
-pub use sprk_core::models::Loaded;
 
 fn env_dir(var: &str) -> Option<PathBuf> {
     std::env::var_os(var).map(PathBuf::from)
@@ -34,7 +35,18 @@ pub fn active_display_name() -> Option<String> {
     sprk_core::models::active_display_name(&roots())
 }
 
-/// Load the active model and voice activity pack for a session.
-pub fn load_active(app_version: &str) -> Result<Loaded, String> {
-    sprk_core::models::load_active(&roots(), app_version)
+/// The model the next session should use, without loading anything: `id@version` and folder.
+pub fn active_choice() -> Result<(String, PathBuf), String> {
+    sprk_core::models::active_choice(&roots())
+}
+
+/// Load the active transcription model with `threads` decode threads (None: the default).
+/// Slow (hashes and loads the model): never call it on the main thread.
+pub fn load_engine(app_version: &str, threads: Option<u32>) -> Result<LoadedEngine, String> {
+    sprk_core::models::load_engine(&roots(), app_version, threads)
+}
+
+/// The voice activity detector for a session.
+pub fn load_vad() -> Result<VadFactory, String> {
+    sprk_core::models::load_vad(&roots())
 }

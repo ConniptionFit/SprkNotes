@@ -23,7 +23,7 @@ A tour of everything SprkNotes does and how to use it, with screenshots. All scr
 ## Transcribing
 1. Optionally name the session. Blank means SprkNotes names the file from your calendar, the call or the audio playing, and falls back to `Transcript`.
 2. Choose sources: **Me** (your microphone) and **Others** (computer sound).
-3. Press **Start**. The light turns red.
+3. Press **Start**. The light turns red. Start is instant: the speech model is kept ready in the background, and if it is still getting ready (right after SprkNotes opens), what you say is held in memory and transcribed as soon as it is.
 
 | Ready | Named, Me turned off |
 |---|---|
@@ -32,6 +32,7 @@ A tour of everything SprkNotes does and how to use it, with screenshots. All scr
 While transcribing:
 - **Pause** writes a pause line and stops capture; **Resume** continues. **End** finishes the file.
 - The light shows the state: green ready, red transcribing, yellow paused.
+- **Mark** (or Ctrl+M) flags the moment, and the note box saves a short typed note with the time (Enter). Both are written into the transcript straight away, stand out in the live view and the Library, and reach Summarize and Ask Sprk.
 - Turn sources on or off at any time. Source changes (a headset plugged in, a default device change) are written as event lines.
 
 | Transcribing | Paused |
@@ -113,7 +114,9 @@ With one app installed it opens that one (Claude gets the file; for Copilot the 
 ## Settings
 ![Settings](screenshots/settings-full-light.png)
 
-- **Transcription model:** status, **Download model**, **Check for updates**.
+- **Transcription model:** status, **Download model**, **Check for updates**, and a speed line ("Speed: 3.2x real time on 4 threads") with **Check again**.
+- **Custom words:** names and terms to spell right, one per line; near misses are changed to your spelling, everyday words never. Your organization can add to the list.
+- **Keep transcripts for:** Forever (default), 30 days, 90 days or 1 year. Older transcripts go to the Recycle Bin at start and once a day; open or running ones are never touched. Admins can lock it (`TranscriptRetentionDays`).
 - **Appearance:** System, Light or Dark.
 - **Misc:** Throwback Mode.
 - **Live captions:** captions on the overlay, the live line in the main window, **Live text delay** (Fast, Steady, Smoothest) and whose words (Others only or Others and Me).
@@ -160,5 +163,5 @@ Deployment through Intune, GPO, SCCM or an RMM, registry policy keys, model runb
 ![Model download turned off by policy](screenshots/settings-model-managed-dark.png)
 
 ## Keyboard and accessibility
-- Everything is reachable by keyboard; the overlay's buttons appear on keyboard focus too. **End** jumps to the live end of the transcript. **Esc** hides the overlay's buttons.
+- Everything is reachable by keyboard; the overlay's buttons appear on keyboard focus too. **End** jumps to the live end of the transcript. **Ctrl+M** drops a mark while a session runs. **Esc** hides the overlay's buttons.
 - The state is also in the tray tooltip and menu header, not only the light's color. Text sizes are adjustable. New live words appear whole, with no typing animation, when the system asks for reduced motion.

@@ -270,6 +270,29 @@ mod tests {
     }
 
     #[test]
+    fn marks_and_notes_read_back_as_events_without_touching_extras() {
+        use crate::format::{event_kind, event_line, note_event, EventKind, MARK};
+        let note = note_event("Call with Sam about the plan").unwrap();
+        let md = format!(
+            "{}\n{}\n\n{}\n",
+            MD,
+            event_line(40_000, MARK),
+            event_line(41_000, &note)
+        );
+        let p = Parsed::parse(&md, None);
+        assert_eq!(p.segments.len(), 3);
+        assert_eq!(p.events.len(), 3);
+        assert_eq!(event_kind(&p.events[1].text), EventKind::Mark);
+        assert_eq!(p.events[1].t_ms, 40_000);
+        assert_eq!(
+            event_kind(&p.events[2].text),
+            EventKind::Note("Call with Sam about the plan")
+        );
+        // A note's words never become a participant or an audio source.
+        assert!(p.extras.is_empty());
+    }
+
+    #[test]
     fn mismatched_sidecar_is_ignored() {
         let sc = "{\"id\":0,\"start_ms\":1,\"end_ms\":2,\"speaker\":\"Me\",\"source\":\"mic\",\"text\":\"a\"}\n";
         let p = Parsed::parse(MD, Some(sc));

@@ -4,7 +4,8 @@
 use serde::Serialize;
 use sprk_handoff::detect::{self, Decision, SystemProbe, TargetInfo};
 use sprk_handoff::{Launcher, Request};
-use sprk_transcript::{export, format::timestamp, library};
+use sprk_transcript::format::{event_kind, timestamp, EventKind};
+use sprk_transcript::{export, library};
 use std::path::{Path, PathBuf};
 use tauri::AppHandle;
 
@@ -101,10 +102,17 @@ pub fn library_list(app: AppHandle, query: String) -> Result<Vec<Entry>, String>
         .collect())
 }
 
+/// Open a transcript in the Library. It counts as open (retention leaves it alone, SPEC 6.6)
+/// until `library_close` or another one is opened.
 #[tauri::command]
-pub fn library_open(app: AppHandle, path: String) -> Result<View, String> {
+pub fn library_open(
+    app: AppHandle,
+    state: tauri::State<crate::AppState>,
+    path: String,
+) -> Result<View, String> {
     let root = root(&app)?;
     let p = checked(&app, &path)?;
+    state.set_viewing(Some(p.clone()));
     let t = library::load(&root, &p).ok_or("Could not read that transcript.")?;
     let mut rows: Vec<(u64, u8, ViewLine)> = Vec::new();
     for g in &t.segments {
@@ -120,14 +128,20 @@ pub fn library_open(app: AppHandle, path: String) -> Result<View, String> {
         ));
     }
     for e in &t.events {
+        // Marks and notes the user added show apart from other events (SPEC 5.1).
+        let (kind, text) = match event_kind(&e.text) {
+            EventKind::Mark => ("mark", String::new()),
+            EventKind::Note(n) => ("note", n.to_string()),
+            EventKind::Other => ("event", e.text.clone()),
+        };
         rows.push((
             e.t_ms,
             0,
             ViewLine {
-                kind: "event",
+                kind,
                 t: timestamp(e.t_ms),
                 speaker: String::new(),
-                text: e.text.clone(),
+                text,
             },
         ));
     }
@@ -140,6 +154,12 @@ pub fn library_open(app: AppHandle, path: String) -> Result<View, String> {
         context: t.meeting_context,
         lines: rows.into_iter().map(|r| r.2).collect(),
     })
+}
+
+/// The Library closed its transcript view.
+#[tauri::command]
+pub fn library_close(state: tauri::State<crate::AppState>) {
+    state.set_viewing(None);
 }
 
 fn reveal(path: &Path) {

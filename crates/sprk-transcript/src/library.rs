@@ -46,6 +46,8 @@ pub struct Entry {
     pub title: String,
     pub date: String,
     pub start: String,
+    /// When the session last ended (front matter `end`), empty while one runs.
+    pub end: String,
     pub duration: String,
     pub status: String,
     /// Folder relative to the root, `""` for the root itself. Always `/` separated.
@@ -111,6 +113,7 @@ fn entry_for(root: &Path, path: &Path) -> Option<Entry> {
         title: p.title,
         date: p.date,
         start: p.start,
+        end: p.end,
         duration: p.duration,
         status: p.status,
         folder,

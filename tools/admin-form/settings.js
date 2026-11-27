@@ -9,6 +9,7 @@
   // start: true when the installer may set a starting value (the user can change it later).
   const SETTINGS = [
     { key: "TranscriptsRoot", group: "Files", type: "path", start: true, label: "Save transcripts to", help: "Folder for new transcripts and the Library. Use %OneDrive%, %USERPROFILE% and the like so each person gets their own folder." },
+    { key: "TranscriptRetentionDays", group: "Files", type: "number", min: 0, max: 3650, start: true, label: "Keep transcripts for (days)", help: "Transcripts older than this go to the Recycle Bin (or are deleted when it can't take them) when SprkNotes starts and once a day. 0 keeps them forever. Settings offers 30, 90 and 365 days; any number up to 3650 works here." },
     { key: "PromptTemplatePath", group: "Files", type: "path", label: "Summary prompt template", help: "A .md file used when sending a transcript to Claude or Copilot. Variables are expanded per user." },
 
     { key: "Theme", group: "Look and live text", type: "enum", options: ["system", "light", "dark"], start: true, label: "Appearance", help: "System follows Windows; Light or Dark always." },
@@ -23,6 +24,7 @@
 
     { key: "FillerRemoval", group: "Transcript", type: "bool", label: "Remove filler words", help: "Drop um, uh and similar from the transcript." },
     { key: "CommitDelaySeconds", group: "Transcript", type: "number", min: 3, max: 15, label: "Line delay (seconds)", help: "How long a line may still change before it is written, 3 to 15." },
+    { key: "CustomWords", group: "Transcript", type: "list", label: "Custom words", help: "Names, medicines and product names to spell right, one per line. They add to each person's own list in Settings." },
 
     { key: "CalendarProvider", group: "Meetings", type: "enum", options: ["com", "off"], label: "Calendar source", help: "com reads the local Outlook calendar for meeting titles; off never looks." },
     { key: "CallContext", group: "Meetings", type: "bool", label: "Use call details", help: "Read the name of the call app and the meeting while a session runs." },

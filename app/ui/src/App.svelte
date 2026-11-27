@@ -5,6 +5,7 @@
   import TopBar from "./lib/TopBar.svelte";
   import Controls from "./lib/Controls.svelte";
   import LivePane from "./lib/LivePane.svelte";
+  import MarkBar from "./lib/MarkBar.svelte";
   import Footer from "./lib/Footer.svelte";
   import Settings from "./lib/Settings.svelte";
   import Library from "./lib/Library.svelte";
@@ -13,6 +14,7 @@
   import Ask from "./lib/Ask.svelte";
   import { Partials, Rows, type Row } from "./lib/live";
   import { hotkeyProblem } from "./lib/hotkey";
+  import { retentionText } from "./lib/retention";
   import { hotkeyState } from "./lib/hotkeyState.svelte";
 
   let api = $state.raw<Backend | undefined>();
@@ -116,6 +118,13 @@
       offs.push(await b.onStatus((s) => (status = s)));
       offs.push(await b.onPhase((p) => (phase = p)));
       offs.push(await b.onProblem((kind) => say(problemText(kind))));
+      offs.push(
+        await b.onRetentionRemoved(({ removed, days }) =>
+          say(
+            `Removed ${removed === 1 ? "1 transcript" : `${removed} transcripts`} older than ${retentionText(days).toLowerCase()}, as set in Keep transcripts for. Look in the Recycle Bin to restore one.`,
+          ),
+        ),
+      );
       b.recoveryScan()
         .then((r) => (recovered = r))
         .catch(() => {});
@@ -250,6 +259,7 @@
   function problemText(kind: string): string {
     if (kind === "write_failed") return "A line could not be saved to your transcript. Check that the folder can be written to and has free space.";
     if (kind === "finalize_failed") return "The transcript could not be closed properly. It still holds everything saved so far.";
+    if (kind === "model_failed") return "The transcription model did not load, so nothing could be transcribed. Check the transcription model in Settings.";
     return "Something went wrong with the session.";
   }
 
@@ -369,6 +379,17 @@
         />
       {/snippet}
     </LivePane>
+    {#if status !== "ready"}
+      <MarkBar
+        disabled={phase.phase === "ending"}
+        onmark={async () => {
+          await api?.mark();
+        }}
+        onnote={async (t) => {
+          await api?.note(t);
+        }}
+      />
+    {/if}
   {/if}
   <div class="dock">
     <Footer

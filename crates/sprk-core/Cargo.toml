@@ -13,6 +13,7 @@ sprk-audio = { path = "../sprk-audio" }
 sprk-config = { path = "../sprk-config" }
 sprk-models = { path = "../sprk-models" }
 sprk-pipeline = { path = "../sprk-pipeline" }
+sprk-transcript = { path = "../sprk-transcript" }
 
 [features]
 # The speech engine (sherpa-onnx). Off by default so `cargo test --workspace` needs no native

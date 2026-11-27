@@ -71,7 +71,7 @@ policy key or a locked-down machine file, which only administrators can change, 
    administrator." `reg query HKLM\Software\Policies\SprkNotes` lists what the registry part wrote; for the file, open
    `%ProgramData%\SprkNotes\policy.json` and check that `%APPDATA%\SprkNotes\admin.log` does not exist for that person.
 
-Starting values can be given for the save folder, the update settings, the assistant and the window settings (appearance, live
+Starting values can be given for the save folder, how long transcripts are kept (`TranscriptRetentionDays`), the update settings, the assistant and the window settings (appearance, live
 captions, live line, live text delay, whose words, microphone prompt, keyboard shortcut and keys, Throwback Mode); they apply until
 the person changes that setting. Every other setting can only be locked. `SummarizeEnabled=0` removes Summarize, so transcripts are
 never handed to Claude or Copilot. People can still uninstall a per-user app themselves; the lock script's values stay and apply
@@ -96,7 +96,7 @@ The Android app is in development and has no release yet. The planned path is a 
 - Pilot builds can restrict packs by `AllowedModelHashes`. From 1.0 every pack must carry a valid signature from a key listed in `ModelPublicKeys`.
 
 ## Registry policy
-Policy under `HKLM\Software\Policies\SprkNotes` (machine) wins over `HKCU\Software\Policies\SprkNotes` (user), which wins over user settings. The full key list is in the [admin guide](admin-guide.md#policy-registry). A draft ADMX template in `packaging/admx` covers the update settings, `TranscriptsRoot`, `SummarizeEnabled` and `AssistantEnabled`; for the rest, set values with a script, a `.reg` file, Group Policy Preferences (Registry) or an Intune Settings catalog custom entry. The same keys can also go in `%ProgramData%\SprkNotes\policy.json` (see above), which sits between the machine and user registry keys.
+Policy under `HKLM\Software\Policies\SprkNotes` (machine) wins over `HKCU\Software\Policies\SprkNotes` (user), which wins over user settings. The full key list is in the [admin guide](admin-guide.md#policy-registry). A draft ADMX template in `packaging/admx` covers the update settings, `TranscriptsRoot`, `TranscriptRetentionDays`, `SummarizeEnabled` and `AssistantEnabled`; for the rest, set values with a script, a `.reg` file, Group Policy Preferences (Registry) or an Intune Settings catalog custom entry. The same keys can also go in `%ProgramData%\SprkNotes\policy.json` (see above), which sits between the machine and user registry keys.
 
 Example `.reg`:
 ```

@@ -8,6 +8,7 @@ pub mod library;
 pub mod naming;
 pub mod parse;
 pub mod recovery;
+pub mod retention;
 pub mod writer;
 
 pub const FORMAT: &str = "sprknotes-transcript/1";

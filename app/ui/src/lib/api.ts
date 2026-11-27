@@ -1,5 +1,5 @@
-import type { ManagedPrefs, SaveLocation } from "./types";
-import type { AppUpdateInfo, AppUpdateProgress, AppUpdateStatus, AssistantRequest, AssistantModelStatus, AssistantResponse, AssistantStatus, Caption, DownloadProgress, ExportFormat, LibraryEntry, Line, ModelStatus, Phase, Source, Status, Summarized, TranscriptView, UpdateInfo } from "./types";
+import type { CustomWords, ManagedPrefs, Retention, SaveLocation } from "./types";
+import type { AppUpdateInfo, AppUpdateProgress, AppUpdateStatus, AssistantRequest, AssistantModelStatus, AssistantResponse, AssistantStatus, Caption, DownloadProgress, ExportFormat, LibraryEntry, Line, ModelStatus, Phase, Source, SpeedStatus, Status, Summarized, TranscriptView, UpdateInfo } from "./types";
 import { asAsk, NO_ASK, type MicAsk } from "./micAsk";
 
 /** Typed surface between the UI and the Rust side. Every command has a matching Tauri command. */
@@ -13,10 +13,25 @@ export interface Backend {
   managedPrefs(): Promise<ManagedPrefs>;
   /** Save a new folder (may use %USERPROFILE%-style names); null goes back to the default. */
   setSaveLocation(path: string | null): Promise<SaveLocation>;
+  /** Custom words: names and terms to spell right. Takes effect at the next session start. */
+  customWords(): Promise<CustomWords>;
+  setCustomWords(words: string[]): Promise<CustomWords>;
   /** Open a library folder ("" is the top) in File Explorer. */
   libraryOpenFolder(folder: string): Promise<void>;
+  /** "Keep transcripts for": days (0 is forever) and whether an administrator set it. */
+  retention(): Promise<Retention>;
+  /** Save "Keep transcripts for" (0, 30, 90 or 365 days). Applies at the next start or daily check. */
+  setRetention(days: number): Promise<Retention>;
+  /** Old transcripts went to the Recycle Bin (a count only). */
+  onRetentionRemoved(cb: (r: { removed: number; days: number }) => void): Promise<() => void>;
+  /** The Library closed its transcript view (retention leaves an open one alone). */
+  libraryClose(): Promise<void>;
   pause(): Promise<void>;
   resume(): Promise<void>;
+  /** Drop a mark into the live transcript at this moment. */
+  mark(): Promise<void>;
+  /** Save a short typed note into the live transcript at this moment. */
+  note(text: string): Promise<void>;
   end(): Promise<void>;
   rename(name: string): Promise<void>;
   setSource(source: Source, on: boolean): Promise<void>;
@@ -26,6 +41,10 @@ export interface Backend {
   modelStatus(): Promise<ModelStatus>;
   modelCheckUpdate(): Promise<UpdateInfo>;
   modelDownload(): Promise<void>;
+  /** The speed check's result for this model on this PC. No loading. */
+  speedStatus(): Promise<SpeedStatus>;
+  /** Time the model again ("Check again"). Rejects with a short sentence during a session. */
+  speedCheck(): Promise<SpeedStatus>;
   /** App updates (ADR-011). Policy-locked settings refuse changes with a short sentence. */
   appUpdateStatus(): Promise<AppUpdateStatus>;
   appUpdateCheck(): Promise<AppUpdateInfo>;
@@ -121,6 +140,8 @@ async function tauri(): Promise<Backend> {
     start: (name) => invoke("start_session", { name }),
     pause: () => invoke("pause_session"),
     resume: () => invoke("resume_session"),
+    mark: () => invoke("mark_session"),
+    note: (text) => invoke("note_session", { text }),
     end: () => invoke("end_session"),
     rename: (name) => invoke("rename_session", { name }),
     setSource: (source, on) => invoke("set_source", { source, on }),
@@ -129,6 +150,8 @@ async function tauri(): Promise<Backend> {
     modelStatus: () => invoke("model_status"),
     modelCheckUpdate: () => invoke("model_check_update"),
     modelDownload: () => invoke("model_download"),
+    speedStatus: () => invoke("speed_status"),
+    speedCheck: () => invoke("speed_check"),
     appUpdateStatus: () => invoke("update_status"),
     appUpdateCheck: () => invoke("update_check"),
     appUpdateSet: ({ channel, repoUrl, mode }) => invoke("update_set", { channel, repoUrl, mode }),
@@ -152,12 +175,18 @@ async function tauri(): Promise<Backend> {
     openApp: () => invoke("open_app"),
     libraryList: (query) => invoke("library_list", { query }),
     libraryOpen: (path) => invoke("library_open", { path }),
+    libraryClose: () => invoke("library_close"),
+    retention: () => invoke("retention_status"),
+    setRetention: (days) => invoke("retention_set", { days }),
+    onRetentionRemoved: (cb) => listen<{ removed: number; days: number }>("retention-removed", (e) => cb(e.payload)),
     libraryReveal: (path) => invoke("library_reveal", { path }),
     libraryOpenFolder: (folder) => invoke("library_open_folder", { folder }),
     continueTranscript: (path) => invoke("continue_session", { path }),
     saveLocation: () => invoke("save_location_status"),
     managedPrefs: () => invoke("managed_prefs"),
     setSaveLocation: (path) => invoke("save_location_set", { path }),
+    customWords: () => invoke("custom_words_status"),
+    setCustomWords: (words) => invoke("custom_words_set", { words }),
     libraryExport: (path, format) => invoke("library_export", { path, format }),
     latestTranscript: () => invoke("latest_transcript"),
     summarize: (path, target) => invoke("summarize", { path, target }),
@@ -200,8 +229,18 @@ const mockSave: SaveLocation = {
   source: "default",
   locked: false,
 };
+// "?words=managed" previews words an administrator added, and a finished session's note.
+const mockWords: CustomWords = { user: [], admin: [], last: null };
+if (typeof location !== "undefined" && new URLSearchParams(location.search).get("words") === "managed") {
+  Object.assign(mockWords, { user: ["metoprolol"], admin: ["Lifespark", "Lisinopril"], last: { words: 3, hints: false } });
+}
 if (typeof location !== "undefined" && new URLSearchParams(location.search).get("save") === "managed") {
   Object.assign(mockSave, { path: "C:\\Users\\you\\OneDrive - Contoso\\Transcripts", source: "policy", locked: true });
+}
+
+const mockRetention: Retention = { days: 0, source: "default", locked: false };
+if (typeof location !== "undefined" && new URLSearchParams(location.search).get("retention") === "managed") {
+  Object.assign(mockRetention, { days: 180, source: "policy", locked: true });
 }
 
 const mockLibrary: LibraryEntry[] = [
@@ -349,6 +388,13 @@ export function mockBackend(): Backend {
       clearInterval(timer);
       statusCb("ready");
     },
+    mark: async () => {
+      lineCb({ kind: "mark", id: id++, t: stamp() });
+    },
+    note: async (text) => {
+      const n = text.split(/\s+/).filter(Boolean).join(" ").slice(0, 500);
+      if (n) lineCb({ kind: "note", id: id++, t: stamp(), text: n });
+    },
     rename: async () => {},
     setSource: async () => {},
     listDevices: async (source) =>
@@ -362,6 +408,11 @@ export function mockBackend(): Backend {
       busy: false,
     }),
     modelCheckUpdate: async () => ({ available: flag === "update", packs: [] }),
+    speedStatus: async () => ({ state: ready ? "done" : "unavailable", speed: ready ? 3.2 : null, threads: ready ? 4 : null }),
+    speedCheck: async () => {
+      await new Promise((r) => setTimeout(r, 1500));
+      return { state: "done", speed: 3.4, threads: 4 };
+    },
     appUpdateStatus: async () => ({
       installed: "0.0.1",
       mode: "notify",
@@ -432,12 +483,22 @@ export function mockBackend(): Backend {
       lines: [
         { kind: "statement", t: "00:00:04", speaker: "Me", text: "Thanks for joining, let's start with the budget." },
         { kind: "statement", t: "00:00:11", speaker: "Others", text: "Sure. The numbers are in the shared sheet." },
+        { kind: "mark", t: "00:05:40", speaker: "", text: "" },
+        { kind: "note", t: "00:06:02", speaker: "", text: "Ask finance for the Q3 numbers" },
         { kind: "event", t: "00:12:30", speaker: "", text: "Transcription paused" },
         { kind: "statement", t: "00:12:52", speaker: "Me", text: "Okay, back. Next item is the roadmap." },
       ],
     }),
     libraryReveal: async () => {},
     libraryOpenFolder: async () => {},
+    libraryClose: async () => {},
+    retention: async () => ({ ...mockRetention }),
+    setRetention: async (days) => {
+      if (mockRetention.locked) throw "Your organization sets how long transcripts are kept.";
+      Object.assign(mockRetention, { days, source: "user" });
+      return { ...mockRetention };
+    },
+    onRetentionRemoved: async () => () => {},
     continueTranscript: async (path) => {
       if (!mockLibrary.some((e) => e.path === path)) throw "That transcript is not in your library.";
       t0 = Date.now() - 600_000;
@@ -447,6 +508,11 @@ export function mockBackend(): Backend {
     },
     saveLocation: async () => ({ ...mockSave }),
     managedPrefs: async () => mockManaged,
+    customWords: async () => ({ ...mockWords }),
+    setCustomWords: async (words) => {
+      mockWords.user = words.map((w) => w.trim()).filter((w) => w !== "");
+      return { ...mockWords };
+    },
     setSaveLocation: async (path) => {
       if (path && !/^([a-zA-Z]:\\|\\\\|%)/.test(path)) throw "Enter a full folder path, for example D:\\Transcripts.";
       mockSave.chosen = path;

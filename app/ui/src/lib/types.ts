@@ -6,7 +6,11 @@ export type Phase = { phase: "idle" | "loading" | "ending"; model?: string | nul
 /** One line of the live pane, matching the transcript grammar (SPEC 5.1). */
 export type Line =
   | { kind: "statement"; id: number; t: string; speaker: string; text: string }
-  | { kind: "event"; id: number; t: string; text: string };
+  | { kind: "event"; id: number; t: string; text: string }
+  /** A moment the user flagged with Mark. In the file it is an event line (SPEC 5.1). */
+  | { kind: "mark"; id: number; t: string }
+  /** A short note the user typed, without its "Note: " prefix. */
+  | { kind: "note"; id: number; t: string; text: string };
 
 export type Source = "mic" | "system";
 
@@ -17,6 +21,15 @@ export type ModelStatus = {
   updateCheckEnabled: boolean;
   customSource: boolean;
   busy: boolean;
+};
+
+/** Mirrors the Rust `SpeedStatus`: the speed check for this model on this PC (SPEC 16.8a). */
+export type SpeedStatus = {
+  /** `done` has speed and threads; `env` has threads set by SPRK_ASR_THREADS. */
+  state: "checking" | "done" | "none" | "env" | "unavailable";
+  /** Times faster than real time, one decimal. */
+  speed: number | null;
+  threads: number | null;
 };
 
 /** Mirrors the Rust `UpdateStatus` (camelCase): app updates, and which settings policy locks. */
@@ -87,6 +100,21 @@ export type SaveLocation = {
   locked: boolean;
 };
 
+/** "Keep transcripts for" (SPEC 6.6): days to keep, 0 forever, and whether an administrator set it. */
+export type Retention = {
+  days: number;
+  source: "policy" | "user" | "install" | "default";
+  locked: boolean;
+};
+
+/** Custom words (Settings): the person's own list, the administrator's (read-only), and what the
+ * last session did with them, as counts only. */
+export type CustomWords = {
+  user: string[];
+  admin: string[];
+  last: { words: number; hints: boolean } | null;
+};
+
 export type LibraryEntry = {
   path: string;
   name: string;
@@ -98,7 +126,7 @@ export type LibraryEntry = {
   folder: string;
 };
 
-export type ViewLine = { kind: "statement" | "event"; t: string; speaker: string; text: string };
+export type ViewLine = { kind: "statement" | "event" | "mark" | "note"; t: string; speaker: string; text: string };
 export type TranscriptView = {
   title: string;
   date: string;

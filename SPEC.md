@@ -20,7 +20,7 @@ SprkNotes is a minimal Windows desktop app that transcribes the user's microphon
 | Commit delay | Short hold before a segment is written to disk, so bleed checks can drop duplicates first |
 | Transcription model | The speech-to-text (ASR) model. Not an LLM; it only converts speech to text |
 | Model pack | A single `.sprkmodel` file (zip) holding model files plus a signed `model.json` manifest |
-| Active model | The model the app loads at session start, chosen by `active.json` or admin policy |
+| Active model | The model a session uses (kept loaded between sessions, 4.6), chosen by `active.json` or admin policy |
 | Audio source | An app playing sound through system output (e.g. Firefox tab, Teams), with its title and active duration |
 | Merge window | How long an audio source may go silent and still count as the same continuous activity |
 | Call context | Who the user is actually in a call with right now (not just who was invited) |
@@ -149,6 +149,7 @@ sprknotes/
 1. **Windows AEC:** open the mic stream as a communications stream; if `IAcousticEchoCancellationControl` is available, set the render endpoint being looped back as the AEC reference.
 2. **Software AEC:** run WebRTC AEC3 (pure Rust port, echo canceller only) on the mic using the loopback stream as the far-end reference (ADR-013). Both streams are kept on the wall clock: a loopback stream that delivers nothing while silent is padded with silence, and when audio returns each device packet is placed by the time it arrived (not when the app got round to reading it), so the two streams stay lined up across silences and busy moments. The speaker audio of a moment is handed to the canceller before the microphone audio of that moment, and the canceller restarts when a capture device changes. Behind the canceller, mic sound that is not clearly louder (about 8 dB) than the bleed the speakers are expected to cause is muted, and sound that still follows the speakers' loudness pattern is muted too. No level setting is exposed: the expected bleed level is learned from the session.
 3. **Transcript dedupe (always on):** in the commit buffer, drop a Me segment when an Others segment overlaps it in time (±2 s) and normalized text similarity is ≥ 0.6 (token-level ratio; threshold configurable), or when 80% of its words (4 or more) appear in order in the Others speech around it, or when a 2 or 3 word Me segment is the same words in a row as an Others segment at about the same moment (within 0.8 s of where those words fall in it), or when a Me segment of 1 to 3 words made only of filler and discourse words ("so", "okay", "yeah", "um" and the like) starts while an Others segment is being spoken (from 0.5 s before its start until its end). Prefer the Others version. A Me line already shown live and then dropped here is taken back from the live view.
+- **Stream independence:** Me is built from the microphone alone and Others from the system stream alone. Each source has its own device stream, resampler, voice detector, caption lane and decode (the shared speech model starts a fresh decode for every utterance, so nothing carries from one stream to the other). The system stream is never changed by the microphone. The only places the two meet only ever take sound or lines away from Me: the canceller (layer 2) uses the speakers as a reference to remove sound from the mic, and its output can never be louder than what the mic heard (a silent mic gives a silent Me stream); dedupe (layer 3) drops Me lines only. Automated tests feed two different signals and check this on every build: each stream reaches the speech model sample for sample, and with the canceller on, Others is untouched and Me carries nothing of the other side.
 - **Headset detection:** if the render endpoint form factor is headphones/headset, layers 1 and 2 may be skipped; layer 3 stays on.
 - **Known limitation:** people speaking in the same room as the user are labeled Me.
 
@@ -163,6 +164,12 @@ sprknotes/
   - Consecutive short fragments from the same speaker within 1 s are merged.
 - **NPU acceleration (v1.1):** evaluate sherpa-onnx QNN models on Snapdragon. CPU int8 is the v1 baseline.
 
+### 4.3a Custom words (ADR-017)
+- Settings has a **Custom words** box: one word or phrase per line (names, medicines, product names). Entries are cleaned (letters, digits, spaces, `'`, `-` and `.` kept; at most 4 words and 64 characters each; duplicates ignoring case dropped; at most 500). The admin policy `CustomWords` (multi-string) adds entries; both lists apply, the admin's first, and the admin list never locks or replaces the person's own. The list in force is read at session start; a change applies from the next session.
+- **Word hints (engine layer).** At session start the list is offered to the engine (`Engine::bias_toward`). The sherpa-onnx transducer adapter takes it only when the model pack declares the optional `bpe_vocab` file (16.5): it builds a recognizer with modified beam search (`max_active_paths` 4, `hotwords_score` 1.5, `modeling_unit` bpe) and passes the hints to every stream from memory, never as a file. With an empty list, no `bpe_vocab`, or a recognizer that cannot be built, decoding stays plain greedy search, unchanged. The current Parakeet TDT 0.6B v2 pack has no `bpe_vocab`, so this layer is off with it today. Whisper takes no hints.
+- **Spelling fixes (text layer, what ships with the current pack).** Whenever the list is not empty, every decoded text (committed lines, the live line, captions) goes through a corrector that rewrites near misses to the listed spelling: case and punctuation are ignored when comparing; a loose match needs an entry of 5 or more letters, the same first letter and at most 1 differing letter (2 from 10 letters up), word for word; words run together or split apart ("life spark" for "Lifespark") match only exactly and only for entries of 4 or more letters; words with digits and common English words are never changed loosely; a word that differs only in capitals stays as heard; capitals follow the entry when it has any, otherwise the heard first letter; a possessive 's is kept; punctuation between words stops a multi-word match.
+- Settings says what the last session did, as counts only: how many words were in force and whether the model took them as hints. The words are PHI-grade: never logged, never in an error. The person's list is kept in `settings.json` (`customWords`).
+
 ### 4.4 Commit buffer
 - Finalized segments wait **6 s** (configurable 3 to 15 s) for dedupe and merge, then commit in timestamp order. A segment that is ready waits for any segment that started before it and is not ready yet (a short line inside a longer, earlier one from the other stream), up to 20 s more, so lines are written in start order.
 - Finished lines shown in the live view before they commit carry the time their utterance began.
@@ -176,6 +183,12 @@ Live captions (ADR-006) show speech in progress in the overlay. They are transie
 - **Pause:** capture stops, buffer flushes, a pause event line is written.
 - **Resume:** capture restarts, a resume event line is written. Timestamps are wall-clock elapsed since start, so gaps stay visible.
 - **End:** flush, finalize file (6.3), show the name/save confirmation.
+
+### 4.6 Session start (Instant Start)
+- **Warm model:** the active transcription model is loaded in the background at launch (after the speed check, 16.8a, when one is due), when the main window is shown again, when "Start a transcript?" (8.3a) shows, and after a model download. It stays loaded between sessions and every session uses that one engine (one session runs at a time). It is loaded again only when the resolver's choice (16.4) or the speed check's thread count changes, or after a decode panicked. Never during a session: a change found then waits for the next Start.
+- **Start is instant:** Start creates the file (6.3), opens the devices and begins capture at once. The voice activity pack is checked at Start, so a missing one still stops Start with its reason. If the warm model is ready, decoding starts at once.
+- **Start before the model is ready** (right after launch, or the model changed): the model is loaded now and capture runs meanwhile. Everything captured waits **in memory only**, in order, with Pause, Resume, source changes, marks and notes; when the model arrives it is decoded as if just heard, so no words are lost and lines keep their real times. The source meters move while waiting. End while waiting waits for the model, then decodes and finalizes as usual. A load that fails (or takes over 5 minutes) closes the file with "Transcription stopped: the transcription model did not load" and a notice; nothing could be transcribed. A model that loads by falling back to another one (16.4) is written into the front matter at End.
+- **Memory:** keeping the model loaded costs its RAM while SprkNotes runs, also when idle (about 1 GB for the default Parakeet model). That is the price of an instant Start; there is no setting for it. The speed check loads a second copy for a few seconds.
 
 ---
 
@@ -258,11 +271,15 @@ app: "SprkNotes 0.1.0"
 
 > `00:31:40` Back to 1:1 with Sam Sample: remote speaker labeled Sam Sample
 - `00:31:45` **Sam Sample:** Okay, back to the pilot.
+
+> `00:33:10` Mark
+> `00:33:25` Note: Send Sam the rollout checklist
 ```
 
 **Grammar (parsers rely on this):**
 - Statement line: `- \`HH:MM:SS\` **<Speaker>:** <text>` (one statement, one line, no line breaks inside). Speaker is `Me`, `Others`, or a participant display name (section 19).
-- Event line: `> \`HH:MM:SS\` <event text>`. Event types: paused, resumed, interrupted, source changed, call started/ended, labeling mode changed (1:1 / group), audio source started/ended.
+- Event line: `> \`HH:MM:SS\` <event text>`. Event types: paused, resumed, interrupted, source changed, call started/ended, labeling mode changed (1:1 / group), audio source started/ended, mark, note.
+- Mark and note (added by the user during a session, 8.1): a mark is the event text `Mark` exactly; a note is `Note: <text>`, one line, trimmed, at most 500 characters (longer notes are cut). They are ordinary event lines (and `{"event":true,...}` sidecar entries), so older readers show them as events, they never feed the Participants or Audio sources sections, and the summary prompt (9.3) and Ask Sprk read them with the rest of the transcript. Statements already committed are written first, so a mark follows what was on screen when it was pressed.
 - A blank line is inserted when the speaker changes (readability; parsers ignore blank lines).
 - Front matter is YAML. `format` is versioned; any breaking change bumps it. The `call`, `audio_sources` and `name_source` fields and the Participants / Audio sources sections are additive in format 1.
 - Meeting context section appears only if the user accepted it (7.3). Participants and Audio sources sections are written at finalization (6.3) from the events already in the file, so a crash loses none of that data.
@@ -298,7 +315,7 @@ Exports are generated on demand from the `.md` file plus the JSONL sidecar.
 - The name is editable in the main window at any time during the session. Renaming moves the open file atomically (file opened with `FILE_SHARE_DELETE`).
 
 ### 6.3 Write strategy
-- **Start:** create the file with front matter (`status: in-progress`), heading, optional meeting context, and `## Transcript`.
+- **Start:** create the file with front matter (`status: in-progress`), heading, optional meeting context, and `## Transcript`. This happens at once, also while the model is still loading (4.6).
 - **During:** each committed segment is appended and flushed (`FlushFileBuffers`). Same for the JSONL sidecar.
 - **End:** rewrite front matter (end, duration, `status: complete`) by writing a temp file and atomically replacing (`ReplaceFileW`). This is the only time the file is rewritten.
 - **Max loss on crash:** the commit delay plus the in-progress utterance (target ≤ 10 s).
@@ -310,6 +327,13 @@ Exports are generated on demand from the `.md` file plus the JSONL sidecar.
 
 ### 6.5 Crash dumps
 - Disable full/heap Windows Error Reporting dumps for the app (memory may hold audio or text). Panics log a redacted message only.
+
+### 6.6 Retention (keep transcripts for)
+- Settings, **Keep transcripts for**: Forever (default), 30 days, 90 days or 1 year. Kept in the app's `settings.json` (10.1). Admin policy `TranscriptRetentionDays` (10.2) sets and locks it: any whole number of days up to 3650, `0` meaning forever; it can also be an installer starting value. Order: policy, then the person's choice, then the starting value, then Forever.
+- When the app starts (about 20 s in, once the window is up) and once a day while it runs (the wall clock is checked every 10 minutes, so a PC that slept still gets its daily pass), every transcript under the transcripts root whose age is past the setting is removed with its sidecar: to the Recycle Bin when it can take the file, otherwise deleted for good, without a prompt (the background pass has no one to ask). Summaries and exports next to it stay, as with a Library delete.
+- Age counts in whole local days from the day the transcript last ended (`end`, so a continued transcript counts from its newest session), else the day it started, else its `date`. With 30 days, a transcript that ended on the 1st is kept through the 31st. One without a readable date, or dated in the future, is kept.
+- Never touched: the running session's file (the session lock is held for the whole pass, so no session can start on or continue a transcript while it is being removed), the transcript open in the Library, and any transcript still marked `status: in-progress` (being written, or waiting for crash recovery, 6.4).
+- A change in Settings applies at the next start or daily pass, never at once, so a slip of the mouse can be put back first. After a pass that removed something the window shows one notice with the count; no names, titles or paths are logged or shown.
 
 ---
 
@@ -347,6 +371,7 @@ Scheduled Teams and Zoom meetings live on the user's Outlook calendar, so one lo
 ### 8.1 Main window
 - **Top bar:** editable session name, source buttons (small icon buttons: microphone **Me**, speaker **Others**, struck through when off). Clicking one opens a menu: System default, each device found now (a saved device that is unplugged stays listed as not connected), and Turn off / Turn on. Picking a device turns that source on. The device choice is the same one as Settings. Which sources are on is remembered across launches (both on at first run). While transcribing, each button that is on shows a small waveform: one smooth line whose swell follows the voice, tapering at both ends. There is one style and no setting for it (Nine bars was retired in 0.2.0-alpha.13; see docs/archive/nine-bars.md). It is drawn on a small canvas at whole device pixels. It shows the peak input level about twenty times a second, on a loudness scale from -60 dBFS to full scale, measured before echo removal so a muted or wrong device reads flat. Levels below about -39 dBFS count as silence, so dead air settles into a flat line. The window hears a level only when it changes, so the meter keeps the newest level and eases toward it on display frames (quick rise, gentler fall) until the line is flat, then stops drawing; a silence that repeats the same 0 still settles. With reduced motion it updates twenty times a second without easing and the line does not drift. Only the number reaches the window; no audio is kept or logged. The buttons show icons only (Me and Others are in the tooltip). Status pill ("Transcribing", "Paused", "Ready").
 - **Controls:** Start · Pause/Resume · End. Context-aware (only valid actions enabled).
+- **Marks and notes:** while a session runs (transcribing or paused), a bar under the live pane has **Mark** (also Ctrl+M while the window has focus; a held key counts once) and a note box (Enter or **Save note** saves it; the box is kept if saving fails). Each is written to the transcript at once as a timestamped line (5.1) and shown in the live pane and the Library view with a tint so it stands out. Not in the overlay, and not a system-wide shortcut (8.6).
 - **Live pane:** transcript lines styled per 5.1 (timestamp muted, speaker bold, Me and Others visually distinct).
 - **Live line:** while transcribing, the newest words appear as the last line of the live pane (marked "live"), growing word by word. Words the engine is unsure of (after `stable`) are muted with a dotted underline; words that change are briefly tinted; when the committed line arrives it replaces the live line. Both speakers, whatever the pop-out shows (Me's live words make Me as quick as Others; before, Me waited for the commit delay). Each speaker has a live row of their own: when two people talk at once, both rows grow side by side (the one who started first on top) instead of one row switching between them. The live line is display only: the saved transcript contains committed lines only, and partial text is never written to disk or logged. A toolbar above the pane has smaller/larger text (remembered) and a show/hide toggle (also in Settings, on by default).
 - **Footer:** Library, Settings, Summarize (document icon; hands the newest transcript to Claude or Copilot, 9; greyed with a tooltip saying why when there is nothing to summarize), and Ask Sprk only while the assistant and its Ask feature are on (hidden otherwise).
@@ -385,12 +410,14 @@ Scheduled Teams and Zoom meetings live on the user's Outlook calendar, so one lo
 
 ### 8.5 Settings (keep short)
 - Save transcripts to: the folder (6.1), typed with variables allowed, with **Save**, **Use default** and **Open**. Read-only with "Set by your organization." when policy sets it.
+- Custom words (4.3a): one word or phrase per line, with **Save**; words the organization added are listed under it, read-only, and a note says what the last session did with the list.
 - Audio: mic device and output device (lists of devices; "System default" follows the headset, an unplugged pick falls back to the default), Others on/off, filler removal, commit delay (advanced).
 - Outlook: provider, context prompt behavior (Ask / Always / Never).
 - Context: detect audio sources (on/off, merge window), Teams call context (on/off, poll interval), name 1:1 speakers (on/off), excluded apps/title patterns.
 - Files: transcripts root, default export format.
+- Keep transcripts for: Forever (default), 30 days, 90 days or 1 year (6.6). Read-only with a quiet line ("Your organization keeps transcripts for 90 days.") when policy sets it.
 - AI handoff: show Claude button, show Copilot button, edit prompt template.
-- Models (16.7): active model, installed models, Import, Switch, Roll back. Locked with a "Managed by your organization" note when policy pins a model.
+- Models (16.7): active model, installed models, Import, Switch, Roll back. Locked with a "Managed by your organization" note when policy pins a model. Under the transcription model, a read-only speed line ("Speed: 3.2x real time on 4 threads") with **Check again** (16.8a).
 - Appearance: System, Light or Dark (the overlay stays dark unless Light is chosen).
 - Throwback Mode: off (default) or on. It swaps only the app icon in the tray and on the window to the first (starburst) icon; fonts, colors, sizes and spacing stay the same, so the window does not move.
 - Live captions: on or off, and Others only (default) or Others and Me in the pop-out. The transcript window's live line always shows both.
@@ -403,6 +430,7 @@ Scheduled Teams and Zoom meetings live on the user's Outlook calendar, so one lo
 - A press starts a transcript when none runs (the same as the tray's Start), pauses a running one and resumes a paused one. Presses less than 0.75 s apart count once; holding the keys does not repeat.
 - A combination needs Ctrl, Alt or Win with a letter, a digit, F1 to F24 or Space, so it never takes a key typed on its own or with Shift.
 - Windows registers it (RegisterHotKey); if another app holds the combination, Settings says so and asks for other keys, and nothing else changes. It is kept in the app's settings and set again at each launch. Other platforms do not offer it.
+- Ctrl+M (drop a mark, 8.1) is a window shortcut, not a system-wide one: it works only while the main window has focus, shows the live transcript (not Library or Settings) and a session runs.
 
 ---
 
@@ -434,6 +462,7 @@ Each statement is one line: - `HH:MM:SS` **Speaker:** text
 "Me" is the person who ran SprkNotes. A named speaker (e.g. "Sam Sample") is the only other person on a 1:1 call.
 "Others" means one or more remote people when the call had 3+ people or nobody could be identified; do not guess who said an "Others" line.
 Lines starting with ">" are events: pauses, people joining or leaving, and audio sources (videos or apps playing sound). Speech during an audio source window may be from a video, not a person in the meeting; treat it that way.
+"> `HH:MM:SS` Mark" is a moment the user flagged as important, and "> `HH:MM:SS` Note: text" is a note the user typed at that moment. Give marked moments and notes extra weight, and keep each note's timestamp when you use it.
 The front matter and the Meeting context, Participants and Audio sources sections give extra context. Invitees are not proof someone attended. During a group-call period, other participants were not identified.
 Speech recognition can mishear words. Fix obvious errors from context, but never invent content.
 
@@ -465,7 +494,7 @@ Admin values win over user settings and lock the matching UI control. Sources, s
 - `HKCU\Software\Policies\SprkNotes` (user registry).
 - Values may also arrive packed in one string value named `Settings` (`Key=Value;Key=Value`, `|` between the items of a list), which is what the MSI switches `POLICY` and `DEFAULTS` write (10.2a). A separate value of the same name wins over the packed one.
 - Path values (`TranscriptsRoot`, `PromptTemplatePath`) are expanded per user at runtime (6.1).
-- Keys: `TranscriptsRoot`, `CalendarProvider` (`com`/`off`), `ContextPrompt`, `SummarizeEnabled` (0 removes Summarize, 9), `ShowClaudeHandoff`, `ShowCopilotHandoff`, `CopilotTarget`, `PromptTemplatePath`, `FillerRemoval`, `CommitDelaySeconds`.
+- Keys: `TranscriptsRoot`, `TranscriptRetentionDays` (0 to 3650, 0 keeps forever, 6.6), `CalendarProvider` (`com`/`off`), `ContextPrompt`, `SummarizeEnabled` (0 removes Summarize, 9), `ShowClaudeHandoff`, `ShowCopilotHandoff`, `CopilotTarget`, `PromptTemplatePath`, `FillerRemoval`, `CommitDelaySeconds`, `CustomWords` (multi-string; adds to each person's own list and never locks it, 4.3a).
 - Model keys (section 16): `PinnedModel` (`id@version`), `AllowUserModels` (0/1), `AllowedModelHashes` (multi-string, SHA-256 of `model.json`), `RequireSignedModels` (0/1; forced on from 1.0), `ModelPublicKeys` (multi-string, OpenSSH `allowed_signers` lines for Ed25519 keys), `KeepModelVersions` (default 2).
 - Context keys (sections 18, 19): `AudioSourceDetection` (0/1), `AudioMergeWindowSeconds`, `CallMergeWindowSeconds`, `AudioSourceExcludePatterns` (multi-string: process names or title regexes), `CallContext` (0/1), `CallPollSeconds`, `NameOneToOneSpeakers` (0/1), `TeamsLocalApi` (0/1, default 1: probed silently at session start).
 
@@ -474,7 +503,7 @@ An offline page in the repository (`tools/admin-form/index.html`, no network use
 - **Lock script** (PowerShell, run as SYSTEM). The admin picks where it writes: the registry (`HKLM\Software\Policies\SprkNotes`, typed string, DWORD and multi-string values through the 64-bit view; by default it replaces all SprkNotes registry policy, so it can run again safely), the file (`%ProgramData%\SprkNotes\policy.json`, always written whole, starting values included as unlocked), or both (the registry wins). For the file it first makes Administrators the owner of the folder and sets a protected access list (SYSTEM and Administrators full control, Users read and execute, nothing inherited), then writes the file as UTF-8 and gives it the same access list. Users cannot change either, so this locks even when SprkNotes is installed per user.
 - **User install script** (PowerShell, run as the signed-in user, for example a NinjaOne self-service item): finds the newest release on the chosen channel (or a pinned tag) on GitHub, or an MSI in a folder or share, checks the SHA-256 against the release's `SHA256SUMS.txt`, and installs per user with the starting values in `DEFAULTS`. It refuses to run as SYSTEM.
 - **Per-machine line** (`msiexec ... ALLUSERS=1 POLICY="..." DEFAULTS="..."`) for Intune, SCCM or GPO.
-Starting values are possible for settings with a control in the window: `TranscriptsRoot`, the update settings, `AssistantEnabled` and the window preferences (10.2b). Everything else can only be locked. Upgrades keep `POLICY` and `DEFAULTS`. `packaging/admx` has a Group Policy template for the update settings, `TranscriptsRoot`, `SummarizeEnabled` and `AssistantEnabled`.
+Starting values are possible for settings with a control in the window: `TranscriptsRoot`, `TranscriptRetentionDays`, the update settings, `AssistantEnabled` and the window preferences (10.2b). Everything else can only be locked. Upgrades keep `POLICY` and `DEFAULTS`. `packaging/admx` has a Group Policy template for the update settings, `TranscriptsRoot`, `TranscriptRetentionDays`, `SummarizeEnabled` and `AssistantEnabled`.
 
 ### 10.2b Managed window preferences
 `UI_KEYS` are preferences the window keeps (`Theme`, `ThrowbackMode`, `LiveCaptions`, `LiveLine`, `CaptionDelay`, `CaptionSpeakers`, `MicPrompt`, `Hotkey`, `HotkeyKeys`), plus `AssistantEnabled`. The app hands the window their raw locked and starting values from every source above; the window drops values that don't fit (an unknown theme, a shortcut without Ctrl, Alt or Win).
@@ -521,6 +550,7 @@ One release = one version = all artifacts, built by `scripts/release.ps1` from t
 - [ ] WER heap dumps disabled for the app.
 - [ ] Tauri CSP strict, no remote content, capabilities minimal per window.
 - [ ] File access scoped to transcripts root, settings and models.
+- [ ] Retention (6.6): with `TranscriptRetentionDays` set, transcripts past it leave the folder within a day; the running and the open transcript never do.
 - [ ] Third-party licenses collected into `THIRD_PARTY_NOTICES.md`.
 - [ ] Repo scan for secrets, IDs and real names before each push.
 - [ ] Model packs: hashes verified on every load; signature required from 1.0 (pilot: hash allow-list); packs never execute code; zip extraction blocks path traversal and size bombs.
@@ -692,7 +722,7 @@ If the chosen model fails verification or loading, fall back to the next valid c
   "notes": "Changelog for this model version"
 }
 ```
-- `files` keys are roles the adapter looks up (`sherpa-onnx/offline-transducer`: encoder, decoder, joiner, tokens; `sherpa-onnx/whisper`: encoder, decoder, tokens; `sherpa-onnx/vad-silero`: vad). A voice activity model is a pack of its own with `features` all false.
+- `files` keys are roles the adapter looks up (`sherpa-onnx/offline-transducer`: encoder, decoder, joiner, tokens, and optionally `bpe_vocab`, the tokenizer vocabulary that lets the model take custom-word hints, 4.3a; `sherpa-onnx/whisper`: encoder, decoder, tokens; `sherpa-onnx/vad-silero`: vad). A voice activity model is a pack of its own with `features` all false.
 - `engine` must match an adapter compiled into the app (17.2). New weights for a supported engine family need **no app update**. A new engine family needs an app release with a new adapter.
 - Versions use `YYYY.MM.patch` so they sort correctly.
 
@@ -737,6 +767,13 @@ sprkctl model sync --from <\\server\share\models> --scope machine   # optional: 
 - Installed list with **Switch** and **Roll back**; **Import model pack** button (user/portable scope only).
 - When policy pins or manages the model, controls are read-only with "Managed by your organization".
 
+### 16.8a Speed check (decode threads)
+- Desktop decode threads used to be fixed at `min(4, logical cores)`. Now, once per model and machine, the app loads the active model at a couple of thread counts (half the default, the default and twice it, within the cores and at most 8) and times a decode of a 3 s built-in clip (made in code: voiced tones at syllable rate, no voice, nothing read from or written to disk) after one warm-up decode. It keeps the fewest threads within 10% of the fastest (more threads add heat for little speed). The same self-check idea as the phone tuning (ADR-015 Decision 2), in `sprk_asr::tune`.
+- Runs in the background at launch when the active model was never checked on this PC, after a model download, and on **Check again** in Settings. Never during a session; a Start while it runs calls it off (its result is dropped and it runs again later). Refused during a session from Settings.
+- Kept in `%APPDATA%\SprkNotes\speed.json`, keyed by `id@version` and machine (processor type, logical cores, computer name), so a roaming profile does not carry one PC's choice to another.
+- Any error (no model, a load or decode failure, a fallback model loaded instead) keeps the default. `SPRK_ASR_THREADS` still wins over everything, and then no check runs; Settings says the threads are set on this PC.
+- Settings shows "Speed: 3.2x real time on 4 threads" (times faster than real time, 1 / real-time factor) under the transcription model, with **Check again**. A new choice takes effect when the warm model reloads (4.6), at the latest the next Start.
+
 ### 16.9 Release process for a new model (runbook outline)
 1. Convert/obtain the model, place files in a folder with `model.json`.
 2. `sprkctl model pack`, then `sprkctl model sign` (1.0) or record the hash with `sprkctl model hash` (pilot).
@@ -780,7 +817,7 @@ Signing is **mandatory for the 1.0 release**. Pilot builds (0.x) may run without
 | Exporters | `Exporter` (input: parsed transcript) | md, txt, json, docx; later srt/vtt, pdf |
 | Calendar providers | `CalendarProvider` | Outlook COM (classic); later other local sources |
 | AI handoff targets | Config entries: name, launch template, prompt template, policy key | Claude, M365 Copilot; new targets added by config |
-| Post-processing | `SegmentFilter` chain in the commit buffer | dedupe, filler removal, custom vocabulary fixes (e.g. company terms) |
+| Post-processing | `SegmentFilter` chain in the commit buffer; engine wrappers for fixes that should reach live text too | dedupe, filler removal; custom words (`custom_words::Corrected`, 4.3a) |
 | Audio source resolvers | `AudioSourceResolver` chain (18.3) | media session, browser tab UIA, window title, process name |
 | Call context providers | `CallContextProvider` chain (19.2) | calendar (COM), Teams local API, Teams call window title; later Zoom |
 
