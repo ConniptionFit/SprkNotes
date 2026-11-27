@@ -112,9 +112,7 @@ pub fn library_open(
 ) -> Result<View, String> {
     let root = root(&app)?;
     let p = checked(&app, &path)?;
-    if let Ok(mut v) = state.viewing.lock() {
-        *v = Some(p.clone());
-    }
+    state.set_viewing(Some(p.clone()));
     let t = library::load(&root, &p).ok_or("Could not read that transcript.")?;
     let mut rows: Vec<(u64, u8, ViewLine)> = Vec::new();
     for g in &t.segments {
@@ -161,9 +159,7 @@ pub fn library_open(
 /// The Library closed its transcript view.
 #[tauri::command]
 pub fn library_close(state: tauri::State<crate::AppState>) {
-    if let Ok(mut v) = state.viewing.lock() {
-        *v = None;
-    }
+    state.set_viewing(None);
 }
 
 fn reveal(path: &Path) {
@@ -179,7 +175,7 @@ pub fn recovery_scan(
     app: AppHandle,
     state: tauri::State<crate::AppState>,
 ) -> Result<Vec<Entry>, String> {
-    if state.host.lock().map(|h| h.is_some()).unwrap_or(true) {
+    if state.busy() {
         return Ok(Vec::new());
     }
     let idle = |p: &Path| {
@@ -203,7 +199,7 @@ pub fn recovery_mark(
     state: tauri::State<crate::AppState>,
     path: String,
 ) -> Result<(), String> {
-    if state.host.lock().map(|h| h.is_some()).unwrap_or(true) {
+    if state.busy() {
         return Err("End the current session first.".into());
     }
     let p = checked(&app, &path)?;
@@ -417,8 +413,7 @@ pub fn summarize(
 /// The file the running session writes to, if any. The library leaves that one alone: moving
 /// or deleting it mid-session would lose lines.
 fn live(state: &tauri::State<crate::AppState>) -> Option<PathBuf> {
-    let host = state.host.lock().ok()?;
-    let p = host.as_ref()?.path()?;
+    let p = state.live_path()?;
     Some(std::fs::canonicalize(&p).unwrap_or(p))
 }
 

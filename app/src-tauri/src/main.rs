@@ -1,7 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod assistant;
-mod clock;
 mod custom_words;
 mod hotkey;
 mod library;
@@ -18,129 +17,41 @@ mod speed;
 mod updater;
 mod warm;
 
-use serde::Serialize;
 use sprk_audio::cpal_backend::CpalBackend;
 use sprk_audio::live::Backend;
-use sprk_audio::live::{Preferred, SharedChoice};
-use sprk_audio::Source;
-use sprk_pipeline::commit::Config;
-use sprk_pipeline::host::{Events, Host, StartParams, UiLine, UiStatus};
-use sprk_transcript::format::{event_kind, EventKind};
+use sprk_audio::live::Preferred;
+use sprk_core::payload::{event, status_name, CaptionPayload, DroppedPayload, LinePayload, Phase};
+use sprk_core::session::Launch;
+use sprk_core::settings::{commit_config, source_of};
+use sprk_pipeline::host::{Events, StartParams, UiLine, UiStatus};
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, State};
 
-#[derive(Default)]
-struct AppState {
-    host: Mutex<Option<Host>>,
-    /// The microphone and output the user picked in Settings (None: the system default).
-    devices: SharedChoice,
-    /// Sources the user switched off ([mic, system]). Kept between sessions so a stream turned
-    /// off before Start stays off when the session begins (it used to start with both on).
-    sources_off: Mutex<[bool; 2]>,
-    /// The transcript open in the Library, which retention (SPEC 6.6) leaves alone.
-    viewing: Mutex<Option<PathBuf>>,
-}
-
-/// Payload shapes the UI expects (app/ui/src/lib/types.ts).
-#[derive(Serialize, Clone)]
-#[serde(tag = "kind", rename_all = "lowercase")]
-enum LinePayload {
-    Statement {
-        id: u64,
-        t: String,
-        speaker: String,
-        text: String,
-    },
-    Event {
-        id: u64,
-        t: String,
-        text: String,
-    },
-    /// A mark the user dropped (SPEC 5.1). In the file it is an event line.
-    Mark {
-        id: u64,
-        t: String,
-    },
-    /// A note the user typed, without its "Note: " prefix.
-    Note {
-        id: u64,
-        t: String,
-        text: String,
-    },
-}
-
-/// Live caption payload (ADR-006). Transient: the UI shows it and forgets it.
-#[derive(Serialize, Clone)]
-struct CaptionPayload {
-    speaker: String,
-    text: String,
-    /// Leading words that are settled; the rest are tentative and may change.
-    stable: usize,
-    #[serde(rename = "final")]
-    is_final: bool,
-    /// Rows that locked since the last caption (ADR-008).
-    sealed: Vec<String>,
-    utt: u64,
-    /// Where a finished utterance began, so its row shows a time before it commits.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    t: Option<String>,
-}
-
-/// A Me line shown live was dropped as microphone bleed (transient, never stored).
-#[derive(Serialize, Clone)]
-struct DroppedPayload {
-    speaker: String,
-    text: String,
-}
+/// Session state shared with the phone app (ADR-015).
+pub(crate) type AppState = sprk_core::session::Sessions;
 
 struct TauriEvents(AppHandle);
 
 impl Events for TauriEvents {
     fn line(&self, l: UiLine) {
         self.0.state::<assistant::Assistant>().feed(&l);
-        let p = match l {
-            UiLine::Statement {
-                id,
-                t,
-                speaker,
-                text,
-            } => LinePayload::Statement {
-                id,
-                t,
-                speaker,
-                text,
-            },
-            UiLine::Event { id, t, text } => match event_kind(&text) {
-                EventKind::Mark => LinePayload::Mark { id, t },
-                EventKind::Note(n) => LinePayload::Note {
-                    id,
-                    t,
-                    text: n.to_string(),
-                },
-                EventKind::Other => LinePayload::Event { id, t, text },
-            },
-        };
-        let _ = self.0.emit("transcript-line", p);
+        let _ = self.0.emit(event::LINE, LinePayload::from(l));
     }
     fn status(&self, s: UiStatus) {
-        let v = match s {
-            UiStatus::Ready => "ready",
-            UiStatus::Transcribing => "transcribing",
-            UiStatus::Paused => "paused",
-        };
-        let _ = self.0.emit("session-status", v);
+        let v = status_name(s);
+        let _ = self.0.emit(event::STATUS, v);
         shell::on_status(&self.0, v);
     }
     fn problem(&self, kind: &str) {
-        let _ = self.0.emit("session-problem", kind);
+        let _ = self.0.emit(event::PROBLEM, kind);
     }
     fn captions_wanted(&self) -> (bool, bool) {
         shell::captions_wanted(&self.0)
     }
     fn dropped(&self, speaker: &'static str, text: &str) {
         let _ = self.0.emit(
-            "transcript-dropped",
+            event::DROPPED,
             DroppedPayload {
                 speaker: speaker.to_string(),
                 text: text.to_string(),
@@ -149,21 +60,10 @@ impl Events for TauriEvents {
     }
     fn levels(&self, me: f32, others: f32) {
         // Only the main window has the source buttons.
-        let _ = self.0.emit_to("main", "source-levels", [me, others]);
+        let _ = self.0.emit_to("main", event::LEVELS, [me, others]);
     }
     fn caption(&self, c: &sprk_pipeline::host::UiCaption) {
-        let _ = self.0.emit(
-            "caption",
-            CaptionPayload {
-                speaker: c.speaker.to_string(),
-                text: c.text.clone(),
-                stable: c.stable,
-                is_final: c.is_final,
-                sealed: c.sealed.clone(),
-                utt: c.utt,
-                t: c.t.clone(),
-            },
-        );
+        let _ = self.0.emit(event::CAPTION, CaptionPayload::from(c));
     }
 }
 
@@ -223,41 +123,6 @@ fn transcripts_root(app: &AppHandle, policy: &sprk_config::AppPolicy) -> Result<
         .ok_or_else(|| "no Documents folder".to_string())
 }
 
-/// Default transcripts folder: the Documents folder, or `~/Documents` when none is configured
-/// (a fresh home on Linux has no user-dirs entry).
-pub(crate) fn default_transcripts_dir(
-    documents: Option<PathBuf>,
-    home: Option<PathBuf>,
-) -> Option<PathBuf> {
-    let docs = documents.or_else(|| home.map(|h| h.join("Documents")))?;
-    Some(docs.join("SprkNotes").join("Transcripts"))
-}
-
-#[cfg(test)]
-mod default_dir_tests {
-    use super::*;
-
-    #[test]
-    fn uses_documents_when_set() {
-        let got = default_transcripts_dir(Some("/d".into()), Some("/h".into()));
-        assert_eq!(got, Some(PathBuf::from("/d/SprkNotes/Transcripts")));
-    }
-
-    #[test]
-    fn falls_back_to_home_documents() {
-        let got = default_transcripts_dir(None, Some("/h".into()));
-        assert_eq!(
-            got,
-            Some(PathBuf::from("/h/Documents/SprkNotes/Transcripts"))
-        );
-    }
-
-    #[test]
-    fn none_when_nothing_known() {
-        assert_eq!(default_transcripts_dir(None, None), None);
-    }
-}
-
 /// Audio source and call context detection (SPEC 18, 19). Windows only; the inputs are built on
 /// the session thread. Defaults until the policy settings are wired in (M14).
 #[cfg(windows)]
@@ -299,17 +164,6 @@ fn context_config(_: &sprk_config::AppPolicy) -> Option<sprk_pipeline::host::Con
     None
 }
 
-fn commit_config(p: &sprk_config::AppPolicy) -> Config {
-    let mut c = Config::default();
-    if let Some(s) = p.commit_delay_seconds {
-        c.delay_ms = s.clamp(1, 30) * 1000;
-    }
-    if let Some(f) = p.filler_removal {
-        c.drop_fillers = f;
-    }
-    c
-}
-
 /// Settings pane: is a model present, and may this PC download one? No network.
 #[tauri::command]
 fn model_status() -> model_download::ModelStatus {
@@ -328,7 +182,7 @@ async fn model_check_update() -> Result<model_download::UpdateInfo, String> {
 /// "Download model": fetch and install the default model. Progress arrives as `model-download`.
 #[tauri::command]
 fn model_download(app: AppHandle, state: State<AppState>) -> Result<(), String> {
-    let running = state.host.lock().map(|h| h.is_some()).unwrap_or(true);
+    let running = state.busy();
     if running {
         return Err("End the current session before downloading a model.".into());
     }
@@ -348,7 +202,7 @@ async fn speed_check(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<speed::SpeedStatus, String> {
-    if state.host.lock().map(|h| h.is_some()).unwrap_or(true) {
+    if state.busy() {
         return Err("End the transcript first, then check the speed.".into());
     }
     tauri::async_runtime::spawn_blocking(|| speed::run(env!("CARGO_PKG_VERSION")))
@@ -380,7 +234,7 @@ fn assistant_model_download(
     state: State<AppState>,
     tier: String,
 ) -> Result<(), String> {
-    let running = state.host.lock().map(|h| h.is_some()).unwrap_or(true);
+    let running = state.busy();
     if running {
         return Err("End the current session before downloading a model.".into());
     }
@@ -432,7 +286,7 @@ async fn update_install() -> Result<Option<String>, String> {
 async fn update_now(app: AppHandle, state: State<'_, AppState>) -> Result<Option<String>, String> {
     let p = policy();
     updater::can_update_now(&p)?;
-    if state.host.lock().map(|h| h.is_some()).unwrap_or(true) {
+    if state.busy() {
         return Err("End the transcript first, then update.".into());
     }
     let a = app.clone();
@@ -458,7 +312,7 @@ async fn update_now(app: AppHandle, state: State<'_, AppState>) -> Result<Option
         return Ok(None);
     };
     // A session may have started while the download ran.
-    if state.host.lock().map(|h| h.is_some()).unwrap_or(true) {
+    if state.busy() {
         updater::request_install();
         return Err(
             "A transcript started, so the update installs when you close SprkNotes.".into(),
@@ -486,16 +340,8 @@ async fn update_now(app: AppHandle, state: State<'_, AppState>) -> Result<Option
     Ok(Some(v))
 }
 
-/// What the window is busy doing while it works: `loading` (with the model's name) at Start,
-/// `ending` while the transcript is closed off, `idle` otherwise.
-#[derive(Serialize, Clone)]
-struct Phase {
-    phase: &'static str,
-    model: Option<String>,
-}
-
 fn emit_phase(app: &AppHandle, phase: &'static str, model: Option<String>) {
-    let _ = app.emit("session-phase", Phase { phase, model });
+    let _ = app.emit(event::PHASE, Phase { phase, model });
 }
 
 /// Async so Tauri runs it off the main thread: loading the model takes a moment and must not
@@ -533,113 +379,66 @@ fn start_session_blocking(
     name: String,
     continue_from: Option<PathBuf>,
 ) -> Result<(), String> {
-    let state = app.state::<AppState>();
-    let mut slot = state.host.lock().map_err(|_| "busy".to_string())?;
-    // A session that stopped by itself (the model never loaded, or a panic) is cleared here.
-    if slot.as_ref().is_some_and(Host::is_finished) {
-        if let Some(h) = slot.take() {
-            let _ = h.end();
-        }
-    }
-    if slot.is_some() {
-        return Err("A session is already running.".into());
-    }
-    app.state::<assistant::Assistant>().clear();
-    let devices = state.devices.clone();
-    // The model is chosen now and never swapped mid-session. It is usually loaded already
-    // (Instant Start, SPEC 4.6); if not, capture starts now and the engine follows.
-    let policy = policy();
-    speed::call_off();
-    let (engine_label, engine) = app.state::<warm::Warm>().for_session()?;
-    let engine = custom_words::apply_source(engine, custom_words::in_force(&policy));
-    let make_vad = models::load_vad()?;
-    let host = Host::start(
-        StartParams {
-            root: transcripts_root(&app, &policy)?,
-            name,
-            app_version: env!("CARGO_PKG_VERSION").to_string(),
-            engine_label,
-            commit: commit_config(&policy),
-            continue_from,
-        },
-        engine,
-        make_vad,
-        Box::new(move || {
-            Box::new(Preferred::new(CpalBackend::default(), devices)) as Box<dyn Backend>
-        }),
-        Box::new(clock::LocalClock),
-        Arc::new(TauriEvents(app.clone())),
-        context_config(&policy),
-    )
-    .map_err(|e| e.to_string())?;
-    let off = state.sources_off.lock().map(|o| *o).unwrap_or_default();
-    for (source, off) in [(Source::Mic, off[0]), (Source::System, off[1])] {
-        if off {
-            let _ = host.set_source(source, false);
-        }
-    }
-    *slot = Some(host);
-    Ok(())
-}
-
-fn with_host(
-    state: &State<AppState>,
-    f: impl FnOnce(&Host) -> Result<(), sprk_pipeline::host::HostError>,
-) -> Result<(), String> {
-    let slot = state.host.lock().map_err(|_| "busy".to_string())?;
-    match slot.as_ref() {
-        Some(h) => f(h).map_err(|e| e.to_string()),
-        None => Err("No session is running.".into()),
-    }
+    let events = Arc::new(TauriEvents(app.clone()));
+    app.state::<AppState>().start(|devices| {
+        app.state::<assistant::Assistant>().clear();
+        // The model is chosen now and never swapped mid-session. It is usually loaded already
+        // (Instant Start, SPEC 4.6); if not, capture starts now and the engine follows.
+        let policy = policy();
+        speed::call_off();
+        let (engine_label, engine) = app.state::<warm::Warm>().for_session()?;
+        let engine = custom_words::apply_source(engine, custom_words::in_force(&policy));
+        let make_vad = models::load_vad()?;
+        Ok(Launch {
+            params: StartParams {
+                root: transcripts_root(&app, &policy)?,
+                name,
+                app_version: env!("CARGO_PKG_VERSION").to_string(),
+                engine_label,
+                commit: commit_config(&policy),
+                continue_from,
+            },
+            engine,
+            make_vad,
+            make_backend: Box::new(move || {
+                Box::new(Preferred::new(CpalBackend::default(), devices)) as Box<dyn Backend>
+            }),
+            events,
+            context: context_config(&policy),
+        })
+    })
 }
 
 #[tauri::command]
 fn pause_session(state: State<AppState>) -> Result<(), String> {
-    with_host(&state, |h| h.pause())
+    state.pause()
 }
 
 #[tauri::command]
 fn resume_session(state: State<AppState>) -> Result<(), String> {
-    with_host(&state, |h| h.resume())
+    state.resume()
 }
 
 /// Drop a mark into the live transcript at this moment.
 #[tauri::command]
 fn mark_session(state: State<AppState>) -> Result<(), String> {
-    with_host(&state, |h| h.mark())
+    state.mark()
 }
 
 /// Save a short typed note into the live transcript at this moment.
 #[tauri::command]
 fn note_session(state: State<AppState>, text: String) -> Result<(), String> {
-    with_host(&state, |h| h.note(&text).map(|_| ()))
+    state.note(&text)
 }
 
 #[tauri::command]
 fn rename_session(state: State<AppState>, name: String) -> Result<(), String> {
-    with_host(&state, |h| h.rename(&name))
+    state.rename(&name)
 }
 
 #[tauri::command]
 fn set_source(state: State<AppState>, source: String, on: bool) -> Result<(), String> {
-    let s = source_of(&source)?;
-    if let Ok(mut off) = state.sources_off.lock() {
-        off[usize::from(s == Source::System)] = !on;
-    }
-    let running = state.host.lock().map(|h| h.is_some()).unwrap_or(false);
-    if !running {
-        // Applied when the next session starts.
-        return Ok(());
-    }
-    with_host(&state, |h| h.set_source(s, on))
-}
-
-fn source_of(source: &str) -> Result<Source, String> {
-    match source {
-        "mic" => Ok(Source::Mic),
-        "system" => Ok(Source::System),
-        _ => Err("unknown source".into()),
-    }
+    state.set_source(source_of(&source)?, on)
 }
 
 /// Devices a source can be switched to (Settings): microphones, or speakers that are looped back.
@@ -653,24 +452,14 @@ fn list_devices(source: String) -> Result<Vec<String>, String> {
 /// also mid-session (a "Source changed" line is written then).
 #[tauri::command]
 fn set_device(state: State<AppState>, source: String, name: Option<String>) -> Result<(), String> {
-    let name = name.filter(|n| !n.is_empty());
-    let mut d = state.devices.lock().map_err(|_| "busy".to_string())?;
-    match source_of(&source)? {
-        Source::Mic => d.mic = name,
-        Source::System => d.system = name,
-    }
-    Ok(())
+    state.set_device(source_of(&source)?, name)
 }
 
 /// End the session and wait for the file to be finalized. Blocks: never call it on the main
 /// thread. The session thread's last status update is marshalled to the main thread (tray, mini),
 /// so a main-thread join deadlocks (the Linux "Not Responding" hang).
-fn end_session_blocking(state: &AppState) -> Result<(), String> {
-    let host = state.host.lock().map_err(|_| "busy".to_string())?.take();
-    match host {
-        Some(h) => h.end().map_err(|e| e.to_string()),
-        None => Ok(()),
-    }
+pub(crate) fn end_session_blocking(state: &AppState) -> Result<(), String> {
+    state.end()
 }
 
 /// Async so Tauri runs it off the main thread; the join happens on a blocking-pool thread.

@@ -109,17 +109,10 @@ fn sweep_now(app: &AppHandle) -> Swept {
         return Swept::default();
     };
     let state = app.state::<crate::AppState>();
-    let host = state.host.lock().unwrap_or_else(|p| p.into_inner());
-    let mut protected = Vec::new();
-    if let Some(p) = host.as_ref().and_then(|h| h.path()) {
-        protected.push(p);
-    }
-    if let Some(p) = state.viewing.lock().ok().and_then(|v| v.clone()) {
-        protected.push(p);
-    }
-    let swept = retention::sweep(&root, days, today, &protected, &RecycleOrDelete);
-    drop(host);
-    swept
+    state.hold(|live| {
+        let protected: Vec<_> = live.into_iter().chain(state.viewing()).collect();
+        retention::sweep(&root, days, today, &protected, &RecycleOrDelete)
+    })
 }
 
 /// What the window hears after a sweep that removed something: a count, never names.

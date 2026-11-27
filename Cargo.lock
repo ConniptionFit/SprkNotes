@@ -1889,6 +1889,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "sprk-core"
+version = "0.2.0-alpha.14"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+ "sprk-asr",
+ "sprk-audio",
+ "sprk-config",
+ "sprk-pipeline",
+ "sprk-transcript",
+]
+
+[[package]]
 name = "sprk-handoff"
 version = "0.2.0-alpha.14"
 dependencies = [

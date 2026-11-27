@@ -90,7 +90,10 @@ pub fn current(app: &AppHandle, policy: &sprk_config::AppPolicy) -> Option<(Path
         policy.transcripts_root.as_deref(),
         user.transcripts_root.as_deref(),
         defaults.transcripts_root.as_deref(),
-        crate::default_transcripts_dir(app.path().document_dir().ok(), app.path().home_dir().ok()),
+        sprk_core::settings::default_transcripts_dir(
+            app.path().document_dir().ok(),
+            app.path().home_dir().ok(),
+        ),
         &expand,
     )
 }

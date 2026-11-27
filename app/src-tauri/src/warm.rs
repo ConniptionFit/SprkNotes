@@ -196,9 +196,5 @@ pub fn ensure(app: &AppHandle) {
 }
 
 fn session_running(app: &AppHandle) -> bool {
-    app.state::<crate::AppState>()
-        .host
-        .lock()
-        .map(|h| h.is_some())
-        .unwrap_or(true)
+    app.state::<crate::AppState>().busy()
 }

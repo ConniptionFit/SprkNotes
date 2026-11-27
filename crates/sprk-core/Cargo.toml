@@ -1,0 +1,21 @@
+[package]
+name = "sprk-core"
+description = "Session control, settings and UI payloads shared by the desktop and phone apps (ADR-015)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+sprk-asr = { path = "../sprk-asr" }
+sprk-audio = { path = "../sprk-audio" }
+sprk-config = { path = "../sprk-config" }
+sprk-pipeline = { path = "../sprk-pipeline" }
+sprk-transcript = { path = "../sprk-transcript" }
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

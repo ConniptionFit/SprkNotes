@@ -35,12 +35,7 @@ fn run(app: AppHandle, source: Box<dyn MicUse>) {
     let mut watch = MicWatch::new();
     loop {
         std::thread::sleep(POLL);
-        let busy = app
-            .state::<crate::AppState>()
-            .host
-            .lock()
-            .map(|h| h.is_some())
-            .unwrap_or(true);
+        let busy = app.state::<crate::AppState>().busy();
         // Reading the data is cheap, but skip it entirely while a session runs.
         let apps = if busy {
             Vec::new()
