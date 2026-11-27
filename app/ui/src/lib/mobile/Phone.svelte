@@ -157,6 +157,10 @@
       {#each lines as l (l.id)}
         {#if l.kind === "statement"}
           <div class="msg"><span class="tm">{l.t}</span><p class="bub">{l.text}</p></div>
+        {:else if l.kind === "mark"}
+          <p class="event"><span class="tm">{l.t}</span> Mark</p>
+        {:else if l.kind === "note"}
+          <p class="event"><span class="tm">{l.t}</span> Note: {l.text}</p>
         {:else}
           <p class="event"><span class="tm">{l.t}</span> {l.text}</p>
         {/if}
