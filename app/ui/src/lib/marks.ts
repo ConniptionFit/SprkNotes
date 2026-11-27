@@ -1,5 +1,6 @@
 // Marks and notes during a session (SPEC 5.1). The backend writes them; this file holds the
 // small rules the UI shares with it.
+import type { Line } from "./types";
 
 type KeyLike = Pick<KeyboardEvent, "code" | "ctrlKey" | "altKey" | "shiftKey" | "metaKey" | "repeat">;
 
@@ -9,4 +10,96 @@ export const NOTE_MAX_CHARS = 500;
 /** Ctrl+M drops a mark while the window has focus. By position, so the keyboard layout does not matter. */
 export function isMarkKey(e: KeyLike): boolean {
   return e.code === "KeyM" && e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey && !e.repeat;
+}
+
+// Naming a mark, and marking a line that was said earlier. The transcript is only ever added to
+// (lines are never rewritten), so both are saved as a note that names the time it belongs to:
+// "Mark 00:12:41: Driver swap". The Library shows it as that note; the live pane shows the name on
+// the mark, or a mark on the line said at that time, instead of a separate note.
+
+
+/** Words of a line used as the name when the line itself is marked. */
+const LINE_MARK_WORDS = 8;
+
+const LABEL = /^Mark (\d{2,}:\d{2}:\d{2}): ([\s\S]+)$/;
+
+/** The note that names the mark (or marks the line) at time `t`. */
+export function markLabel(t: string, name: string): string {
+  return `Mark ${t}: ${name.trim().replace(/\s+/g, " ")}`.slice(0, NOTE_MAX_CHARS);
+}
+
+/** A note that names a mark: its time and the name; anything else is null. */
+export function parseMarkLabel(text: string): { t: string; name: string } | null {
+  const m = LABEL.exec(text.trim());
+  return m && m[2].trim() ? { t: m[1], name: m[2].trim() } : null;
+}
+
+/** The name a marked line gets: its first few words. */
+export function lineMarkName(speaker: string, text: string): string {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  const head = words.slice(0, LINE_MARK_WORDS).join(" ");
+  return `${speaker}: ${head}${words.length > LINE_MARK_WORDS ? "…" : ""}`;
+}
+
+export type MarkItem = {
+  /** Id of the line the mark sits on: a Mark line, or a speech line that was marked. */
+  id: number;
+  t: string;
+  /** Empty until the person names it. */
+  name: string;
+};
+
+export type Marks = {
+  /** Every mark in time order. */
+  items: MarkItem[];
+  /** Line id to its mark, for drawing the name on a Mark line or a marked speech line. */
+  byLine: Map<number, MarkItem>;
+  /** Naming notes that are shown on their mark instead of as a note. */
+  hidden: Set<number>;
+};
+
+/** Marks in a transcript, with the names their notes give them (the newest name wins). */
+export function collectMarks(lines: readonly Line[]): Marks {
+  const names = new Map<string, { name: string; id: number }>();
+  for (const l of lines) {
+    if (l.kind !== "note") continue;
+    const p = parseMarkLabel(l.text);
+    if (p) names.set(p.t, { name: p.name, id: l.id });
+  }
+  const items: MarkItem[] = [];
+  const byLine = new Map<number, MarkItem>();
+  const hidden = new Set<number>();
+  const named = new Set<string>();
+  const used = new Set<string>();
+  for (const l of lines) {
+    if (l.kind !== "mark") continue;
+    const n = names.get(l.t);
+    const item = { id: l.id, t: l.t, name: n?.name ?? "" };
+    items.push(item);
+    byLine.set(l.id, item);
+    if (n) named.add(l.t);
+  }
+  // A name with no Mark line at its time marks the speech line said then.
+  for (const [t, n] of names) {
+    if (named.has(t)) {
+      hidden.add(n.id);
+      continue;
+    }
+    const line = lines.find((l) => l.kind === "statement" && l.t === t);
+    if (!line || used.has(t)) continue;
+    used.add(t);
+    const item = { id: line.id, t, name: n.name };
+    items.push(item);
+    byLine.set(line.id, item);
+    hidden.add(n.id);
+  }
+  // Earlier naming notes for the same time are hidden too.
+  for (const l of lines) {
+    if (l.kind === "note" && !hidden.has(l.id)) {
+      const p = parseMarkLabel(l.text);
+      if (p && (named.has(p.t) || used.has(p.t))) hidden.add(l.id);
+    }
+  }
+  items.sort((a, b) => (a.t < b.t ? -1 : a.t > b.t ? 1 : a.id - b.id));
+  return { items, byLine, hidden };
 }

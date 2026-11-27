@@ -25,14 +25,17 @@ SprkNotes needs a transcription model before it can start. If none is installed,
 - **Me (your microphone)** and **Others (computer sound)** switches turn each source on or off.
 - **Pause** stops capture and writes a pause line. **Resume** continues. Timestamps keep counting, so the gap is visible.
 - **End** finishes the file.
-- **Mark** (or **Ctrl+M** while the window is in front) flags the moment in the transcript, for example something to come back to. Type a short note in the box next to it and press **Enter** to save it with the time. Marks and notes are tinted in the transcript and in the Library, and Summarize and Ask Sprk read them too. They work while paused as well.
-- The magnifier buttons change the text size. The **CC** button turns the live line on or off in this window.
+- The transcript reads like a conversation: other people's lines are bubbles on the left, yours on the right, and each speaker's name shows once per turn. Hover a line to see its time (or pick **Message times: Always** in [Settings](#settings)).
+- A chip next to the session name shows **Listening** or **Paused** and how long the session has run. The **Me** and **Others** pills show the sound meters; click one to pick a device or turn it off.
+- **Mark** (or **Ctrl+M** while the window is in front), in the bar at the bottom of the transcript, flags the moment, for example something to come back to. Type a short note in the box next to it and press **Enter** to save it with the time. Marks show as chips (click the pencil to name one) and notes as dashed cards; Summarize and Ask Sprk read them too. They work while paused as well.
+- Hover a line for **Copy line**, **Mark this line** and **Add a note about this line**. Once there are marks, **Marks** in the toolbar lists them; click one to jump to it.
+- **Find** (or **Ctrl+F**) searches the transcript on screen: matches are highlighted, **Enter** goes to older matches and **Shift+Enter** to newer ones, **Esc** closes it. **A−** and **A+** change the text size, and **Live line** turns the live line on or off in this window.
 
 ![Transcribing](screenshots/main-transcribing-light.png)
 ![Paused](screenshots/main-paused-light.png)
 
 ### The live line
-The last row of the transcript, marked **live**, shows what is being said right now. Text types out at an even pace; only the last word or two are lighter and can still change. Sentences lock in as they finish (or after about 1.5 seconds, or a pause), stay in normal color, and are quietly replaced by the finished line later. The transcript fills from the bottom, so new rows push older ones up. The live line is a preview: it is never saved or logged, and the saved transcript comes only from finished sentences. By default it shows Others only (see [Settings](#settings)).
+The last bubble of the transcript, with a dashed outline and "speaking" next to the name, shows what is being said right now. Text types out at an even pace; only the last word or two are lighter and can still change. Sentences lock in as they finish (or after about 1.5 seconds, or a pause), stay in normal color, and are quietly replaced by the finished line later. The transcript fills from the bottom, so new rows push older ones up. The live line is a preview: it is never saved or logged, and the saved transcript comes only from finished sentences. By default it shows Others only (see [Settings](#settings)).
 
 ### Dark mode
 Dark mode follows Windows or your desktop, or the choice in Settings.
@@ -90,11 +93,12 @@ Open **Settings** at the bottom of the window.
 
   ![Throwback Mode setting](screenshots/settings-throwback-light.png)
 - **Live captions.** Turn captions on the overlay on or off, turn the live line in the main window on or off, set the **Live text delay** (Fast, Steady or Smoothest; a short wait so words settle and fewer change on screen, under a second on Steady), and choose **Others only** (default, quickest) or **Others and Me**.
+- **Message times.** Show each line's time in the transcript window **On hover** (default) or **Always**.
 
 ![All settings](screenshots/settings-full-light.png)
 
 ## Your files
-Transcripts are Markdown files in `Documents\SprkNotes\Transcripts` (Windows), named `YYYY-MM-DD HHmm <Title>.md`. Each line is `- \`HH:MM:SS\` **Speaker:** text`. Lines starting with `>` are events (pauses, call changes, audio sources), and also your marks (`> \`00:12:04\` Mark`) and notes (`> \`00:12:30\` Note: your words`).
+Transcripts are Markdown files in `Documents\SprkNotes\Transcripts` (Windows), named `YYYY-MM-DD HHmm <Title>.md`. Each line is `- \`HH:MM:SS\` **Speaker:** text`. Lines starting with `>` are events (pauses, call changes, audio sources), and also your marks (`> \`00:12:04\` Mark`) and notes (`> \`00:12:30\` Note: your words`). Naming a mark, or marking an earlier line, adds a note that names its time (`> \`00:13:02\` Note: Mark 00:12:04: Driver swap`), because the file is only ever added to.
 
 If the app or PC stops unexpectedly, the file already holds everything that was committed. On the next start SprkNotes says it closed unexpectedly and offers **Open** (takes you to the Library) or **Mark finished** (closes the transcript as interrupted).
 

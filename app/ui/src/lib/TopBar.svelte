@@ -9,6 +9,7 @@
     mic = $bindable(),
     system = $bindable(),
     levels = null,
+    elapsed = "",
     onrename,
     onsource,
   }: {
@@ -18,6 +19,8 @@
     system: boolean;
     /** Me and Others input levels, 0 to 1; null when nothing is being transcribed. */
     levels?: [number, number] | null;
+    /** Session time so far ("12:41"), shown beside the status while a session runs. */
+    elapsed?: string;
     onrename: (n: string) => void;
     onsource: (s: Source, on: boolean) => void;
   } = $props();
@@ -34,7 +37,11 @@
       onchange={() => onrename(name)}
     />
     {#if status !== "ready"}
-      <Light {status} size={14} />
+      <p class="status" class:paused={status === "paused"}>
+        <Light {status} size={12} />
+        <span class="word" aria-hidden="true">{status === "paused" ? "Paused" : "Listening"}</span>
+        <time title="Time transcribed so far">{elapsed}</time>
+      </p>
     {/if}
   </div>
   <div class="sources" role="group" aria-label="Sound sources">
@@ -71,5 +78,21 @@
   .name:focus { border-color: var(--accent); background: var(--surface); outline: none; }
 
 
-  .sources { display: flex; gap: 0.4rem; flex: none; }
+  .sources { display: flex; gap: 0.5rem; flex: none; }
+  /* Session status: the light, what is happening, and how long it has run. */
+  .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex: none;
+    margin: 0;
+    padding: 0.3rem 0.75rem 0.3rem 0.6rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--live) 12%, transparent);
+    font-size: 0.88rem;
+    font-weight: 650;
+  }
+  .status.paused { background: var(--warn-soft); }
+  .status .word { color: var(--text); }
+  .status time { color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums; }
 </style>

@@ -36,17 +36,21 @@ export class Rows {
     this.rows.push({ uid: this.next++, utt, speaker, text, at, t });
   }
 
-  /** A caption arrived. Locked rows are kept; a final caption replaces its utterance's rows. */
-  caption(c: Caption, now: number): void {
+  /**
+   * A caption arrived. Locked rows are kept; a final caption replaces its utterance's rows.
+   * `stamp` is the session time now (HH:MM:SS): a sentence that locks before its utterance has a
+   * time of its own shows this one, so no row is left without a time.
+   */
+  caption(c: Caption, now: number, stamp?: string): void {
     this.rows = this.rows.filter((r) => now - r.at < ROW_TTL_MS);
     const utt = c.utt ?? -1;
     if (c.final) {
       this.rows = this.rows.filter((r) => !(r.utt === utt && r.speaker === c.speaker));
       // Each sentence shows when the utterance began; the committed lines bring exact times.
-      for (const s of sentences(c.text)) this.add(utt, c.speaker, s, now, c.t);
+      for (const s of sentences(c.text)) this.add(utt, c.speaker, s, now, c.t ?? stamp);
       return;
     }
-    for (const s of c.sealed ?? []) this.add(utt, c.speaker, s, now);
+    for (const s of c.sealed ?? []) this.add(utt, c.speaker, s, now, stamp);
   }
 
   /** A committed line arrived: drop locked rows it now covers (most of their words appear in it). */
