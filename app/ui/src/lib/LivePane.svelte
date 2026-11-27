@@ -345,8 +345,8 @@
       <span>Find</span>
     </button>
     <div class="size" role="group" aria-label="Text size">
-      <button title="Smaller text" aria-label="Smaller text" disabled={prefs.lineText === 0} onclick={() => bump(-1)}>A<span class="minus">−</span></button>
-      <button title="Larger text" aria-label="Larger text" disabled={prefs.lineText === LINE_TEXT.length - 1} onclick={() => bump(1)}>A<span class="plus">+</span></button>
+      <button title="Smaller text" aria-label="Smaller text" disabled={prefs.lineText === 0} onclick={() => bump(-1)}>−</button>
+      <button title="Larger text" aria-label="Larger text" disabled={prefs.lineText === LINE_TEXT.length - 1} onclick={() => bump(1)}>+</button>
     </div>
     <button class="tool" title={prefs.liveLine ? "Hide live line" : "Show live line"} aria-pressed={prefs.liveLine} class:on={prefs.liveLine} onclick={() => setPref("liveLine", !prefs.liveLine)}>
       <span class="dot" aria-hidden="true"></span>
@@ -595,9 +595,8 @@
   .tools .on { color: var(--accent); background: var(--accent-soft); }
   .tools svg { width: 1rem; height: 1rem; }
   .size { display: inline-flex; border: 1px solid var(--border); border-radius: 999px; overflow: hidden; }
-  .size button { border-radius: 0; padding: 0 0.65rem; font-size: 0.95rem; color: var(--text); }
+  .size button { border-radius: 0; padding: 0 0.75rem; font-size: 1.1rem; font-weight: 600; color: var(--text); }
   .size button + button { border-left: 1px solid var(--border); }
-  .size .minus, .size .plus { font-size: 0.75em; margin-left: 1px; }
   .dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: currentColor; opacity: 0.5; }
   .on .dot { background: var(--live); opacity: 1; }
   .count { min-width: 1.2rem; padding: 0 0.3rem; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-size: 0.72rem; line-height: 1.2rem; text-align: center; }

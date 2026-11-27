@@ -48,7 +48,7 @@ export type SkippedApp = { id: string; name: string };
 
 /** Caption text sizes in px for the magnifier buttons, and the step used by default. */
 export const CAPTION_TEXT = [13, 15, 17, 19, 22, 26, 30, 36];
-/** Transcript text sizes in px for the main window A− and A+ buttons. */
+/** Transcript text sizes in px for the main window − and + buttons. */
 export const LINE_TEXT = [12, 13, 14, 15, 17, 19, 22, 26];
 export const CAPTION_LIMITS = { minW: 260, maxW: 900, minH: 64, maxH: 480 };
 

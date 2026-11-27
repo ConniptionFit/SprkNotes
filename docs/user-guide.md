@@ -29,7 +29,7 @@ SprkNotes needs a transcription model before it can start. If none is installed,
 - A chip next to the session name shows **Listening** or **Paused** and how long the session has run. The **Me** and **Others** pills show the sound meters; click one to pick a device or turn it off.
 - **Mark** (or **Ctrl+M** while the window is in front), in the bar at the bottom of the transcript, flags the moment, for example something to come back to. Type a short note in the box next to it and press **Enter** to save it with the time. Marks show as chips (click the pencil to name one) and notes as dashed cards; Summarize and Ask Sprk read them too. They work while paused as well.
 - Hover a line for **Copy line**, **Mark this line** and **Add a note about this line**. Once there are marks, **Marks** in the toolbar lists them; click one to jump to it.
-- **Find** (or **Ctrl+F**) searches the transcript on screen: matches are highlighted, **Enter** goes to older matches and **Shift+Enter** to newer ones, **Esc** closes it. **A−** and **A+** change the text size, and **Live line** turns the live line on or off in this window.
+- **Find** (or **Ctrl+F**) searches the transcript on screen: matches are highlighted, **Enter** goes to older matches and **Shift+Enter** to newer ones, **Esc** closes it. **−** and **+** change the text size, and **Live line** turns the live line on or off in this window.
 
 ![Transcribing](screenshots/main-transcribing-light.png)
 ![Paused](screenshots/main-paused-light.png)
