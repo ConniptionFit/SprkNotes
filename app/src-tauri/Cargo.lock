@@ -4280,7 +4280,7 @@ dependencies = [
 
 [[package]]
 name = "sprk-asr"
-version = "0.2.0-alpha.15"
+version = "0.2.0-alpha.16"
 dependencies = [
  "sherpa-onnx",
  "sprk-models",
@@ -4289,7 +4289,7 @@ dependencies = [
 
 [[package]]
 name = "sprk-assistant"
-version = "0.2.0-alpha.15"
+version = "0.2.0-alpha.16"
 dependencies = [
  "serde",
  "serde_json",
@@ -4300,7 +4300,7 @@ dependencies = [
 
 [[package]]
 name = "sprk-audio"
-version = "0.2.0-alpha.15"
+version = "0.2.0-alpha.16"
 dependencies = [
  "cpal",
  "ringbuf",
@@ -4311,7 +4311,7 @@ dependencies = [
 
 [[package]]
 name = "sprk-config"
-version = "0.2.0-alpha.15"
+version = "0.2.0-alpha.16"
 dependencies = [
  "serde_json",
  "windows 0.58.0",
@@ -4319,14 +4319,14 @@ dependencies = [
 
 [[package]]
 name = "sprk-context"
-version = "0.2.0-alpha.15"
+version = "0.2.0-alpha.16"
 dependencies = [
  "windows 0.58.0",
 ]
 
 [[package]]
 name = "sprk-core"
-version = "0.2.0-alpha.15"
+version = "0.2.0-alpha.16"
 dependencies = [
  "chrono",
  "serde",
@@ -4341,14 +4341,14 @@ dependencies = [
 
 [[package]]
 name = "sprk-handoff"
-version = "0.2.0-alpha.15"
+version = "0.2.0-alpha.16"
 dependencies = [
  "windows 0.58.0",
 ]
 
 [[package]]
 name = "sprk-models"
-version = "0.2.0-alpha.15"
+version = "0.2.0-alpha.16"
 dependencies = [
  "base64 0.22.1",
  "ed25519-dalek",
@@ -4362,7 +4362,7 @@ dependencies = [
 
 [[package]]
 name = "sprk-pipeline"
-version = "0.2.0-alpha.15"
+version = "0.2.0-alpha.16"
 dependencies = [
  "sprk-asr",
  "sprk-audio",
@@ -4373,7 +4373,7 @@ dependencies = [
 
 [[package]]
 name = "sprk-transcript"
-version = "0.2.0-alpha.15"
+version = "0.2.0-alpha.16"
 dependencies = [
  "docx-rs",
  "serde_json",
@@ -4382,7 +4382,7 @@ dependencies = [
 
 [[package]]
 name = "sprk-update"
-version = "0.2.0-alpha.15"
+version = "0.2.0-alpha.16"
 dependencies = [
  "hex",
  "serde",
@@ -4394,7 +4394,7 @@ dependencies = [
 
 [[package]]
 name = "sprknotes"
-version = "0.2.0-alpha.15"
+version = "0.2.0-alpha.16"
 dependencies = [
  "anyhow",
  "chrono",
