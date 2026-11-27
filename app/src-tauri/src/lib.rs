@@ -16,7 +16,7 @@ mod phone {
     };
     use sprk_core::session::{Launch, Sessions};
     use sprk_core::settings::{commit_config, source_of};
-    use sprk_pipeline::host::{Events, StartParams, UiCaption, UiLine, UiStatus};
+    use sprk_pipeline::host::{EngineSource, Events, StartParams, UiCaption, UiLine, UiStatus};
     use std::path::PathBuf;
     use std::sync::Arc;
     use tauri::{AppHandle, Emitter, Manager, State};
@@ -147,7 +147,7 @@ mod phone {
                     commit: commit_config(&policy()),
                     continue_from: None,
                 },
-                engine: loaded.engine,
+                engine: EngineSource::Ready(loaded.engine),
                 make_vad: loaded.make_vad,
                 make_backend: Box::new(move || {
                     Box::new(Preferred::new(CpalBackend::default(), devices)) as Box<dyn Backend>

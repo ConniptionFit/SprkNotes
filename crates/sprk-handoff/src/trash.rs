@@ -1,11 +1,24 @@
 //! Move files to the Recycle Bin (Windows) or the user's trash (Linux, freedesktop.org Trash
-//! spec), so a Library delete (SPEC 8.4) can be undone from there. Never deletes permanently on
-//! its own: when the trash cannot take a file, the call fails and the file stays.
+//! spec), so a Library delete (SPEC 8.4) can be undone from there. [`to_trash`] never deletes
+//! permanently on its own: when the trash cannot take a file, the call fails and the file stays.
+//! [`recycle_or_delete`] is for retention (SPEC 6.6), which must remove the file either way.
 use std::path::PathBuf;
 
 /// Move each path (absolute) to the trash, in order. Stops at the first failure.
 pub fn to_trash(paths: &[PathBuf]) -> std::io::Result<()> {
-    imp::to_trash(paths)
+    imp::to_trash(paths, true)
+}
+
+/// Retention (SPEC 6.6): move each path to the trash when it can take the file, and delete it
+/// for good when it can't (a network folder, a full Recycle Bin). Never asks: it runs in the
+/// background. Stops at the first file that can be neither trashed nor deleted.
+pub fn recycle_or_delete(paths: &[PathBuf]) -> std::io::Result<()> {
+    for p in paths {
+        if imp::to_trash(std::slice::from_ref(p), false).is_err() && p.exists() {
+            std::fs::remove_file(p)?;
+        }
+    }
+    Ok(())
 }
 
 #[cfg(windows)]
@@ -19,7 +32,9 @@ mod imp {
         FOF_WANTNUKEWARNING, FO_DELETE, SHFILEOPSTRUCTW,
     };
 
-    pub fn to_trash(paths: &[PathBuf]) -> std::io::Result<()> {
+    /// `warn`: ask before destroying a file the Recycle Bin can't take. Without it, Windows
+    /// deletes such a file for good without a word (retention wants exactly that).
+    pub fn to_trash(paths: &[PathBuf], warn: bool) -> std::io::Result<()> {
         for p in paths {
             // pFrom is a list of NUL-terminated paths ending with an extra NUL.
             let mut from: Vec<u16> = p.as_os_str().encode_wide().collect();
@@ -29,12 +44,11 @@ mod imp {
             from.extend([0, 0]);
             // ALLOWUNDO sends the file to the Recycle Bin. NOCONFIRMATION skips the "are you
             // sure" (the window already asked); WANTNUKEWARNING brings back a prompt when the
-            // file cannot be recycled and would be destroyed, so that is never silent.
-            let flags = FOF_ALLOWUNDO
-                | FOF_NOCONFIRMATION
-                | FOF_NOERRORUI
-                | FOF_SILENT
-                | FOF_WANTNUKEWARNING;
+            // file cannot be recycled and would be destroyed, so a Library delete is never silent.
+            let mut flags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT;
+            if warn {
+                flags |= FOF_WANTNUKEWARNING;
+            }
             let mut op = SHFILEOPSTRUCTW {
                 wFunc: FO_DELETE,
                 pFrom: PCWSTR(from.as_ptr()),
@@ -61,7 +75,8 @@ mod imp {
 mod imp {
     use std::path::PathBuf;
 
-    pub fn to_trash(paths: &[PathBuf]) -> std::io::Result<()> {
+    /// Off Windows nothing ever asks, so `warn` changes nothing.
+    pub fn to_trash(paths: &[PathBuf], _warn: bool) -> std::io::Result<()> {
         let dir = super::home_trash().ok_or(std::io::ErrorKind::NotFound)?;
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -226,5 +241,38 @@ mod tests {
         assert!(trash_into(&trash, &missing, 0).is_err());
         assert!(!trash.join("info/gone.md.trashinfo").exists());
         std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    // The only test in this crate that touches XDG_DATA_HOME, so changing it here is safe.
+    #[cfg(unix)]
+    #[test]
+    fn retention_trashes_when_it_can_and_deletes_when_it_cannot() {
+        let dir = std::env::temp_dir().join(format!("sprk-retain-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let base = dir.as_path();
+        let data = base.join("data");
+        let kept = base.join("kept.md");
+        std::fs::write(&kept, "x").unwrap();
+        std::env::set_var("XDG_DATA_HOME", &data);
+        recycle_or_delete(std::slice::from_ref(&kept)).unwrap();
+        assert!(!kept.exists());
+        assert!(
+            data.join("Trash/files/kept.md").exists(),
+            "went to the trash"
+        );
+
+        // A trash that can't be made (its parent is a file) means the file is deleted instead.
+        let blocker = base.join("blocker");
+        std::fs::write(&blocker, "not a folder").unwrap();
+        let gone = base.join("gone.md");
+        std::fs::write(&gone, "x").unwrap();
+        std::env::set_var("XDG_DATA_HOME", &blocker);
+        let r = recycle_or_delete(std::slice::from_ref(&gone));
+        std::env::remove_var("XDG_DATA_HOME");
+        r.unwrap();
+        assert!(!gone.exists());
+        assert!(to_trash(&[base.join("missing.md")]).is_err());
+        std::fs::remove_dir_all(base).unwrap();
     }
 }

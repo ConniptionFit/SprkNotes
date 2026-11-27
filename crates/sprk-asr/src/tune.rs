@@ -5,6 +5,11 @@
 //! Detection is cheap and needs no extra libraries. An AI accelerator (NPU) is *detected* and
 //! reported, but v1 always decodes on the CPU: no NPU route runs our English models today.
 //! The numbers from the self-check decide, not a table of chip names that goes stale.
+//!
+//! Desktop speed check (SPEC 16.8a): Windows laptops time a short decode of the built-in clip
+//! ([`speed_clip`]) at a couple of thread counts ([`speed_candidates`]) once per model and
+//! machine, and keep the fewest threads that are about as fast as the fastest
+//! ([`pick_threads`]). Any error keeps [`default_threads`].
 
 /// The two model tiers. One model family per tier, downloaded, never bundled (ADR-005).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -174,6 +179,130 @@ pub fn big_cores_from_max_freqs(freqs_khz: &[u64]) -> u32 {
     freqs_khz.iter().filter(|&&f| f >= cutoff).count() as u32
 }
 
+/// Decode threads before any speed check: the logical cores, capped at 4.
+pub fn default_threads() -> u32 {
+    std::thread::available_parallelism()
+        .map(|n| n.get().min(4) as u32)
+        .unwrap_or(2)
+}
+
+/// `SPRK_ASR_THREADS` when it is a positive number. It wins over the speed check, for
+/// benchmarking on dev machines.
+pub fn env_threads() -> Option<u32> {
+    std::env::var("SPRK_ASR_THREADS")
+        .ok()
+        .and_then(|v| v.trim().parse::<u32>().ok())
+        .filter(|n| *n > 0)
+}
+
+/// Most threads the speed check tries. More only adds heat for one stream at a time.
+pub const SPEED_MAX_THREADS: u32 = 8;
+
+/// Thread counts the speed check times on a machine with `cores` logical cores: half the
+/// default, the default, and twice the default, never above the cores or
+/// [`SPEED_MAX_THREADS`]. Ascending, no repeats.
+pub fn speed_candidates(cores: u32) -> Vec<u32> {
+    let cores = cores.max(1);
+    let d = cores.min(4);
+    let mut v = vec![(d / 2).max(1), d, (d * 2).min(cores).min(SPEED_MAX_THREADS)];
+    v.sort_unstable();
+    v.dedup();
+    v
+}
+
+/// One speed check timing: decode threads and the real-time factor (seconds spent decoding per
+/// second of audio; lower is faster).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ThreadTiming {
+    pub threads: u32,
+    pub rtf: f32,
+}
+
+impl ThreadTiming {
+    /// How many times faster than real time, as shown in Settings ("3.2x real time").
+    pub fn times_real_time(&self) -> f32 {
+        if self.rtf > 0.0 {
+            1.0 / self.rtf
+        } else {
+            0.0
+        }
+    }
+}
+
+/// Within this share of the fastest timing, fewer threads win: the same speed with fewer
+/// cores busy leaves room for the rest of the PC and runs cooler.
+pub const THREADS_TOLERANCE: f32 = 0.10;
+
+/// The speed check's choice: the fewest threads whose timing is within [`THREADS_TOLERANCE`]
+/// of the fastest. Timings that are not a positive finite number are ignored; `None` when none
+/// is left (the caller keeps [`default_threads`]).
+pub fn pick_threads(timings: &[ThreadTiming]) -> Option<ThreadTiming> {
+    let valid: Vec<ThreadTiming> = timings
+        .iter()
+        .copied()
+        .filter(|t| t.threads > 0 && t.rtf.is_finite() && t.rtf > 0.0)
+        .collect();
+    let best = valid.iter().map(|t| t.rtf).fold(f32::INFINITY, f32::min);
+    valid
+        .into_iter()
+        .filter(|t| t.rtf <= best * (1.0 + THREADS_TOLERANCE))
+        .min_by_key(|t| t.threads)
+}
+
+/// Run the speed check: `time` decodes the clip with that many threads and returns the
+/// real-time factor, or `None` when that try failed (or was called off). Each candidate is
+/// tried once, in order; the result is [`pick_threads`] of what was measured.
+pub fn speed_check(
+    candidates: &[u32],
+    mut time: impl FnMut(u32) -> Option<f32>,
+) -> Option<ThreadTiming> {
+    let timings: Vec<ThreadTiming> = candidates
+        .iter()
+        .filter_map(|&threads| time(threads).map(|rtf| ThreadTiming { threads, rtf }))
+        .collect();
+    pick_threads(&timings)
+}
+
+/// The built-in speed check clip: `seconds` of speech-like sound at 16 kHz (voiced tones with a
+/// moving pitch, pulsed at syllable rate, short pauses between "words"). Made in code, the
+/// same every time; no file and no real voice.
+pub fn speed_clip(seconds: f32) -> Vec<f32> {
+    let n = (seconds.max(0.0) * 16_000.0) as usize;
+    (0..n)
+        .map(|i| {
+            let t = i as f32 / 16_000.0;
+            // Pitch drifts between about 100 and 160 Hz, like a speaking voice.
+            let f0 = 130.0 + 30.0 * (std::f32::consts::TAU * 0.7 * t).sin();
+            let phase = std::f32::consts::TAU * f0 * t;
+            let voice = (1..=8)
+                .map(|h| (phase * h as f32).sin() / h as f32)
+                .sum::<f32>();
+            // About four syllables a second; every fourth beat is a pause.
+            let beat = (t * 4.0).fract();
+            let gap = ((t * 4.0) as u32) % 4 == 3;
+            let env = if gap {
+                0.0
+            } else {
+                (std::f32::consts::PI * beat).sin()
+            };
+            0.15 * env * voice
+        })
+        .collect()
+}
+
+/// Real-time factor of one decode of `clip`: decode once to warm the engine up, then time a
+/// second decode. `None` when a decode fails or the clip is empty.
+pub fn time_decode(engine: &mut dyn crate::Engine, clip: &[f32]) -> Option<f32> {
+    if clip.is_empty() {
+        return None;
+    }
+    engine.transcribe(clip).ok()?;
+    let started = std::time::Instant::now();
+    engine.transcribe(clip).ok()?;
+    let spent = started.elapsed().as_secs_f32();
+    Some(spent / (clip.len() as f32 / 16_000.0))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -297,5 +426,101 @@ mod tests {
         ];
         assert_eq!(big_cores_from_max_freqs(&f), 4);
         assert_eq!(big_cores_from_max_freqs(&[]), 0);
+    }
+
+    #[test]
+    fn speed_candidates_halve_and_double_the_default_within_the_cores() {
+        assert_eq!(speed_candidates(12), vec![2, 4, 8]);
+        assert_eq!(speed_candidates(8), vec![2, 4, 8]);
+        assert_eq!(speed_candidates(6), vec![2, 4, 6]);
+        assert_eq!(speed_candidates(4), vec![2, 4]);
+        assert_eq!(speed_candidates(2), vec![1, 2]);
+        assert_eq!(speed_candidates(1), vec![1]);
+        assert_eq!(speed_candidates(0), vec![1]);
+    }
+
+    fn t(threads: u32, rtf: f32) -> ThreadTiming {
+        ThreadTiming { threads, rtf }
+    }
+
+    #[test]
+    fn the_fastest_wins_when_it_is_clearly_faster() {
+        let got = pick_threads(&[t(2, 0.5), t(4, 0.3), t(8, 0.2)]);
+        assert_eq!(got, Some(t(8, 0.2)));
+    }
+
+    #[test]
+    fn fewer_threads_win_when_about_as_fast() {
+        // 8 threads is only 5% faster than 4: keep 4.
+        let got = pick_threads(&[t(2, 0.5), t(4, 0.21), t(8, 0.2)]);
+        assert_eq!(got, Some(t(4, 0.21)));
+        // More threads were slower (efficiency cores joined in).
+        let got = pick_threads(&[t(2, 0.4), t(4, 0.25), t(8, 0.33)]);
+        assert_eq!(got, Some(t(4, 0.25)));
+    }
+
+    #[test]
+    fn bad_timings_are_ignored_and_nothing_left_means_no_choice() {
+        let got = pick_threads(&[t(2, f32::NAN), t(4, 0.0), t(8, 0.3), t(0, 0.1)]);
+        assert_eq!(got, Some(t(8, 0.3)));
+        assert_eq!(pick_threads(&[t(2, f32::INFINITY), t(4, -1.0)]), None);
+        assert_eq!(pick_threads(&[]), None);
+    }
+
+    #[test]
+    fn speed_check_times_each_candidate_once_and_skips_failures() {
+        let mut seen = Vec::new();
+        let got = speed_check(&[2, 4, 8], |n| {
+            seen.push(n);
+            match n {
+                2 => Some(0.6),
+                4 => None, // that load failed
+                _ => Some(0.25),
+            }
+        });
+        assert_eq!(seen, vec![2, 4, 8]);
+        assert_eq!(got, Some(t(8, 0.25)));
+        assert_eq!(speed_check(&[2, 4], |_| None), None);
+    }
+
+    #[test]
+    fn times_real_time_is_the_inverse_of_the_factor() {
+        assert!((t(4, 0.3125).times_real_time() - 3.2).abs() < 1e-4);
+        assert_eq!(t(4, 0.0).times_real_time(), 0.0);
+    }
+
+    #[test]
+    fn the_clip_is_the_same_every_time_and_has_sound_and_pauses() {
+        let a = speed_clip(3.0);
+        assert_eq!(a.len(), 48_000);
+        assert_eq!(a, speed_clip(3.0));
+        let peak = a.iter().fold(0.0f32, |m, v| m.max(v.abs()));
+        assert!(peak > 0.1 && peak < 1.0, "{peak}");
+        // The fourth beat of each second (0.75 s to 1.0 s) is silent.
+        assert!(a[12_100..15_900].iter().all(|v| *v == 0.0));
+    }
+
+    struct Counting(u32);
+    impl crate::Engine for Counting {
+        fn transcribe(&mut self, _s: &[f32]) -> Result<Vec<crate::Segment>, crate::AsrError> {
+            self.0 += 1;
+            Ok(vec![])
+        }
+    }
+    struct Failing;
+    impl crate::Engine for Failing {
+        fn transcribe(&mut self, _s: &[f32]) -> Result<Vec<crate::Segment>, crate::AsrError> {
+            Err(crate::AsrError::Rejected)
+        }
+    }
+
+    #[test]
+    fn time_decode_warms_up_first_and_reports_failures() {
+        let mut e = Counting(0);
+        let rtf = time_decode(&mut e, &speed_clip(0.5));
+        assert_eq!(e.0, 2, "one warm-up decode, one timed");
+        assert!(rtf.is_some_and(|r| r >= 0.0 && r.is_finite()));
+        assert_eq!(time_decode(&mut Failing, &speed_clip(0.5)), None);
+        assert_eq!(time_decode(&mut Counting(0), &[]), None);
     }
 }
