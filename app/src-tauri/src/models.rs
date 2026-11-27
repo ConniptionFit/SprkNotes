@@ -20,7 +20,7 @@ pub fn user_data_dir() -> Option<PathBuf> {
 }
 
 /// bundled (next to the exe), machine (`%ProgramData%`), user (`%APPDATA%`).
-fn roots() -> sprk_core::models::Roots {
+pub fn roots() -> sprk_core::models::Roots {
     sprk_core::models::Roots {
         bundled: std::env::current_exe()
             .ok()

@@ -15,11 +15,22 @@ sprk-models = { path = "../sprk-models" }
 sprk-pipeline = { path = "../sprk-pipeline" }
 sprk-transcript = { path = "../sprk-transcript" }
 
+[target.'cfg(not(any(windows, target_os = "android")))'.dependencies]
+# Model download on Linux: https only, the system certificate store.
+ureq = { version = "2", default-features = false, features = ["tls", "native-certs"], optional = true }
+
+[target.'cfg(target_os = "android")'.dependencies]
+# Model download on phones: https only, the bundled Mozilla roots (see src/net.rs).
+ureq = { version = "2", default-features = false, features = ["tls"], optional = true }
+
 [features]
 # The speech engine (sherpa-onnx). Off by default so `cargo test --workspace` needs no native
 # libs; without it `load_active` reports that this build has no engine.
 engine = ["sprk-asr/sherpa-static"]
 engine-shared = ["sprk-asr/sherpa-shared"]
+# The https client for model downloads (src/net.rs). Off by default so the workspace checks need
+# no C compiler for its TLS library; the app shells turn it on.
+https = ["dep:ureq"]
 
 [dev-dependencies]
 serde_json.workspace = true

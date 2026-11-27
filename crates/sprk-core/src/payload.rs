@@ -14,6 +14,8 @@ pub mod event {
     pub const LEVELS: &str = "source-levels";
     pub const CAPTION: &str = "caption";
     pub const PHASE: &str = "session-phase";
+    /// Model download progress ([`crate::download::Progress`]).
+    pub const MODEL_DOWNLOAD: &str = "model-download";
 }
 
 /// A committed transcript line.

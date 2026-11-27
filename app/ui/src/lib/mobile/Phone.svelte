@@ -7,7 +7,7 @@
   import { prefs, setPref, type Theme } from "../prefs.svelte";
   import Segmented from "../Segmented.svelte";
   import SourceButton from "../SourceButton.svelte";
-  import type { Line, Phase, Status } from "../types";
+  import type { DownloadProgress, Line, ModelStatus, Phase, Status } from "../types";
   import { CLOCK_START, elapsed, hms, hold, run, type Clock } from "./clock";
 
   let api: Backend | null = null;
@@ -25,10 +25,19 @@
   let now = $state(Date.now());
   let list = $state<HTMLDivElement>();
   let follow = true;
+  // The speech model is downloaded once, on first use (about 480 MB), then stays on the phone.
+  let model = $state<ModelStatus | null>(null);
+  let progress = $state<DownloadProgress | null>(null);
 
   const active = $derived(status !== "ready");
   const busy = $derived(phase.phase !== "idle");
   const clockText = $derived(hms(elapsed(clock, now)));
+  const needsModel = $derived(model !== null && !model.ready);
+  const downloading = $derived(model?.busy === true || (progress !== null && progress.stage !== "done" && progress.stage !== "error"));
+  const percent = $derived(progress?.total ? Math.min(100, Math.round((progress.done / progress.total) * 100)) : null);
+  const progressText = $derived(
+    progress?.stage === "checking" ? "Checking the download…" : progress?.stage === "verifying" ? "Checking the model…" : percent !== null ? `Downloading… ${percent}%` : "Downloading…",
+  );
   const loadingText = $derived(
     phase.phase === "loading" ? `Loading ${phase.model ?? "the model"}…` : phase.phase === "ending" ? "Saving the transcript…" : "",
   );
@@ -83,6 +92,16 @@
     );
     offs.push(await b.onPhase((p) => (phase = p)));
     offs.push(await b.onProblem((kind) => say(problemText(kind))));
+    offs.push(
+      await b.onModelDownload((p) => {
+        progress = p;
+        if (p.stage === "done" || p.stage === "error") {
+          if (p.error) say(p.error);
+          refreshModel();
+        }
+      }),
+    );
+    refreshModel();
     version = await import("@tauri-apps/api/app").then((m) => m.getVersion()).catch(() => "");
     ticker = setInterval(() => (now = Date.now()), 500);
   });
@@ -101,6 +120,24 @@
     try {
       await api?.start(name.trim());
     } catch (e) {
+      say(String(e));
+    }
+  }
+
+  async function refreshModel() {
+    try {
+      model = (await api?.modelStatus()) ?? null;
+    } catch {
+      model = null;
+    }
+  }
+
+  async function download() {
+    progress = { stage: "checking", done: 0 };
+    try {
+      await api?.modelDownload();
+    } catch (e) {
+      progress = null;
       say(String(e));
     }
   }
@@ -151,7 +188,21 @@
 
   {#if screen === "live"}
     <div class="lines" bind:this={list} onscroll={onScroll} aria-live="polite">
-      {#if lines.length === 0 && !live}
+      {#if needsModel && !active}
+        <div class="model">
+          <p class="lbl">Get the speech model</p>
+          {#if downloading}
+            <p class="sub" role="status">{progressText}</p>
+            <div class="track" aria-hidden="true"><div class="fill" style:width={`${percent ?? 0}%`}></div></div>
+            <p class="sub">Keep SprkNotes open until it finishes.</p>
+          {:else if model?.downloadEnabled}
+            <p class="sub">SprkNotes turns speech into text on this phone. It needs a one-time download of about 480 MB. Use Wi-Fi.</p>
+            <button class="pill solid" onclick={download}>Download</button>
+          {:else}
+            <p class="sub">Your organization installs the speech model. Ask your administrator to set it up.</p>
+          {/if}
+        </div>
+      {:else if lines.length === 0 && !live}
         <p class="empty">{loadingText || "Lines appear here as people speak."}</p>
       {/if}
       {#each lines as l (l.id)}
@@ -179,7 +230,7 @@
         <button class="pill ghost" disabled={busy} onclick={() => act(() => api!.end())}>End</button>
       {/if}
       {#if status === "ready"}
-        <button class="round" aria-label="Start" disabled={busy} onclick={start}>
+        <button class="round" aria-label="Start" disabled={busy || needsModel} onclick={start}>
           <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6.5 4l10 6-10 6z" /></svg>
         </button>
       {:else if status === "transcribing"}
@@ -256,6 +307,12 @@
   .clock { flex: 1; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--muted); }
   .clock.rec { color: var(--live); }
   .pill { height: 44px; padding: 0 16px; border-radius: 999px; font: inherit; font-weight: 600; font-size: 16px; }
+  .solid { background: var(--accent); color: var(--on-accent); border: none; align-self: flex-start; }
+  .model { margin: auto 0; display: flex; flex-direction: column; gap: 8px; padding: 16px; border-radius: 16px; background: var(--surface); border: 1px solid var(--border); }
+  .model .lbl { margin: 0; font-weight: 650; }
+  .model .sub { margin: 0; }
+  .track { height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+  .fill { height: 100%; background: var(--accent); transition: width 0.3s; }
   .ghost { background: transparent; border: 1px solid var(--border); color: var(--text); }
   .round { width: 52px; height: 52px; border-radius: 50%; border: none; background: var(--accent); color: var(--on-accent); display: inline-flex; align-items: center; justify-content: center; flex: none; }
   .round svg { width: 20px; height: 20px; fill: currentColor; }

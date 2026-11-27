@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Fetch the prebuilt sherpa-onnx static libs for the targets we build (dev tooling only).
 # Nothing here is committed or shipped: libs go to $SPRK_CACHE (default ~/.cache/sprknotes).
-# Usage: scripts/fetch-sherpa.sh [linux-x64|win-x64|win-arm64|win-x64-shared|win-arm64-shared ...]
+# Usage: scripts/fetch-sherpa.sh [linux-x64|win-x64|win-arm64|win-x64-shared|win-arm64-shared|android-arm64 ...]
 #   (default: linux-x64 win-x64 win-arm64-shared)
 # Then build with, for example:
 #   SHERPA_ONNX_LIB_DIR="$(scripts/fetch-sherpa.sh --print linux-x64)" cargo test -p sprk-asr --features sherpa
@@ -17,7 +17,8 @@ archive() {
     win-arm64) echo "sherpa-onnx-v$VER-win-arm64-static-MT-Release-lib" ;;
     win-x64-shared)   echo "sherpa-onnx-v$VER-win-x64-shared-MT-Release-lib" ;;
     win-arm64-shared) echo "sherpa-onnx-v$VER-win-arm64-shared-MT-Release-lib" ;;
-    *) echo "unknown target '$1' (linux-x64|win-x64|win-arm64|win-x64-shared|win-arm64-shared)" >&2; exit 2 ;;
+    android-arm64) echo "sherpa-onnx-v$VER-android" ;;
+    *) echo "unknown target '$1' (linux-x64|win-x64|win-arm64|win-x64-shared|win-arm64-shared|android-arm64)" >&2; exit 2 ;;
   esac
 }
 
@@ -28,6 +29,28 @@ targets=("$@"); [ ${#targets[@]} -eq 0 ] && targets=(linux-x64 win-x64 win-arm64
 mkdir -p "$CACHE"
 for t in "${targets[@]}"; do
   name=$(archive "$t"); dir="$CACHE/$name"
+  if [ "$t" = android-arm64 ]; then
+    # Phones (ADR-015 Decision 3): arm64 only, and only the two libraries the C API needs
+    # (libsherpa-onnx-c-api.so and libonnxruntime.so, about 26 MB before APK compression).
+    # The archive also carries JNI and C++ wrappers and three other ABIs we do not ship.
+    dir="$CACHE/sherpa-onnx-v$VER-android-arm64"
+    if [ ! -d "$dir/lib" ]; then
+      [ $print_only -eq 1 ] && { echo "not fetched: run scripts/fetch-sherpa.sh $t" >&2; exit 1; }
+      echo "fetching $name.tar.bz2" >&2
+      curl -fL --retry 3 -o "$CACHE/$name.tar.bz2.part" "$BASE/$name.tar.bz2"
+      mv "$CACHE/$name.tar.bz2.part" "$CACHE/$name.tar.bz2"
+      sha256sum "$CACHE/$name.tar.bz2" >&2
+      tmp="$CACHE/$name.extract"; rm -rf "$tmp"; mkdir -p "$tmp"
+      tar -xjf "$CACHE/$name.tar.bz2" -C "$tmp"
+      mkdir -p "$dir/lib"
+      for so in libsherpa-onnx-c-api.so libonnxruntime.so; do
+        cp "$(find "$tmp" -path '*arm64-v8a*' -name "$so" | head -1)" "$dir/lib/"
+      done
+      rm -rf "$tmp" "$CACHE/$name.tar.bz2"
+    fi
+    [ $print_only -eq 1 ] && echo "$dir/lib" || echo "$t: $dir/lib" >&2
+    continue
+  fi
   if [ ! -d "$dir/lib" ]; then
     [ $print_only -eq 1 ] && { echo "not fetched: run scripts/fetch-sherpa.sh $t" >&2; exit 1; }
     echo "fetching $name.tar.bz2" >&2

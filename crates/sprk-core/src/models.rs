@@ -28,7 +28,7 @@ pub struct Roots {
     pub user: Option<PathBuf>,
 }
 
-fn stores(r: &Roots) -> (Option<ModelStore>, Option<ModelStore>, Option<ModelStore>) {
+pub(crate) fn stores(r: &Roots) -> (Option<ModelStore>, Option<ModelStore>, Option<ModelStore>) {
     let bundled = r
         .bundled
         .clone()

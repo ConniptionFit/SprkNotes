@@ -4336,6 +4336,7 @@ dependencies = [
  "sprk-models",
  "sprk-pipeline",
  "sprk-transcript",
+ "ureq",
 ]
 
 [[package]]
@@ -4413,7 +4414,6 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-single-instance",
- "ureq",
  "windows 0.58.0",
 ]
 

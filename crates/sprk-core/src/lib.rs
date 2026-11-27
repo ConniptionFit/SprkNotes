@@ -5,7 +5,11 @@
 //! Platform pieces (the capture backend, call context, file locations) come in from the shell.
 
 pub mod clock;
+pub mod download;
 pub mod models;
+/// The https client for model downloads (WinHTTP stays in the Windows shell).
+#[cfg(all(feature = "https", not(windows)))]
+pub mod net;
 pub mod payload;
 pub mod session;
 pub mod settings;

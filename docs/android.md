@@ -1,8 +1,8 @@
 # SprkNotes for Android
 
 > **Status: in development.** There is no Android release yet. Nothing on this page installs a finished app today.
-> The conversation screen, Settings and the phone microphone are built; the speech engine, the model download and the
-> Library are still to come, so a test build cannot transcribe yet ([ADR-015](adr/015-android.md)).
+> The conversation screen, Settings, the phone microphone, the speech engine and the model download are built; the
+> Library, the Light model tier and a test on a real phone are still to come ([ADR-015](adr/015-android.md)).
 > Test builds for developers are covered in [Test builds](#test-builds-developers). An Android build is published
 > only with the owner's approval.
 
@@ -13,7 +13,7 @@ Transcription runs on the phone only. Nothing leaves the device except model and
 | | |
 |---|---|
 | Phones | Android 7.0 (API 24) or newer, 64-bit Arm (arm64-v8a). Samsung Galaxy phones from the last several years qualify. |
-| App size | About 13.5 MB today (measured 2026-11-25, before the speech engine). Expected 25 to 40 MB once the engine is in. |
+| App size | About 13.5 MB before the speech engine (measured 2026-11-25). The engine adds two libraries (26 MB, about 10 MB compressed), so about 23 MB is expected; CI prints the measured size on every build. |
 | Models | Downloaded separately, never inside the app: Parakeet (about 460 MB download) on phones with 8 GB RAM or more that pass a short self-check, Whisper base.en (154 MB) on the rest. |
 | Audio source | The phone's microphone only (built-in, wired or Bluetooth). Android does not let apps capture other apps' call audio, so there is no Me and Others split and no speaker labels. |
 | Look | Conversation layout, dark by default, the same font, icons and sound meter as the desktop app. |
@@ -33,7 +33,7 @@ This is how IT will install SprkNotes on company phones once a release exists.
    Whether NinjaOne can push a private APK to Samsung phones is still being confirmed (ADR-015 open item 2).
 3. **Grant the microphone permission** in the app's policy so people are not prompted, or let each person allow it on
    first start. SprkNotes will ask for the microphone only; it needs no contacts, storage, location or phone permissions.
-4. **Provide the model.** Either let people press **Download model** in Settings (needs https access to the model host
+4. **Provide the model.** Either let people press **Download** on the main screen (needs https access to the model host
    or your mirror), or push the `.sprkmodel` pack with the MDM so phones never download it. Admin settings such as
    blocking model downloads will follow the same names as the [desktop policy keys](deployment.md#registry-policy),
    delivered as Android managed configuration.
@@ -44,16 +44,20 @@ For a pilot, a single signed APK can be installed by hand:
 1. Copy `SprkNotes_<version>_arm64.apk` to the phone and check its checksum as above.
 2. Open it from **My Files** (Samsung) or **Files**. Android asks once to allow installs from that app: choose
    **Settings**, turn on **Allow from this source**, then go back and choose **Install**.
-3. Open SprkNotes, allow the microphone, and press **Download model** in Settings.
+3. Open SprkNotes, allow the microphone, and press **Download** under **Get the speech model**.
 4. Turn **Allow from this source** off again afterwards.
 
 Company phones often block installs from unknown sources; use the managed path above for those.
 
 ## First start
 1. Open SprkNotes and allow the microphone.
-2. The app reads the phone's hardware and runs a 3-second self-check, then picks the Full or Light model tier and the
-   number of threads. Settings shows the result as **Tuned for this phone**, with **Re-check** to run it again.
-3. Press **Download model** if no model was pushed, then press **Start**. Lines appear as people speak.
+2. If no model was pushed, the main screen shows **Get the speech model**. Press **Download** (about 480 MB, once;
+   use Wi-Fi and keep SprkNotes open until it finishes). The download is checked against its checksums exactly as on
+   the desktop ([ADR-005](adr/005-model-download.md)). When your admin blocks model downloads, the card says so instead.
+3. Press **Start**. Lines appear as people speak.
+
+Planned: the app will read the phone's hardware and run a 3-second self-check, then pick the Full or Light model tier
+and the number of threads. Today every phone gets the Full tier (Parakeet).
 
 ## Where things live
 | What | Where |
@@ -73,7 +77,13 @@ and the app shell build for phones. CI does not upload or publish it. To build a
 1. Install the Android SDK and NDK, Java 17, Node 22 and Rust with the `aarch64-linux-android` target, then the Tauri
    CLI: `cargo install tauri-cli --version '^2' --locked`.
 2. Set `ANDROID_HOME` to the SDK and `NDK_HOME` to the NDK folder.
-3. Build:
+3. Fetch the speech engine libraries (arm64 only, two files) and point the build at them. Without this the build
+   downloads the whole sherpa-onnx Android archive and copies extra libraries into the APK.
+   ```bash
+   bash scripts/fetch-sherpa.sh android-arm64
+   export SHERPA_ONNX_LIB_DIR="$(bash scripts/fetch-sherpa.sh --print android-arm64)"
+   ```
+4. Build:
    ```bash
    (cd app/ui && npm ci)
    cd app
@@ -82,7 +92,7 @@ and the app shell build for phones. CI does not upload or publish it. To build a
    The Android project is kept in `app/src-tauri/gen/android`, so there is no `init` step. Do not run
    `cargo tauri android init` over it: that would drop the microphone permission. The APK lands in
    `app/src-tauri/gen/android/app/build/outputs/apk/universal/debug/`.
-4. On the phone, turn on **Developer options** and **USB debugging**, connect it, and run
+5. On the phone, turn on **Developer options** and **USB debugging**, connect it, and run
    `adb install -r app-universal-debug.apk`. Or run `cargo tauri android dev` to build, install and open it in one step.
 
 A debug build is about 150 MB because it keeps debug symbols; release builds are about a tenth of that. Debug builds

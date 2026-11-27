@@ -39,11 +39,18 @@ jobs:
             ~/.cargo/git
             ~/.cargo/bin/cargo-tauri
             app/src-tauri/target
+            ~/.cache/sprknotes/sherpa
           key: android-${{ hashFiles('app/src-tauri/Cargo.lock', 'Cargo.lock') }}
       # The cargo-installed CLI, not the npm one: Gradle calls the CLI back from app/src-tauri,
       # where there is no package.json, and `cargo tauri` works from any folder.
       - name: Tauri CLI
         run: command -v cargo-tauri || cargo install tauri-cli --version '^2' --locked
+      # The speech engine (ADR-015 Decision 3): only the two arm64 libraries the phone needs, so
+      # the build copies just those into jniLibs instead of the whole sherpa-onnx Android archive.
+      - name: Speech engine libraries
+        run: |
+          bash scripts/fetch-sherpa.sh android-arm64
+          echo "SHERPA_ONNX_LIB_DIR=$(bash scripts/fetch-sherpa.sh --print android-arm64)" >> "$GITHUB_ENV"
       - name: UI dependencies
         working-directory: app/ui
         run: npm ci
@@ -56,3 +63,4 @@ jobs:
         run: |
           cargo tauri android build --apk --target aarch64 --ci
           find src-tauri/gen/android -name '*.apk' -exec ls -l {} \;
+          find src-tauri/gen/android -name '*release*.apk' -exec unzip -l {} 'lib/*' \;

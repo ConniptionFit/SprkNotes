@@ -24,7 +24,7 @@ sprk-assistant = { path = "../../crates/sprk-assistant" }
 sprk-asr = { path = "../../crates/sprk-asr" }
 sprk-audio = { path = "../../crates/sprk-audio" }
 sprk-config = { path = "../../crates/sprk-config" }
-sprk-core = { path = "../../crates/sprk-core" }
+sprk-core = { path = "../../crates/sprk-core", features = ["https"] }
 sprk-context = { path = "../../crates/sprk-context" }
 sprk-handoff = { path = "../../crates/sprk-handoff" }
 sprk-models = { path = "../../crates/sprk-models" }
@@ -50,11 +50,12 @@ sprk-audio = { path = "../../crates/sprk-audio", features = ["cpal-backend"] }
 [target.'cfg(target_os = "android")'.dependencies]
 # Phone capture: the microphone through AAudio (cpal's oboe host). No loopback (ADR-015).
 sprk-audio = { path = "../../crates/sprk-audio", features = ["cpal-backend"] }
+# The speech engine is always on for phones: Android links sherpa-onnx as shared libraries,
+# which its build copies into gen/android jniLibs for the APK (ADR-015 Decision 3).
+sprk-asr = { path = "../../crates/sprk-asr", features = ["sherpa-shared"] }
+sprk-core = { path = "../../crates/sprk-core", features = ["engine-shared"] }
 
 [target.'cfg(windows)'.dependencies]
 # WinHTTP: the model download uses the system proxy and certificate store (ADR-005).
 windows = { version = "0.58", features = ["Win32_Foundation", "Win32_Networking_WinHttp", "Win32_System_SystemInformation"] }
 
-[target.'cfg(not(windows))'.dependencies]
-# Model download off Windows: https only, system certificate store.
-ureq = { version = "2", default-features = false, features = ["tls", "native-certs"] }
