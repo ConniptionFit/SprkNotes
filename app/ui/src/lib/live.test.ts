@@ -20,6 +20,13 @@ describe("locked rows", () => {
       [1, "Another one."],
     ]);
   });
+  it("every row has a time: the utterance's own, else the session time when it locked", () => {
+    const r = new Rows();
+    r.caption(cap({ utt: 1, sealed: ["Still settling."] }), 0, "00:00:07");
+    r.caption(cap({ utt: 2, final: true, text: "Done.", t: "00:00:09" }), 100, "00:00:11");
+    r.caption(cap({ utt: 3, final: true, text: "No time given." }), 200, "00:00:12");
+    expect(r.rows.map((x) => x.t)).toEqual(["00:00:07", "00:00:09", "00:00:12"]);
+  });
   it("a committed line removes the rows it covers and keeps unrelated ones", () => {
     const r = new Rows();
     r.caption(cap({ utt: 1, sealed: ["Now the insurer needs to verify.", "Something else entirely."] }), 0);

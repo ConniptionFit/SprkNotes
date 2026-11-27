@@ -10,7 +10,7 @@
   import Retention from "./Retention.svelte";
   import CustomWords from "./CustomWords.svelte";
   import Managed from "./Managed.svelte";
-  import { isLocked, prefs, setPref, type CaptionWho, type CaptionDelay, type Theme } from "./prefs.svelte";
+  import { isLocked, prefs, setPref, type CaptionWho, type CaptionDelay, type MessageTimes, type Theme } from "./prefs.svelte";
   import { comboFromEvent } from "./hotkey";
   import { hotkeyState } from "./hotkeyState.svelte";
 
@@ -169,6 +169,22 @@
           <span class="sr-only">Show the live line in the transcript window</span>
         </label>
         </Managed>
+      </div>
+      <div class="row">
+        <div class="what">
+          <p class="plain">Message times</p>
+          <p class="help">When each line's time shows in the transcript window.</p>
+        </div>
+        <Segmented
+          name="message-times"
+          label="When each line's time shows in the transcript window"
+          value={prefs.messageTimes}
+          options={[
+            { value: "hover", text: "On hover" },
+            { value: "always", text: "Always" },
+          ]}
+          onchange={(v: MessageTimes) => setPref("messageTimes", v)}
+        />
       </div>
       <div class="row">
         <div class="what">
