@@ -57,9 +57,10 @@ mod phone {
         fn problem(&self, kind: &str) {
             let _ = self.0.emit(event::PROBLEM, kind);
         }
-        /// No caption overlay on a phone: the conversation view already shows every line.
+        /// The conversation view shows the words as they are spoken, and the phone's only voice
+        /// is the microphone ("Me"), so it always wants Me's live text.
         fn captions_wanted(&self) -> (bool, bool) {
-            (false, false)
+            (true, true)
         }
         fn dropped(&self, speaker: &'static str, text: &str) {
             let _ = self.0.emit(
@@ -96,6 +97,8 @@ mod phone {
                 resume_session,
                 rename_session,
                 set_source,
+                list_devices,
+                set_device,
                 end_session,
             ])
             .run(tauri::generate_context!());
@@ -177,6 +180,25 @@ mod phone {
             Source::Mic => state.set_source(Source::Mic, on),
             Source::System => Ok(()),
         }
+    }
+
+    /// Microphones the phone offers (built-in, wired or Bluetooth headsets). None for "Others".
+    #[tauri::command]
+    fn list_devices(source: String) -> Result<Vec<String>, String> {
+        Ok(match source_of(&source)? {
+            Source::Mic => CpalBackend::default().devices(Source::Mic),
+            Source::System => Vec::new(),
+        })
+    }
+
+    /// Pick the microphone, or None for the phone's default. Takes effect within a second.
+    #[tauri::command]
+    fn set_device(
+        state: State<Sessions>,
+        source: String,
+        name: Option<String>,
+    ) -> Result<(), String> {
+        state.set_device(source_of(&source)?, name)
     }
 
     /// Off the main thread: ending waits for the transcript file to be finalized.

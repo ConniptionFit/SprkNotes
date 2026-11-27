@@ -1,7 +1,8 @@
 # SprkNotes for Android
 
-> **Status: in development.** There is no Android release yet. Nothing on this page installs a finished app today:
-> the phone screens, the phone microphone and the speech engine are still being built ([ADR-015](adr/015-android.md)).
+> **Status: in development.** There is no Android release yet. Nothing on this page installs a finished app today.
+> The conversation screen, Settings and the phone microphone are built; the speech engine, the model download and the
+> Library are still to come, so a test build cannot transcribe yet ([ADR-015](adr/015-android.md)).
 > Test builds for developers are covered in [Test builds](#test-builds-developers). An Android build is published
 > only with the owner's approval.
 

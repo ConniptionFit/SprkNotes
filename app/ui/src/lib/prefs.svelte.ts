@@ -1,5 +1,6 @@
 import { backend } from "./api";
 import { chosenKeys, effective, NOTHING_MANAGED, parseManaged, type Managed } from "./managed";
+import { isPhone } from "./platform";
 
 // Small UI-only preferences, shared by the main window and the overlay through localStorage.
 // Nothing here is sensitive: a theme choice, caption switches, device names, which sources are on and
@@ -53,7 +54,8 @@ export const LINE_TEXT = [12, 13, 14, 15, 17, 19, 22, 26];
 export const CAPTION_LIMITS = { minW: 260, maxW: 900, minH: 64, maxH: 480 };
 
 const KEY = "sprknotes.prefs";
-const defaults: Prefs = { theme: "system", throwback: false, captionsOn: false, captionsWho: "others", captionDelay: "steady", captionW: 420, captionH: 118, captionText: 2, liveLine: true, lineText: 3, messageTimes: "hover", assistantOn: false, assistantTier: "light", assistantFeatures: ["title", "recap", "actions", "ask"], micDevice: null, systemDevice: null, micOn: true, systemOn: true, micPromptOn: true, micPromptSkip: [], hotkeyOn: false, hotkeyKeys: "Ctrl+Alt+S" };
+// The phone app starts dark (ADR-015, John's pick); the desktop follows the system.
+const defaults: Prefs = { theme: isPhone() ? "dark" : "system", throwback: false, captionsOn: false, captionsWho: "others", captionDelay: "steady", captionW: 420, captionH: 118, captionText: 2, liveLine: true, lineText: 3, messageTimes: "hover", assistantOn: false, assistantTier: "light", assistantFeatures: ["title", "recap", "actions", "ask"], micDevice: null, systemDevice: null, micOn: true, systemOn: true, micPromptOn: true, micPromptSkip: [], hotkeyOn: false, hotkeyKeys: "Ctrl+Alt+S" };
 
 const clamp = (n: unknown, lo: number, hi: number, fallback: number) =>
   typeof n === "number" && Number.isFinite(n) ? Math.min(hi, Math.max(lo, Math.round(n))) : fallback;
