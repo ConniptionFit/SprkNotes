@@ -11,8 +11,15 @@ chrono = { version = "0.4", default-features = false, features = ["clock"] }
 sprk-asr = { path = "../sprk-asr" }
 sprk-audio = { path = "../sprk-audio" }
 sprk-config = { path = "../sprk-config" }
+sprk-models = { path = "../sprk-models" }
 sprk-pipeline = { path = "../sprk-pipeline" }
 sprk-transcript = { path = "../sprk-transcript" }
+
+[features]
+# The speech engine (sherpa-onnx). Off by default so `cargo test --workspace` needs no native
+# libs; without it `load_active` reports that this build has no engine.
+engine = ["sprk-asr/sherpa-static"]
+engine-shared = ["sprk-asr/sherpa-shared"]
 
 [dev-dependencies]
 serde_json.workspace = true

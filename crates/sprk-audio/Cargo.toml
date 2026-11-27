@@ -6,7 +6,8 @@ edition.workspace = true
 license.workspace = true
 
 [features]
-# cpal capture backend (WASAPI mic + loopback on Windows). Off by default.
+# cpal capture backend: WASAPI mic + loopback on Windows, ALSA/PipeWire on Linux, AAudio/OpenSL
+# (through oboe) mic only on Android. Off by default.
 cpal-backend = ["dep:cpal", "dep:ringbuf"]
 
 [dependencies]

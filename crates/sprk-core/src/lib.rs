@@ -5,6 +5,7 @@
 //! Platform pieces (the capture backend, call context, file locations) come in from the shell.
 
 pub mod clock;
+pub mod models;
 pub mod payload;
 pub mod session;
 pub mod settings;
