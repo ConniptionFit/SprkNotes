@@ -10,6 +10,7 @@ mod phone {
     use sprk_audio::cpal_backend::CpalBackend;
     use sprk_audio::live::{Backend, Preferred};
     use sprk_audio::Source;
+    use sprk_core::download::{self, ModelStatus, Progress};
     use sprk_core::models::{self, Roots};
     use sprk_core::payload::{
         event, status_name, CaptionPayload, DroppedPayload, LinePayload, Phase,
@@ -18,10 +19,17 @@ mod phone {
     use sprk_core::settings::{commit_config, source_of};
     use sprk_pipeline::host::{EngineSource, Events, StartParams, UiCaption, UiLine, UiStatus};
     use std::path::PathBuf;
+    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
     use tauri::{AppHandle, Emitter, Manager, State};
 
     const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+    /// The model index, compiled in from `distribution.toml` (the same one the desktop uses).
+    const DEFAULT_INDEX_URL: &str = env!("SPRK_DEFAULT_MODELS_INDEX_URL");
+
+    /// One model download at a time.
+    static DOWNLOADING: AtomicBool = AtomicBool::new(false);
 
     /// Admin settings on phones will come from Android managed configuration, with the desktop
     /// key names (docs/android.md). Until then nothing is locked.
@@ -100,6 +108,8 @@ mod phone {
                 list_devices,
                 set_device,
                 end_session,
+                model_status,
+                model_download,
             ])
             .run(tauri::generate_context!());
         if let Err(err) = result {
@@ -199,6 +209,38 @@ mod phone {
         name: Option<String>,
     ) -> Result<(), String> {
         state.set_device(source_of(&source)?, name)
+    }
+
+    /// Whether the speech model and the voice activity pack are on the phone, and whether the
+    /// admin allows downloading them.
+    #[tauri::command]
+    fn model_status(app: AppHandle) -> ModelStatus {
+        download::status(&roots(&app), &policy(), DOWNLOADING.load(Ordering::SeqCst))
+    }
+
+    /// Download the default packs (the speech model and the voice activity pack, about 480 MB)
+    /// into the app's storage, verified exactly as on the desktop (ADR-005). Returns at once;
+    /// progress and the result arrive as `model-download` events.
+    #[tauri::command]
+    fn model_download(app: AppHandle) -> Result<(), String> {
+        if DOWNLOADING.swap(true, Ordering::SeqCst) {
+            return Err("A download is already running.".into());
+        }
+        std::thread::spawn(move || {
+            let result = download::install(
+                &sprk_core::net::Https,
+                &roots(&app),
+                &policy(),
+                DEFAULT_INDEX_URL,
+                VERSION,
+                &mut |step| {
+                    let _ = app.emit(event::MODEL_DOWNLOAD, step);
+                },
+            );
+            DOWNLOADING.store(false, Ordering::SeqCst);
+            let _ = app.emit(event::MODEL_DOWNLOAD, Progress::finished(&result));
+        });
+        Ok(())
     }
 
     /// Off the main thread: ending waits for the transcript file to be finalized.

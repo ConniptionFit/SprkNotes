@@ -67,14 +67,21 @@ phones miss the speed gates. Nothing in the main install grows for it.
 ## Decision 3: keep the install small
 - **arm64-v8a only** (`tauri android build --apk --target aarch64`). Every current Galaxy phone is arm64; dropping
   armv7/x86 cuts native code by about three quarters.
-- **Models are not bundled.** First run downloads the pack (ADR-005, same checksums and policy switch) or IT pushes it
+- **Models are not bundled.** First run downloads the pack (ADR-005, same checksums and policy switch; the download
+  code now lives in `sprk-core::download` and is shared by the desktop and the phone) or IT pushes it
   with the MDM; a pack file can also be imported. One model family, two tiers:
   - **Full:** Parakeet TDT 0.6B v2 int8 (about 460 MB download, 631 MB installed, about 1.1 GB RAM) for phones with
     8 GB RAM or more that pass the self-check.
   - **Light:** Whisper base.en int8 (154 MB installed, under 0.5 GB RAM) for everything else.
 - **Sizes:** measured 2026-11-25 in CI, the unsigned arm64 release APK of the app shell (Tauri, web UI, shared crates,
-  no speech engine yet) is 13.5 MB. Adding sherpa-onnx and onnxruntime (about 15 MB) should land the app at 25 to
-  40 MB arm64-only, still to confirm once the engine is wired in. A universal 4-ABI APK would be about 90 to 120 MB;
+  no speech engine yet) is 13.5 MB. The engine is wired in since 2026-11-27: only `libsherpa-onnx-c-api.so` (4.3 MB)
+  and `libonnxruntime.so` (22.2 MB) go into `jniLibs/arm64-v8a`. Measured 2026-11-27 in CI, the unsigned arm64
+  release APK is 45.5 MB: the app library is 17.3 MB, and Android's default packaging stores native libraries
+  uncompressed so the phone loads them in place with no copy at install. Compressing them would shrink the APK to
+  roughly 20 MB but unpack about 44 MB at install, so the installed size would not drop. The Android workflow prints
+  the size and the APK's native libraries on every build.
+  `scripts/fetch-sherpa.sh android-arm64` fetches just those two and the build is pointed at them with
+  `SHERPA_ONNX_LIB_DIR`; without it the whole sherpa-onnx Android archive (JNI and C++ wrappers too) would be copied. A universal 4-ABI APK would be about 90 to 120 MB;
   bundling Parakeet would push it past 500 MB.
 
 ## Decision 4: Me and Others on a phone
@@ -127,3 +134,5 @@ Picked from four interactive mock-ups (A desktop twin, B bottom tabs, C control 
 1. Speed and RAM of both tiers on a real Galaxy (which models does Lifespark hand out?).
 2. NinjaOne private APK support, or managed Google Play.
 3. Accuracy bar for turning on Person 1, 2 (John decides on measured numbers).
+4. The model download runs inside the app, so it stops if Android closes SprkNotes in the background. A foreground
+   service with a progress notification would let it finish with the screen off.
