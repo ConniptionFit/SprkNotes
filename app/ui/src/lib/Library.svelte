@@ -3,6 +3,7 @@
   import type { Backend } from "./api";
   import type { ExportFormat, LibraryEntry, TranscriptView } from "./types";
   import { ALL, renamed, shows, tree, type FolderFilter } from "./folders";
+  import { collectLineNotes, collectMarks, isLineMarkDefault, withIds } from "./marks";
 
   let {
     api,
@@ -27,6 +28,13 @@
   let entries = $state<LibraryEntry[]>([]);
   let loaded = $state(false);
   let open = $state<{ entry: LibraryEntry; view: TranscriptView } | null>(null);
+  // Marks get their names, and marks and notes about one line sit under it as annotations.
+  const view = $derived.by(() => {
+    const lines = withIds(open?.view.lines ?? []);
+    const marks = collectMarks(lines);
+    const notes = collectLineNotes(lines);
+    return { lines: lines.filter((l) => !marks.hidden.has(l.id) && !notes.hidden.has(l.id)), marks, notes };
+  });
   let message = $state("");
   let exportMenu = $state(false);
   let moveMenu = $state(false);
@@ -331,13 +339,25 @@
     {#if message || notice}<p class="note" role="status">{message || notice}</p>{/if}
     <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
     <div class="body" tabindex="0" role="region" aria-label="Transcript">
-      {#each open.view.lines as l, i (i)}
+      {#each view.lines as l (l.id)}
         {#if l.kind === "statement"}
+          {@const m = view.marks.byLine.get(l.id)}
+          {@const about = view.notes.under.get(l.id) ?? []}
           <p class="line" class:me={l.speaker === "Me"} class:others={l.speaker !== "Me"}>
             <time>{l.t}</time><strong>{l.speaker}</strong><span class="text">{l.text}</span>
           </p>
+          {#if m || about.length}
+            <ul class="annos" aria-label="Annotations on this line">
+              {#if m}
+                <li class="anno"><span class="tag">Annotation</span><strong>Mark</strong><span class="text">{isLineMarkDefault(m, l) ? "" : m.name}</span></li>
+              {/if}
+              {#each about as n (n.id)}
+                <li class="anno"><span class="tag">Annotation</span><strong>Note</strong><span class="text">{n.text}</span><time title="Added at {n.t}">{n.t}</time></li>
+              {/each}
+            </ul>
+          {/if}
         {:else if l.kind === "mark"}
-          <p class="line marked"><time>{l.t}</time><strong>Mark</strong><span class="text"></span></p>
+          <p class="line marked"><time>{l.t}</time><strong>Mark</strong><span class="text">{view.marks.byLine.get(l.id)?.name ?? ""}</span></p>
         {:else if l.kind === "note"}
           <p class="line usernote"><time>{l.t}</time><strong>Note</strong><span class="text">{l.text}</span></p>
         {:else}
@@ -501,4 +521,12 @@
   /* Marks and notes the user added stand out from the conversation (SPEC 5.1). */
   .marked, .usernote { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
   .marked strong, .usernote strong { color: var(--accent); }
+  /* Annotations: marks and notes about one line, nested under it. */
+  .annos { list-style: none; margin: 0 0 0.25rem; padding: 0 0.5rem 0 calc(4.5rem + 1.1rem); display: flex; flex-direction: column; gap: 0.15rem; }
+  @media (max-width: 40rem) { .annos { padding-left: 1.5rem; } }
+  .anno { display: flex; align-items: baseline; gap: 0.5rem; padding: 0.2rem 0.6rem; border-left: 2px solid var(--accent); border-radius: 0 8px 8px 0; background: var(--accent-soft); font-size: 0.92em; }
+  .anno strong { color: var(--accent); flex: none; }
+  .anno .text { min-width: 0; overflow-wrap: anywhere; }
+  .anno time { flex: none; margin-left: auto; }
+  .tag { flex: none; align-self: center; padding: 0.05rem 0.4rem; border: 1px solid var(--accent); border-radius: 999px; color: var(--accent); font-size: 0.68rem; font-weight: 650; letter-spacing: 0.03em; text-transform: uppercase; }
 </style>

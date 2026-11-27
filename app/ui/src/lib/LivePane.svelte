@@ -6,7 +6,7 @@
   import { Typist, type Row, type Shown } from "./live";
   import { lastSpeaker, turnStarts } from "./turns";
   import { findKeys, isFindKey, splitHits, step } from "./find";
-  import { collectMarks, lineMarkName, markLabel, type MarkItem } from "./marks";
+  import { aboutPrefix, collectLineNotes, collectMarks, isLineMarkDefault, lineMarkName, markLabel, markedLine, type MarkItem } from "./marks";
   import MarkBar from "./MarkBar.svelte";
 
   let {
@@ -75,7 +75,13 @@
 
   // Marks, with the names their notes give them; naming notes show on their mark, not as notes.
   const marks = $derived(collectMarks(lines));
-  const visible = $derived(lines.filter((l) => !marks.hidden.has(l.id)));
+  // Notes about a line sit under that line as annotations, not at the time they were typed.
+  const lineNotes = $derived(collectLineNotes(lines));
+  const visible = $derived(lines.filter((l) => !marks.hidden.has(l.id) && !lineNotes.hidden.has(l.id)));
+  /** A line mark's name when the person gave it one (its first name only repeats the line). */
+  const ownName = (m: MarkItem, l: Line & { kind: "statement" }) => (isLineMarkDefault(m, l) ? "" : m.name);
+  // What each mark is about, for the Marks list.
+  const about = $derived(new Map(marks.items.map((m) => [m.id, markedLine(lines, m)])));
   const speakerOf = (l: Line) => (l.kind === "statement" ? l.speaker : null);
   const lineStarts = $derived(turnStarts(visible.map(speakerOf)));
   const afterLines = $derived(lastSpeaker(visible.map(speakerOf)));
@@ -90,10 +96,19 @@
   let hitAt = $state(-1);
   let findInput = $state<HTMLInputElement>();
   const entries = $derived([
-    ...visible.map((l) => ({
-      key: `l${l.id}`,
-      text: l.kind === "mark" ? (marks.byLine.get(l.id)?.name ?? "") : l.kind === "statement" || l.kind === "note" || l.kind === "event" ? l.text : "",
-    })),
+    ...visible.flatMap((l) => {
+      const own = {
+        key: `l${l.id}`,
+        text: l.kind === "mark" ? (marks.byLine.get(l.id)?.name ?? "") : l.kind === "statement" || l.kind === "note" || l.kind === "event" ? l.text : "",
+      };
+      if (l.kind !== "statement") return [own];
+      const m = marks.byLine.get(l.id);
+      return [
+        own,
+        ...(m ? [{ key: `m${l.id}`, text: ownName(m, l) }] : []),
+        ...(lineNotes.under.get(l.id) ?? []).map((n) => ({ key: `a${n.id}`, text: n.text })),
+      ];
+    }),
     ...rows.map((r) => ({ key: `r${r.uid}`, text: r.text })),
   ]);
   const hits = $derived(findOpen ? findKeys(entries, query) : []);
@@ -420,10 +435,7 @@
         >
           {#if lineStarts[i]}<p class="who"><strong>{l.speaker}</strong></p>{/if}
           <div class="body">
-            <p class="bubble" class:marked={!!m}>
-              {#if m}<span class="flag" title={m.name || "Marked"}>{@render bookmark()}</span>{/if}
-              {@render text(`l${l.id}`, l.text)}
-            </p>
+            <p class="bubble" class:marked={!!m}>{@render text(`l${l.id}`, l.text)}</p>
             <div class="side">
               {#if hovered === l.id}
                 <span class="acts">
@@ -438,7 +450,7 @@
                     <button title="Mark this line" aria-label="Mark this line" disabled={markDisabled} onclick={() => markLine(l)}>{@render bookmark()}</button>
                   {/if}
                   {#if marking}
-                    <button title="Add a note about this line" aria-label="Add a note about this line" disabled={markDisabled} onclick={() => bar?.prefill(`About ${l.t}: `)}>
+                    <button title="Add a note about this line" aria-label="Add a note about this line" disabled={markDisabled} onclick={() => bar?.prefill(aboutPrefix(l.t))}>
                       <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 15.5V13l8.5-8.5 2.5 2.5-8.5 8.5zM11 6l2.5 2.5" /></svg>
                     </button>
                   {/if}
@@ -447,6 +459,37 @@
               <time class="stamp">{l.t}</time>
             </div>
           </div>
+          {#if m || lineNotes.under.has(l.id)}
+            <ul class="annos" aria-label="Annotations on this line">
+              {#if m}
+                {@const name = ownName(m, l)}
+                <li class="anno" class:flash={flash === `m${l.id}`} data-key="m{l.id}">
+                  <span class="tag">Annotation</span>
+                  {@render bookmark()}
+                  {#if editing === m.id}
+                    {@render nameBox(m)}
+                  {:else}
+                    <strong>Mark</strong>
+                    {#if name}<span class="say">{@render text(`m${l.id}`, name)}</span>{/if}
+                    {#if marking}
+                      <button class="pen" title={name ? "Rename this mark" : "Name this mark"} aria-label={name ? "Rename this mark" : "Name this mark"} onclick={() => startNaming(m)}>
+                        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 15.5V13l8.5-8.5 2.5 2.5-8.5 8.5zM11 6l2.5 2.5" /></svg>
+                      </button>
+                    {/if}
+                  {/if}
+                </li>
+              {/if}
+              {#each lineNotes.under.get(l.id) ?? [] as n (n.id)}
+                <li class="anno" class:flash={flash === `a${n.id}`} data-key="a{n.id}">
+                  <span class="tag">Annotation</span>
+                  <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 15.5V13l8.5-8.5 2.5 2.5-8.5 8.5zM11 6l2.5 2.5" /></svg>
+                  <strong>Note</strong>
+                  <span class="say">{@render text(`a${n.id}`, n.text)}</span>
+                  <time title="Added at {n.t}">{n.t}</time>
+                </li>
+              {/each}
+            </ul>
+          {/if}
         </div>
       {:else if l.kind === "mark"}
         {@const m = marks.byLine.get(l.id)}
@@ -524,9 +567,14 @@
             {#if editing === m.id}
               {@render nameBox(m)}
             {:else}
+              {@const on = about.get(m.id)}
+              {@const name = on && on.id === m.id ? ownName(m, on) : m.name}
               <button class="jump" onclick={() => go(`l${m.id}`)}>
                 <time>{m.t}</time>
-                <span class:unnamed={!m.name}>{m.name || "Unnamed mark"}</span>
+                <span class="what">
+                  <span class:unnamed={!name}>{name || (on && on.id === m.id ? "Marked line" : "Unnamed mark")}</span>
+                  {#if on}<span class="on" class:me={on.speaker === "Me"}><b>{on.speaker}</b> {on.text}</span>{/if}
+                </span>
               </button>
               {#if marking}
                 <button class="pen" title={m.name ? "Rename this mark" : "Name this mark"} aria-label={m.name ? `Rename the mark at ${m.t}` : `Name the mark at ${m.t}`} onclick={() => startNaming(m)}>
@@ -686,8 +734,27 @@
   .others:not(.start) .bubble { border-top-left-radius: 1.05em; border-bottom-left-radius: 0.35em; }
   .me:not(.start) .bubble { border-top-right-radius: 1.05em; border-bottom-right-radius: 0.35em; }
   .bubble.marked { box-shadow: inset 0 0 0 1.5px var(--accent); }
-  .flag { display: inline-flex; vertical-align: -0.12em; margin-right: 0.3em; color: var(--accent); }
-  .flag svg { width: 0.95em; height: 0.95em; }
+  /* Annotations: marks and notes about one line, nested under it and flagged as annotations. */
+  .annos { display: flex; flex-direction: column; align-items: inherit; gap: 0.2rem; max-width: min(40em, calc(100% - 11rem)); margin: 0.25rem 1.1rem 0.1rem; padding: 0; list-style: none; }
+  .anno {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    max-width: 100%;
+    padding: 0.2rem 0.4rem 0.2rem 0.55rem;
+    border-left: 2px solid var(--accent);
+    border-radius: 0 8px 8px 0;
+    background: var(--accent-soft);
+    font-size: calc(var(--line-size, 15px) * 0.87);
+    line-height: 1.4;
+  }
+  .me .anno { border-left: 0; border-right: 2px solid var(--accent); border-radius: 8px 0 0 8px; }
+  .anno > svg { width: 0.9rem; height: 0.9rem; flex: none; color: var(--accent); }
+  .anno strong { color: var(--accent); font-weight: 650; flex: none; }
+  .anno .say { min-width: 0; overflow-wrap: anywhere; color: var(--text); }
+  .anno time { flex: none; color: var(--muted); font-size: 0.75rem; font-variant-numeric: tabular-nums; }
+  .anno .pen { width: 1.4rem; height: 1.4rem; }
+  .tag { flex: none; padding: 0.05rem 0.4rem; border-radius: 999px; border: 1px solid var(--accent); color: var(--accent); font-size: 0.68rem; font-weight: 650; letter-spacing: 0.03em; text-transform: uppercase; }
   .side { display: flex; align-items: center; gap: 0.35rem; flex: none; min-height: 1.6rem; }
   .me .side { flex-direction: row-reverse; }
   .stamp { color: var(--muted); font-size: 0.75rem; font-variant-numeric: tabular-nums; opacity: 0; transition: opacity 120ms; }
@@ -753,7 +820,7 @@
   .note strong { color: var(--accent); }
   .event { display: flex; align-items: center; justify-content: center; gap: 0.5rem; margin: 0.85rem 0 0.2rem; color: var(--muted); font-size: 0.85rem; content-visibility: auto; contain-intrinsic-size: auto 1.6rem; }
   .event::before, .event::after { content: ""; flex: 1; max-width: 6rem; border-top: 1px solid var(--border); }
-  .flash .bubble, .flash .chip, .flash .note, .flash.event span { animation: flash 1.6s ease-out; }
+  .flash .bubble, .flash .chip, .flash .note, .flash.event span, .anno.flash { animation: flash 1.6s ease-out; }
   @keyframes flash { 0%, 40% { box-shadow: 0 0 0 3px var(--accent); } 100% { box-shadow: 0 0 0 3px transparent; } }
 
   /* Marks list. */
@@ -776,16 +843,21 @@
   .jump { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 0.6rem; padding: 0.45rem 0.5rem; border: 0; border-radius: 8px; background: transparent; color: var(--text); font: inherit; font-size: 0.9rem; text-align: left; cursor: pointer; }
   .jump:hover { background: var(--surface-2); }
   .jump time { color: var(--muted); font-size: 0.78rem; font-variant-numeric: tabular-nums; flex: none; }
-  .jump span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .jump .what { min-width: 0; display: flex; flex-direction: column; gap: 0.1rem; }
+  .jump .what > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .jump .on { color: var(--muted); font-size: 0.8rem; }
+  .jump .on b { font-weight: 650; color: var(--others); }
+  .jump .on.me b { color: var(--me); }
   .jump .unnamed { color: var(--muted); font-style: italic; }
   .marks .namebox { flex: 1; margin: 0.25rem 0.2rem; }
 
   @media (max-width: 30rem) {
     .pane { padding: 0.4rem 0.5rem 0.8rem; }
     .bubble { max-width: calc(100% - 5rem); }
+    .annos { max-width: calc(100% - 3rem); margin-inline: 0.6rem; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .row, .caret, .w, .speaking i, .flash .bubble, .flash .chip, .flash .note, .flash.event span { animation: none; transition: none; }
+    .row, .caret, .w, .speaking i, .flash .bubble, .flash .chip, .flash .note, .flash.event span, .anno.flash { animation: none; transition: none; }
   }
   @media (forced-colors: active) {
     .bubble, .live .bubble { border: 1px solid CanvasText; }
