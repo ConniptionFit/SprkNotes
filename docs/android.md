@@ -13,7 +13,7 @@ Transcription runs on the phone only. Nothing leaves the device except model and
 | | |
 |---|---|
 | Phones | Android 7.0 (API 24) or newer, 64-bit Arm (arm64-v8a). Samsung Galaxy phones from the last several years qualify. |
-| App size | About 13.5 MB before the speech engine (measured 2026-11-25). The engine adds two libraries (26 MB, about 10 MB compressed), so about 23 MB is expected; CI prints the measured size on every build. |
+| App size | 45.5 MB (unsigned arm64 release, measured 2026-11-27 with the speech engine). Android keeps the native libraries uncompressed inside the APK so the phone runs them in place and nothing extra is unpacked at install. CI prints the size on every build. |
 | Models | Downloaded separately, never inside the app: Parakeet (about 460 MB download) on phones with 8 GB RAM or more that pass a short self-check, Whisper base.en (154 MB) on the rest. |
 | Audio source | The phone's microphone only (built-in, wired or Bluetooth). Android does not let apps capture other apps' call audio, so there is no Me and Others split and no speaker labels. |
 | Look | Conversation layout, dark by default, the same font, icons and sound meter as the desktop app. |

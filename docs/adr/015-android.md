@@ -75,8 +75,11 @@ phones miss the speed gates. Nothing in the main install grows for it.
   - **Light:** Whisper base.en int8 (154 MB installed, under 0.5 GB RAM) for everything else.
 - **Sizes:** measured 2026-11-25 in CI, the unsigned arm64 release APK of the app shell (Tauri, web UI, shared crates,
   no speech engine yet) is 13.5 MB. The engine is wired in since 2026-11-27: only `libsherpa-onnx-c-api.so` (4.3 MB)
-  and `libonnxruntime.so` (22.2 MB) go into `jniLibs/arm64-v8a`, about 10 MB compressed, so about 23 MB is expected;
-  the Android workflow prints the measured size and the APK's native libraries on every build.
+  and `libonnxruntime.so` (22.2 MB) go into `jniLibs/arm64-v8a`. Measured 2026-11-27 in CI, the unsigned arm64
+  release APK is 45.5 MB: the app library is 17.3 MB, and Android's default packaging stores native libraries
+  uncompressed so the phone loads them in place with no copy at install. Compressing them would shrink the APK to
+  roughly 20 MB but unpack about 44 MB at install, so the installed size would not drop. The Android workflow prints
+  the size and the APK's native libraries on every build.
   `scripts/fetch-sherpa.sh android-arm64` fetches just those two and the build is pointed at them with
   `SHERPA_ONNX_LIB_DIR`; without it the whole sherpa-onnx Android archive (JNI and C++ wrappers too) would be copied. A universal 4-ABI APK would be about 90 to 120 MB;
   bundling Parakeet would push it past 500 MB.
