@@ -5,7 +5,6 @@
   import TopBar from "./lib/TopBar.svelte";
   import Controls from "./lib/Controls.svelte";
   import LivePane from "./lib/LivePane.svelte";
-  import MarkBar from "./lib/MarkBar.svelte";
   import Footer from "./lib/Footer.svelte";
   import Settings from "./lib/Settings.svelte";
   import Library from "./lib/Library.svelte";
@@ -16,6 +15,7 @@
   import { hotkeyProblem } from "./lib/hotkey";
   import { retentionText } from "./lib/retention";
   import { hotkeyState } from "./lib/hotkeyState.svelte";
+  import { Elapsed, clockText, stampText } from "./lib/clock";
 
   let api = $state.raw<Backend | undefined>();
   let name = $state("");
@@ -51,6 +51,20 @@
   // Sentences that locked in the live view until their committed line arrives (ADR-008).
   const locked = new Rows();
   let liveRows = $state<Row[]>([]);
+  // Session time, counted only while transcribing: shown beside the status and given to sentences
+  // that settle before their line is written, so every line in the window has a time.
+  const elapsed = new Elapsed();
+  let clock = $state("00:00");
+  $effect(() => {
+    const now = Date.now();
+    if (status === "transcribing") elapsed.run(now);
+    else if (status === "paused") elapsed.hold(now);
+    else elapsed.reset();
+    clock = clockText(elapsed.at(now));
+    if (status === "ready") return;
+    const timer = setInterval(() => (clock = clockText(elapsed.at(Date.now()))), 1000);
+    return () => clearInterval(timer);
+  });
 
   // Ask the engine for partial captions whenever either window wants them.
   $effect(() => {
@@ -94,6 +108,7 @@
       offs.push(
         await b.onLine((l) => {
           lines = [...lines, l];
+          elapsed.seen(l.t, Date.now());
           if (l.kind === "statement") {
             locked.line(l.speaker, l.text);
             liveRows = [...locked.rows];
@@ -108,7 +123,8 @@
       );
       offs.push(
         await b.onCaption((c) => {
-          locked.caption(c, Date.now());
+          const now = Date.now();
+          locked.caption(c, now, stampText(elapsed.at(now)));
           liveRows = [...locked.rows];
           speaking.caption(c);
           partials = [...speaking.list];
@@ -351,6 +367,7 @@
       bind:mic
       bind:system
       levels={status === "transcribing" ? levels : null}
+      elapsed={clock}
       onrename={(n) => api?.rename(n)}
       onsource={setSource}
     />
@@ -365,7 +382,20 @@
         {/if}
       </div>
     {/if}
-    <LivePane {lines} {status} {partials} rows={liveRows} needsModel={!model.ready && status === "ready"}>
+    <LivePane
+      {lines}
+      {status}
+      {partials}
+      rows={liveRows}
+      needsModel={!model.ready && status === "ready"}
+      markDisabled={phase.phase === "ending"}
+      onmark={async () => {
+        await api?.mark();
+      }}
+      onnote={async (t) => {
+        await api?.note(t);
+      }}
+    >
       {#snippet empty()}
         <ModelDownload
           compact
@@ -379,17 +409,6 @@
         />
       {/snippet}
     </LivePane>
-    {#if status !== "ready"}
-      <MarkBar
-        disabled={phase.phase === "ending"}
-        onmark={async () => {
-          await api?.mark();
-        }}
-        onnote={async (t) => {
-          await api?.note(t);
-        }}
-      />
-    {/if}
   {/if}
   <div class="dock">
     <Footer

@@ -1,6 +1,6 @@
 <script lang="ts">
-  // One sound source as a small icon button (a microphone for Me, a speaker for Others; the names
-  // are in the tooltip and for screen readers). Clicking it
+  // One sound source as a pill: a microphone for Me or a speaker for Others, its name, and a sound
+  // meter while transcribing (the same look as the pop-out's Focus view). Clicking it
   // opens a short menu: which device to transcribe, or turn this source off. The device choice is
   // the same one as in Settings (shared preference), so the two never disagree.
   import { backend } from "./api";
@@ -100,7 +100,7 @@
     const c = canvas;
     if (!c) return;
     const dpr = typeof devicePixelRatio === "number" && devicePixelRatio > 0 ? devicePixelRatio : 1;
-    const w = Math.round((c.clientWidth || 34) * dpr);
+    const w = Math.round((c.clientWidth || 44) * dpr);
     const h = Math.round((c.clientHeight || 16) * dpr);
     if (c.width !== w) c.width = w;
     if (c.height !== h) c.height = h;
@@ -208,6 +208,7 @@
       <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 7.75h3l4.5-3.75v12l-4.5-3.75h-3z" /><path d="M14 7.25a3.75 3.75 0 010 5.5" /></svg>
     {/if}
     {#if !on}<span class="slash" aria-hidden="true"></span>{/if}
+    <span class="who" aria-hidden="true">{who}</span>
     {#if live}
       <canvas class="wave" bind:this={canvas} aria-hidden="true"></canvas>
     {/if}
@@ -239,16 +240,16 @@
     position: relative;
     display: inline-flex;
     align-items: center;
-    gap: 0.3rem;
-    height: 2rem;
-    padding: 0 0.45rem 0 0.55rem;
+    gap: 0.4rem;
+    height: 2.25rem;
+    padding: 0 0.6rem 0 0.7rem;
     border: 1px solid var(--border);
     border-radius: 999px;
     background: var(--surface);
     color: var(--muted);
     font: inherit;
-    font-size: 0.82rem;
-    font-weight: 600;
+    font-size: 0.88rem;
+    font-weight: 650;
     cursor: pointer;
     transition: background 120ms, border-color 120ms;
   }
@@ -257,8 +258,9 @@
   .src.on.mic { background: var(--me-soft); color: var(--me); border-color: transparent; }
   .src.on.system { background: var(--others-soft); color: var(--others); border-color: transparent; }
   /* The sound meter's box; the line is drawn at whole device pixels inside it. */
-  .wave { display: block; width: 34px; height: 1rem; }
-  .slash { position: absolute; left: 0.45rem; top: 50%; width: 1.15rem; height: 1.5px; background: currentColor; transform: rotate(-45deg); }
+  .wave { display: block; width: 44px; height: 1.1rem; }
+  .who { line-height: 1; }
+  .slash { position: absolute; left: 0.6rem; top: 50%; width: 1.15rem; height: 1.5px; background: currentColor; transform: rotate(-45deg); }
   .src:hover { border-color: var(--accent); }
   .src:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 

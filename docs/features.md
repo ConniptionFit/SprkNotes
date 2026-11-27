@@ -32,7 +32,10 @@ A tour of everything SprkNotes does and how to use it, with screenshots. All scr
 While transcribing:
 - **Pause** writes a pause line and stops capture; **Resume** continues. **End** finishes the file.
 - The light shows the state: green ready, red transcribing, yellow paused.
-- **Mark** (or Ctrl+M) flags the moment, and the note box saves a short typed note with the time (Enter). Both are written into the transcript straight away, stand out in the live view and the Library, and reach Summarize and Ask Sprk.
+- The transcript reads like a conversation: Others on the left and Me on the right in tinted bubbles, the speaker's name once per turn, an easy reading width on wide windows, and each line's time on hover (or always, in Settings).
+- A status chip beside the session name shows **Listening** or **Paused** with the time so far; the **Me** and **Others** pills carry the sound meters.
+- **Mark** (or Ctrl+M) flags the moment, and the note box saves a short typed note with the time (Enter), both in a slim bar at the bottom of the transcript. Both are written into the transcript straight away, stand out in the live view and the Library, and reach Summarize and Ask Sprk. Marks can be named, listed under **Marks**, and jumped to; hovering a line offers Copy line, Mark this line and Add a note about this line.
+- **Find** (Ctrl+F) searches the transcript on screen and highlights every match.
 - Turn sources on or off at any time. Source changes (a headset plugged in, a default device change) are written as event lines.
 
 | Transcribing | Paused |
@@ -44,7 +47,7 @@ Dark mode is the same app:
 ![Dark](screenshots/main-transcribing-dark.png)
 
 ## Live text
-The last row, marked **live**, shows the words being spoken right now. Text types out at an even pace, only the last word or two are lighter and may still change, and sentences **lock in** as they finish (or after about 1.5 seconds, or a pause) so they stay put in normal color; the finished line quietly replaces them later. The transcript fills from the bottom: new rows push older ones up. The live line is a preview: never saved, never logged, and the saved transcript comes only from finished sentences. Turn it on or off, choose whose words it shows, and set the **Live text delay** (Fast, Steady or Smoothest: a short wait, under a second on Steady, that lets words settle so fewer change on screen) in [Settings](#settings). The magnifier buttons change the text size.
+The last bubble, outlined in the speaker's colour with "speaking" beside the name, shows the words being spoken right now. Text types out at an even pace, only the last word or two are lighter and may still change, and sentences **lock in** as they finish (or after about 1.5 seconds, or a pause) so they stay put in normal color; the finished line quietly replaces them later. The transcript fills from the bottom: new rows push older ones up. The live line is a preview: never saved, never logged, and the saved transcript comes only from finished sentences. Turn it on or off, choose whose words it shows, and set the **Live text delay** (Fast, Steady or Smoothest: a short wait, under a second on Steady, that lets words settle so fewer change on screen) in [Settings](#settings). **−** and **+** change the text size.
 
 ### Scrolling
 The pane follows new lines while you are at the bottom. Scroll up (wheel, touch, PageUp, Home or the scrollbar) to read earlier text: it stops moving, and it only stops when you scroll, never because new text arrived, and a **Return to live** pill counts the new lines. Click it or press **End** to jump back.
@@ -120,6 +123,7 @@ With one app installed it opens that one (Claude gets the file; for Copilot the 
 - **Appearance:** System, Light or Dark.
 - **Misc:** Throwback Mode.
 - **Live captions:** captions on the overlay, the live line in the main window, **Live text delay** (Fast, Steady, Smoothest) and whose words (Others only or Others and Me).
+- **Message times:** each line's time in the transcript window on hover (default) or always.
 
 Dark: ![Settings dark](screenshots/settings-full-dark.png)
 
@@ -163,5 +167,5 @@ Deployment through Intune, GPO, SCCM or an RMM, registry policy keys, model runb
 ![Model download turned off by policy](screenshots/settings-model-managed-dark.png)
 
 ## Keyboard and accessibility
-- Everything is reachable by keyboard; the overlay's buttons appear on keyboard focus too. **End** jumps to the live end of the transcript. **Ctrl+M** drops a mark while a session runs. **Esc** hides the overlay's buttons.
+- Everything is reachable by keyboard; the overlay's buttons appear on keyboard focus too. **End** jumps to the live end of the transcript. **Ctrl+M** drops a mark while a session runs. **Ctrl+F** finds text in the live transcript. **Esc** hides the overlay's buttons.
 - The state is also in the tray tooltip and menu header, not only the light's color. Text sizes are adjustable. New live words appear whole, with no typing animation, when the system asks for reduced motion.

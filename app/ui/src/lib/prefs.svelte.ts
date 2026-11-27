@@ -9,6 +9,8 @@ export type CaptionWho = "others" | "both";
 /** How long a new word waits before it is shown, to let the engine settle it (ADR-008). */
 export type CaptionDelay = "fast" | "steady" | "smooth";
 export const DELAY_MS: { [k in CaptionDelay]: number } = { fast: 200, steady: 400, smooth: 600 };
+/** When each line's time shows in the transcript window: on hover, or always. */
+export type MessageTimes = "hover" | "always";
 type Prefs = {
   theme: Theme;
   /** Throwback Mode: the first app icon (window, taskbar and tray). Fonts, colors and layout stay the same. */
@@ -23,6 +25,7 @@ type Prefs = {
   /** Show the live line inside the main transcript, and the transcript text size (step in LINE_TEXT). */
   liveLine: boolean;
   lineText: number;
+  messageTimes: MessageTimes;
   /** Ask Sprk (ADR-009). Off by default; the four core features start on, every extra starts off. */
   assistantOn: boolean;
   assistantTier: "titles" | "light" | "standard";
@@ -45,12 +48,12 @@ export type SkippedApp = { id: string; name: string };
 
 /** Caption text sizes in px for the magnifier buttons, and the step used by default. */
 export const CAPTION_TEXT = [13, 15, 17, 19, 22, 26, 30, 36];
-/** Transcript text sizes in px for the main window magnifier buttons. */
+/** Transcript text sizes in px for the main window − and + buttons. */
 export const LINE_TEXT = [12, 13, 14, 15, 17, 19, 22, 26];
 export const CAPTION_LIMITS = { minW: 260, maxW: 900, minH: 64, maxH: 480 };
 
 const KEY = "sprknotes.prefs";
-const defaults: Prefs = { theme: "system", throwback: false, captionsOn: false, captionsWho: "others", captionDelay: "steady", captionW: 420, captionH: 118, captionText: 2, liveLine: true, lineText: 3, assistantOn: false, assistantTier: "light", assistantFeatures: ["title", "recap", "actions", "ask"], micDevice: null, systemDevice: null, micOn: true, systemOn: true, micPromptOn: true, micPromptSkip: [], hotkeyOn: false, hotkeyKeys: "Ctrl+Alt+S" };
+const defaults: Prefs = { theme: "system", throwback: false, captionsOn: false, captionsWho: "others", captionDelay: "steady", captionW: 420, captionH: 118, captionText: 2, liveLine: true, lineText: 3, messageTimes: "hover", assistantOn: false, assistantTier: "light", assistantFeatures: ["title", "recap", "actions", "ask"], micDevice: null, systemDevice: null, micOn: true, systemOn: true, micPromptOn: true, micPromptSkip: [], hotkeyOn: false, hotkeyKeys: "Ctrl+Alt+S" };
 
 const clamp = (n: unknown, lo: number, hi: number, fallback: number) =>
   typeof n === "number" && Number.isFinite(n) ? Math.min(hi, Math.max(lo, Math.round(n))) : fallback;
@@ -82,6 +85,7 @@ function load(): Prefs {
     delete (p as { waveStyle?: unknown }).waveStyle;
     if (!(p.captionDelay in DELAY_MS)) p.captionDelay = defaults.captionDelay;
     p.lineText = clamp(p.lineText, 0, LINE_TEXT.length - 1, defaults.lineText);
+    if (p.messageTimes !== "hover" && p.messageTimes !== "always") p.messageTimes = defaults.messageTimes;
     if (!["titles", "light", "standard"].includes(p.assistantTier)) p.assistantTier = defaults.assistantTier;
     if (!Array.isArray(p.assistantFeatures)) p.assistantFeatures = defaults.assistantFeatures;
     if (typeof p.micDevice !== "string" || !p.micDevice) p.micDevice = null;
