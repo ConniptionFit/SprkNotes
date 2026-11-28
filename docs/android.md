@@ -2,9 +2,9 @@
 
 > **Status: in development.** There is no Android release yet. Nothing on this page installs a finished app today.
 > The conversation screen, Settings, the phone microphone, the speech engine and the model download are built; the
-> Library, the Light model tier and a test on a real phone are still to come ([ADR-015](adr/015-android.md)).
-> Test builds for developers are covered in [Test builds](#test-builds-developers). An Android build is published
-> only with the owner's approval.
+> Library, the Light model tier, downloads that finish in the background and a test on a real phone are still to come
+> ([ADR-015](adr/015-android.md)). To try it on your own phone, see [Testing on your own phone](#testing-on-your-own-phone).
+> An Android build is published only with the owner's approval.
 
 SprkNotes for Android is the same Rust and Tauri app as the Windows version, built for phones (Samsung Galaxy first).
 Transcription runs on the phone only. Nothing leaves the device except model and app downloads.
@@ -70,9 +70,37 @@ and the number of threads. Today every phone gets the Full tier (Parakeet).
 Long-press SprkNotes, **Uninstall**, or remove the assignment in your MDM. Uninstalling removes the app, its models and
 its private storage. Share or export any transcript you need to keep first.
 
+## Testing on your own phone
+There is no published APK, so a test build is a debug APK you build yourself (below) or one the owner has asked for.
+A maintainer gets one by running the **Android** workflow by hand (Actions, Android, Run workflow) with **test_apk**
+on: the run page then offers `SprkNotes-debug-arm64-<commit>` as a download for 7 days. It is a zip holding
+`app-universal-debug.apk`. The repository is public, so anyone signed in to GitHub can download it. A debug APK is signed with Android's throwaway debug key, so it installs on any arm64 phone but cannot be updated
+by a signed release later: uninstall it first when a real release arrives.
+
+**Install it**
+1. Get `app-universal-debug.apk` onto the phone (USB, or download it on the phone).
+2. Either open it from **My Files** and allow installs from that app when Android asks (turn it off again afterwards),
+   or install over USB with `adb install -r app-universal-debug.apk` (needs **Developer options** and **USB debugging**).
+3. Google Play Protect may warn that the app is from an unknown developer. Choose **More details**, then
+   **Install anyway**. Company phones often block this; use a personal test phone.
+
+**First run**
+1. Open SprkNotes and allow the microphone.
+2. Under **Get the speech model**, press **Download** (about 480 MB, once). Use Wi-Fi and keep SprkNotes on screen until
+   it finishes: if Android closes the app in the background, the download stops and you press **Download** again.
+3. Press **Start** and talk. Lines appear as bubbles with a time and no speaker name.
+
+**What works:** the conversation screen, the microphone and its device menu, Start, Pause, Resume and End, live
+lines, the Line wave meter, the session name, Theme in Settings, and transcripts saved to the app's private storage.
+
+**Not built yet:** the Library (past transcripts cannot be listed, opened or shared on the phone yet), the Light model
+for phones under 8 GB of RAM (every phone gets Parakeet, so older phones may be slow or run short of memory), the
+hardware self-check, downloads that keep going in the background, and admin settings through managed configuration.
+A debug build also runs the app's own code unoptimized, so it can feel slower than a release build will.
+
 ## Test builds (developers)
 Every change to the repository builds an arm64 debug APK in CI (the **Android** workflow) to prove the shared crates
-and the app shell build for phones. CI does not upload or publish it. To build and install one yourself:
+and the app build for phones. CI does not upload or publish it. To build and install one yourself:
 
 1. Install the Android SDK and NDK, Java 17, Node 22 and Rust with the `aarch64-linux-android` target, then the Tauri
    CLI: `cargo install tauri-cli --version '^2' --locked`.
@@ -95,8 +123,8 @@ and the app shell build for phones. CI does not upload or publish it. To build a
 5. On the phone, turn on **Developer options** and **USB debugging**, connect it, and run
    `adb install -r app-universal-debug.apk`. Or run `cargo tauri android dev` to build, install and open it in one step.
 
-A debug build is about 150 MB because it keeps debug symbols; release builds are about a tenth of that. Debug builds
-are for testing only and must not be given to staff.
+A debug APK is about 256 MB because it keeps debug symbols; the release APK is 45.5 MB (both measured in CI on
+2026-11-27). Debug builds are for testing only and must not be given to staff.
 
 ## More
 - [ADR-015](adr/015-android.md): why one shared Rust app, how device tuning works, and what is still open.

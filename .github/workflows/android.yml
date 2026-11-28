@@ -1,11 +1,18 @@
 name: Android
 # Debug build of the phone app (ADR-015) plus an unsigned release build to measure the install
-# size: arm64 only, nothing uploaded or published. It proves the shared crates and the app shell build for Android on every change.
+# size: arm64 only. It proves the shared crates and the app build for Android on every change. Nothing is uploaded,
+# except when a maintainer runs it by hand with "test_apk" on: then the debug APK is kept as a 7-day download on that
+# run's page. The repository is public, so anyone signed in to GitHub can download it. Never a signed release.
 on:
   push:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      test_apk:
+        description: Keep the debug APK as a 7-day download on this run (public repository)
+        type: boolean
+        default: false
 concurrency:
   group: android-${{ github.ref }}
   cancel-in-progress: true
@@ -57,6 +64,14 @@ jobs:
       - name: Build the debug APK
         working-directory: app
         run: cargo tauri android build --debug --apk --target aarch64 --ci
+      - name: Keep the debug APK for testing (7 days, only when asked)
+        if: github.event_name == 'workflow_dispatch' && inputs.test_apk
+        uses: actions/upload-artifact@v4
+        with:
+          name: SprkNotes-debug-arm64-${{ github.sha }}
+          path: app/src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk
+          retention-days: 7
+          if-no-files-found: error
       # Size check only (ADR-015 Decision 3): an unsigned release build, never uploaded or published.
       - name: Release APK size (unsigned, arm64)
         working-directory: app
