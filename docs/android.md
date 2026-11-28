@@ -71,8 +71,10 @@ Long-press SprkNotes, **Uninstall**, or remove the assignment in your MDM. Unins
 its private storage. Share or export any transcript you need to keep first.
 
 ## Testing on your own phone
-There is no published APK, so a test build is a debug APK you build yourself (below) or one the owner has asked to be
-made. A debug APK is signed with Android's throwaway debug key, so it installs on any arm64 phone but cannot be updated
+There is no published APK, so a test build is a debug APK you build yourself (below) or one the owner has asked for.
+A maintainer gets one by running the **Android** workflow by hand (Actions, Android, Run workflow) with **test_apk**
+on: the run page then offers `SprkNotes-debug-arm64-<commit>` as a download for 7 days. It is a zip holding
+`app-universal-debug.apk`. The repository is public, so anyone signed in to GitHub can download it. A debug APK is signed with Android's throwaway debug key, so it installs on any arm64 phone but cannot be updated
 by a signed release later: uninstall it first when a real release arrives.
 
 **Install it**
